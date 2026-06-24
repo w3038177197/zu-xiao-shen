@@ -420,6 +420,44 @@ const productBacklog = [
   '涨租预警系统：合同到期前提醒提前沟通',
 ]
 
+const evidenceGroupMeta = {
+  contract: {
+    title: '合同文件',
+    Icon: FileText,
+    items: ['租赁合同原件或电子版', '押金收据或转账记录', '租金支付记录或银行流水'],
+  },
+  photos: {
+    title: '房屋照片',
+    Icon: UploadCloud,
+    items: ['入住时房屋整体状况照片', '入住时家电家具状况照片', '退租时房屋整体状况照片', '退租时家电家具状况照片'],
+  },
+  chat: {
+    title: '沟通记录',
+    Icon: MessageSquareText,
+    items: ['与房东或中介的聊天记录截图', '退租通知发送记录', '维修、押金、交接事项沟通记录'],
+  },
+  expense: {
+    title: '费用凭证',
+    Icon: CircleDollarSign,
+    items: ['水电燃气缴费凭证', '物业费或宽带费缴纳凭证', '维修、保洁或其他费用凭证'],
+  },
+}
+
+const evidenceActions = [
+  { title: '整理合同和押金凭证', desc: '把租赁合同、押金收据、租金支付记录统一保存。' },
+  { title: '拍摄退租现状照片', desc: '覆盖客厅、卧室、厨房、卫生间、门锁、墙面和家电家具。' },
+  { title: '导出沟通记录', desc: '重点保留退租通知、维修争议、押金扣款和交接时间确认。' },
+  { title: '结清并留存费用凭证', desc: '水电燃气、物业、宽带等费用尽量取得账单或转账记录。' },
+  { title: '预约现场交接', desc: '提前确认交接时间、在场人员、钥匙门禁卡数量和押金退还方式。' },
+  { title: '发送押金退还说明', desc: '用书面方式发送，要求对方明确扣款依据和退还时间。' },
+]
+
+const evidenceToolTabs = [
+  { value: 'deposit', label: '押金退还' },
+  { value: 'repair', label: '维修争议' },
+  { value: 'handover', label: '退租交接' },
+]
+
 const contractTypeOptions = [
   { value: 'auto', label: '自动识别' },
   { value: 'service', label: '服务 / 外包合同' },
@@ -1149,6 +1187,121 @@ function calculateDepositReturn(inputs) {
   }
 }
 
+function formatEvidenceDate(value) {
+  if (!value) return '待确认'
+  return value
+}
+
+function buildEvidenceCommunication(type, formData) {
+  const address = formData.address || 'XX小区XX栋XX室'
+  const deposit = formData.deposit || 'XXXX'
+  const checkin = formatEvidenceDate(formData.checkinDate)
+  const checkout = formatEvidenceDate(formData.checkoutDate)
+  const handoverDate = formatEvidenceDate(formData.handoverDate)
+  const handoverTime = formData.handoverTime || '待协商'
+  const repairItem = formData.repairItem || '房屋维修事项'
+  const repairCost = formData.repairCost || '待确认'
+  const notes = formData.notes || '房屋已按合同约定完成基础清洁，家电家具按现状交接。'
+
+  if (type === 'repair') {
+    return `尊敬的房东/中介：
+
+您好。
+
+关于${address}的${repairItem}，我已整理维修前后照片、沟通记录和费用凭证。当前维修费用为人民币${repairCost}元。
+
+为便于核对，请您确认以下事项：
+1. 该维修是否属于自然损耗、房屋老化或非承租人原因造成；
+2. 如需从押金中扣除，请提供维修清单、照片、报价或有效票据；
+3. 如属于出租方维修义务，请确认费用承担方式和处理时间。
+
+我会配合合理核验，但不接受无凭证、无明细或将正常使用损耗直接从押金中扣除。
+
+谢谢。`
+  }
+
+  if (type === 'handover') {
+    return `尊敬的房东/中介：
+
+您好。
+
+我是${address}的承租人，计划于${handoverDate} ${handoverTime}办理退租交接。
+
+交接时建议双方共同确认：
+1. 房屋整体状况和重点设施状态；
+2. 水、电、燃气、物业等费用结清情况；
+3. 钥匙、门禁卡、遥控器等物品交还数量；
+4. 押金退还金额、扣款依据和退还时间。
+
+备注事项：${notes}
+
+请您确认上述时间是否方便。如需调整，请回复可交接时间。`
+  }
+
+  return `尊敬的房东/中介：
+
+您好。
+
+我是${address}的承租人，入住时间为${checkin}，退租时间为${checkout}。根据租赁合同和实际交接情况，现申请退还押金人民币${deposit}元。
+
+我已准备以下材料用于核对：
+1. 租赁合同、押金收据或转账记录；
+2. 入住和退租时房屋、家具、家电照片；
+3. 水电燃气等费用结清凭证；
+4. 与退租、维修、押金相关的沟通记录。
+
+如您认为需要扣除押金，请提供明确扣款项目、金额、照片、维修清单和有效票据。正常使用损耗不应作为任意扣款依据。
+
+请您在完成交接核对后确认押金退还安排。谢谢。`
+}
+
+function createEvidencePackageText({ formData, evidence, actions, communicationText }) {
+  const selectedLines = []
+  const missingLines = []
+
+  Object.entries(evidenceGroupMeta).forEach(([group, meta]) => {
+    meta.items.forEach((item, index) => {
+      const line = `${meta.title}：${item}`
+      if (evidence[group][index]) {
+        selectedLines.push(line)
+      } else {
+        missingLines.push(line)
+      }
+    })
+  })
+
+  const actionLines = evidenceActions.map((item, index) => `${actions[index] ? '[已完成]' : '[待完成]'} ${item.title}：${item.desc}`)
+
+  return [
+    '租房安心审 退租证据包摘要',
+    `生成时间：${new Date().toLocaleString()}`,
+    '',
+    '一、退租基础信息',
+    `房屋地址：${formData.address || '待填写'}`,
+    `押金金额：${formData.deposit || '待填写'} 元`,
+    `月租金：${formData.monthlyRent || '待填写'} 元`,
+    `房东/中介：${formData.landlordName || '待填写'}`,
+    `联系电话：${formData.landlordPhone || '待填写'}`,
+    `入住日期：${formatEvidenceDate(formData.checkinDate)}`,
+    `退租日期：${formatEvidenceDate(formData.checkoutDate)}`,
+    `交接时间：${formatEvidenceDate(formData.handoverDate)} ${formData.handoverTime || ''}`.trim(),
+    '',
+    '二、已收集证据',
+    selectedLines.length ? selectedLines.join('\n') : '暂无已勾选证据。',
+    '',
+    '三、待补齐证据',
+    missingLines.length ? missingLines.join('\n') : '证据清单已全部勾选。',
+    '',
+    '四、下一步行动',
+    actionLines.join('\n'),
+    '',
+    '五、沟通说明',
+    communicationText || '尚未生成沟通说明。',
+    '',
+    '提示：本摘要用于整理材料和沟通留痕，不构成法律意见。',
+  ].join('\n')
+}
+
 function createReportText({ summary, findings, revisionItems, contractText, reviewProfile }) {
   const contractType = contractTypeOptions.find((item) => item.value === reviewProfile.contractType)?.label
   const partyRole = partyRoleOptions.find((item) => item.value === reviewProfile.partyRole)?.label
@@ -1298,6 +1451,268 @@ function FindingItem({ finding, accepted, onApply }) {
         {accepted ? '已采纳修改' : '采纳并改写合同'}
       </button>
     </article>
+  )
+}
+
+function EvidencePack({ onStatus }) {
+  const [tab, setTab] = useState('info')
+  const [toolType, setToolType] = useState('deposit')
+  const [formData, setFormData] = useState({
+    address: '阳光花园3栋2单元601室',
+    deposit: '3800',
+    monthlyRent: '3800',
+    landlordName: '',
+    landlordPhone: '',
+    checkinDate: '',
+    checkoutDate: '',
+    handoverDate: '',
+    handoverTime: '',
+    repairItem: '',
+    repairCost: '',
+    notes: '',
+  })
+  const [evidence, setEvidence] = useState(() =>
+    Object.fromEntries(Object.entries(evidenceGroupMeta).map(([group, meta]) => [group, meta.items.map(() => false)])),
+  )
+  const [actions, setActions] = useState(() => evidenceActions.map(() => false))
+  const [communicationText, setCommunicationText] = useState('')
+
+  const evidenceStats = useMemo(() => {
+    const values = Object.values(evidence).flat()
+    const checked = values.filter(Boolean).length
+    const total = values.length
+    return {
+      checked,
+      total,
+      percent: total ? Math.round((checked / total) * 100) : 0,
+    }
+  }, [evidence])
+
+  const updateField = (field, value) => {
+    setFormData((current) => ({ ...current, [field]: value }))
+  }
+
+  const toggleEvidence = (group, index) => {
+    setEvidence((current) => ({
+      ...current,
+      [group]: current[group].map((value, currentIndex) => (currentIndex === index ? !value : value)),
+    }))
+  }
+
+  const toggleAction = (index) => {
+    setActions((current) => current.map((value, currentIndex) => (currentIndex === index ? !value : value)))
+  }
+
+  const generateCommunication = () => {
+    const nextText = buildEvidenceCommunication(toolType, formData)
+    setCommunicationText(nextText)
+    onStatus('已生成退租沟通说明')
+  }
+
+  const exportEvidencePackage = () => {
+    const text = createEvidencePackageText({ formData, evidence, actions, communicationText })
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = `租房安心审-退租证据包-${new Date().toISOString().slice(0, 10)}.txt`
+    link.click()
+    URL.revokeObjectURL(url)
+    onStatus('退租证据包摘要已导出')
+  }
+
+  const progressTone = evidenceStats.percent >= 80 ? 'safe' : evidenceStats.percent >= 50 ? 'warning' : 'danger'
+
+  return (
+    <div className="evidence-pack">
+      <section className="evidence-hero work-panel">
+        <div>
+          <p className="section-kicker">Move-out Evidence Kit</p>
+          <h2>退租证据包助手</h2>
+          <p>把退租时最容易遗漏的合同、照片、聊天记录和费用凭证整理成可勾选、可导出的证据包。</p>
+        </div>
+        <div className={`evidence-score ${progressTone}`}>
+          <strong>{evidenceStats.percent}%</strong>
+          <span>证据完整度</span>
+          <em>{evidenceStats.checked}/{evidenceStats.total} 项已收集</em>
+        </div>
+      </section>
+
+      <div className="evidence-tabs" role="tablist" aria-label="退租证据包功能">
+        {[
+          { key: 'info', label: '退租信息', Icon: ClipboardCheck },
+          { key: 'checklist', label: '证据清单', Icon: FileDiff },
+          { key: 'tool', label: '沟通生成器', Icon: MessageSquareText },
+          { key: 'actions', label: '行动清单', Icon: BadgeCheck },
+        ].map((item) => {
+          const Icon = item.Icon
+          return (
+            <button
+              className={`evidence-tab ${tab === item.key ? 'active' : ''}`}
+              key={item.key}
+              type="button"
+              onClick={() => setTab(item.key)}
+            >
+              <Icon size={16} aria-hidden="true" />
+              {item.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {tab === 'info' && (
+        <section className="work-panel evidence-section">
+          <div className="panel-head">
+            <div>
+              <h2>退租信息录入</h2>
+              <p>基础信息会用于生成沟通说明和证据包摘要。</p>
+            </div>
+            <button className="ghost-button compact-button" type="button" onClick={exportEvidencePackage}>
+              <Download size={15} aria-hidden="true" />
+              导出证据包
+            </button>
+          </div>
+          <div className="evidence-form-grid">
+            {[
+              { key: 'address', label: '房屋地址', placeholder: '如：阳光花园3栋2单元601室' },
+              { key: 'deposit', label: '押金金额', placeholder: '如：3800' },
+              { key: 'monthlyRent', label: '月租金', placeholder: '如：3800' },
+              { key: 'landlordName', label: '房东/中介名称', placeholder: '如：恒业房产' },
+              { key: 'landlordPhone', label: '联系电话', placeholder: '如：138xxxxxxxx' },
+              { key: 'repairItem', label: '争议维修事项', placeholder: '如：空调不制冷、墙面扣款' },
+              { key: 'repairCost', label: '维修/扣款金额', placeholder: '如：400' },
+            ].map((field) => (
+              <label className="field" key={field.key}>
+                <span>{field.label}</span>
+                <input value={formData[field.key]} onChange={(event) => updateField(field.key, event.target.value)} placeholder={field.placeholder} />
+              </label>
+            ))}
+            <label className="field">
+              <span>入住日期</span>
+              <input type="date" value={formData.checkinDate} onChange={(event) => updateField('checkinDate', event.target.value)} />
+            </label>
+            <label className="field">
+              <span>退租日期</span>
+              <input type="date" value={formData.checkoutDate} onChange={(event) => updateField('checkoutDate', event.target.value)} />
+            </label>
+            <label className="field">
+              <span>交接日期</span>
+              <input type="date" value={formData.handoverDate} onChange={(event) => updateField('handoverDate', event.target.value)} />
+            </label>
+            <label className="field">
+              <span>交接时间</span>
+              <input type="time" value={formData.handoverTime} onChange={(event) => updateField('handoverTime', event.target.value)} />
+            </label>
+            <label className="field evidence-note-field">
+              <span>备注事项</span>
+              <textarea value={formData.notes} onChange={(event) => updateField('notes', event.target.value)} placeholder="如：房屋已完成基础清洁，钥匙和门禁卡齐全。" />
+            </label>
+          </div>
+        </section>
+      )}
+
+      {tab === 'checklist' && (
+        <section className="work-panel evidence-section">
+          <div className="panel-head">
+            <div>
+              <h2>退租证据清单</h2>
+              <p>逐项勾选已收集材料，完整度会实时更新。</p>
+            </div>
+            <span className="knowledge-count">{evidenceStats.checked}/{evidenceStats.total}</span>
+          </div>
+          <div className="evidence-progress">
+            <div>
+              <strong>证据完整度</strong>
+              <span>{evidenceStats.percent}%</span>
+            </div>
+            <meter className={progressTone} min="0" max="100" value={evidenceStats.percent}>{evidenceStats.percent}</meter>
+          </div>
+          <div className="evidence-group-grid">
+            {Object.entries(evidenceGroupMeta).map(([group, meta]) => {
+              const Icon = meta.Icon
+              const checkedCount = evidence[group].filter(Boolean).length
+              return (
+                <article className="evidence-group-card" key={group}>
+                  <div className="evidence-group-head">
+                    <span>
+                      <Icon size={17} aria-hidden="true" />
+                      {meta.title}
+                    </span>
+                    <em>{checkedCount}/{meta.items.length}</em>
+                  </div>
+                  <div className="evidence-item-list">
+                    {meta.items.map((item, index) => (
+                      <label className={evidence[group][index] ? 'checked' : ''} key={item}>
+                        <input checked={evidence[group][index]} type="checkbox" onChange={() => toggleEvidence(group, index)} />
+                        <span>{item}</span>
+                        <strong>{evidence[group][index] ? '已收集' : '待补齐'}</strong>
+                      </label>
+                    ))}
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {tab === 'tool' && (
+        <section className="work-panel evidence-section">
+          <div className="panel-head">
+            <div>
+              <h2>沟通说明生成器</h2>
+              <p>生成押金退还、维修争议、退租交接三类可复制文本。</p>
+            </div>
+            <button className="primary-button" type="button" onClick={generateCommunication}>
+              <Sparkles size={16} aria-hidden="true" />
+              生成说明
+            </button>
+          </div>
+          <div className="evidence-tool-tabs">
+            {evidenceToolTabs.map((item) => (
+              <button
+                className={toolType === item.value ? 'active' : ''}
+                key={item.value}
+                type="button"
+                onClick={() => {
+                  setToolType(item.value)
+                  setCommunicationText('')
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="communication-preview">
+            <pre>{communicationText || '点击“生成说明”后，这里会生成可复制的沟通文本。'}</pre>
+          </div>
+        </section>
+      )}
+
+      {tab === 'actions' && (
+        <section className="work-panel evidence-section">
+          <div className="panel-head">
+            <div>
+              <h2>下一步行动清单</h2>
+              <p>按顺序完成这些动作，退租交接会更有证据链。</p>
+            </div>
+            <span className="knowledge-count">{actions.filter(Boolean).length}/{actions.length}</span>
+          </div>
+          <div className="evidence-action-list">
+            {evidenceActions.map((item, index) => (
+              <button className={actions[index] ? 'done' : ''} key={item.title} type="button" onClick={() => toggleAction(index)}>
+                <span>{actions[index] ? <Check size={15} aria-hidden="true" /> : index + 1}</span>
+                <div>
+                  <strong>{item.title}</strong>
+                  <p>{item.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
   )
 }
 
@@ -1615,6 +2030,24 @@ function App() {
     setStatusMessage('已打开 AI 接口配置入口')
   }
 
+  const topbarCopy = {
+    review: {
+      kicker: 'Rental Contract Copilot',
+      title: '租房签字前，先让 AI 帮你看一遍',
+      subtitle: '聚焦押金、涨租、维修、入户、管辖和违约金，把租房合同里的坑讲成大白话。',
+    },
+    evidence: {
+      kicker: 'Move-out Evidence Kit',
+      title: '退租前，把证据包整理好',
+      subtitle: '把合同、照片、沟通记录和费用凭证整理成可导出的证据摘要，减少押金争议中的材料遗漏。',
+    },
+    proposal: {
+      kicker: 'Creative Proposal',
+      title: '租房安心审参赛提案',
+      subtitle: '展示签约前审合同、退租时整理证据、押金计算和 AI 质量自检的租房全周期方案。',
+    },
+  }[activeTab]
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="租房安心审导航">
@@ -1632,6 +2065,10 @@ function App() {
           <button className={activeTab === 'review' ? 'active' : ''} type="button" onClick={() => setActiveTab('review')}>
             <FileText size={18} aria-hidden="true" />
             租房审查
+          </button>
+          <button className={activeTab === 'evidence' ? 'active' : ''} type="button" onClick={() => setActiveTab('evidence')}>
+            <ClipboardCheck size={18} aria-hidden="true" />
+            退租证据包
           </button>
           <button className={activeTab === 'proposal' ? 'active' : ''} type="button" onClick={() => setActiveTab('proposal')}>
             <BookOpenCheck size={18} aria-hidden="true" />
@@ -1655,25 +2092,38 @@ function App() {
       <section className="workspace">
         <header className="topbar">
           <div className="hero-copy">
-            <p className="section-kicker">Rental Contract Copilot</p>
-            <h1>租房签字前，先让 AI 帮你看一遍</h1>
-            <p className="hero-subtitle">
-              聚焦押金、涨租、维修、入户、管辖和违约金，把租房合同里的坑讲成大白话。
-            </p>
+            <p className="section-kicker">{topbarCopy.kicker}</p>
+            <h1>{topbarCopy.title}</h1>
+            <p className="hero-subtitle">{topbarCopy.subtitle}</p>
           </div>
           <div className="topbar-actions">
-            <button className="ghost-button" type="button" onClick={() => setShowAiConfig(true)}>
-              <Settings size={17} aria-hidden="true" />
-              AI 接入
-            </button>
-            <button className="ghost-button" type="button" onClick={() => resetContractText(sampleContract)}>
-              <RefreshCw size={17} aria-hidden="true" />
-              示例租房合同
-            </button>
-            <button className="primary-button" type="button" onClick={exportReport}>
-              <Download size={17} aria-hidden="true" />
-              导出报告
-            </button>
+            {activeTab === 'review' ? (
+              <>
+                <button className="ghost-button" type="button" onClick={() => setShowAiConfig(true)}>
+                  <Settings size={17} aria-hidden="true" />
+                  AI 接入
+                </button>
+                <button className="ghost-button" type="button" onClick={() => resetContractText(sampleContract)}>
+                  <RefreshCw size={17} aria-hidden="true" />
+                  示例租房合同
+                </button>
+                <button className="primary-button" type="button" onClick={exportReport}>
+                  <Download size={17} aria-hidden="true" />
+                  导出报告
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="ghost-button" type="button" onClick={() => setActiveTab('review')}>
+                  <FileText size={17} aria-hidden="true" />
+                  返回审查
+                </button>
+                <button className="primary-button" type="button" onClick={() => setActiveTab('evidence')}>
+                  <ClipboardCheck size={17} aria-hidden="true" />
+                  退租证据包
+                </button>
+              </>
+            )}
           </div>
         </header>
 
@@ -1757,7 +2207,9 @@ function App() {
           </section>
         )}
 
-        {activeTab === 'review' ? (
+        {activeTab === 'evidence' ? (
+          <EvidencePack onStatus={setStatusMessage} />
+        ) : activeTab === 'review' ? (
           <div className="review-layout">
             <section className="work-panel input-panel">
               <div className="panel-head">
