@@ -309,6 +309,35 @@ function normalizeAiFindings(data, sourceText) {
   }).filter((risk) => risk.evidence && (risk.hits.length > 0 || sourceText.includes(risk.evidence)))
 }
 
+function buildAiQualityReport(data, sourceText, acceptedFindings) {
+  const risks = Array.isArray(data?.risks) ? data.risks : []
+  const contractType = String(data?.contractType || data?.type || '')
+  const verifiedRawCount = risks.filter((risk) => {
+    const evidence = typeof risk.evidence === 'string' ? risk.evidence.trim() : ''
+    const replaceFrom = typeof risk.replaceFrom === 'string' ? risk.replaceFrom.trim() : ''
+    const keywords = Array.isArray(risk.keywords) ? risk.keywords : []
+
+    return (
+      (evidence && sourceText.includes(evidence)) ||
+      (replaceFrom && sourceText.includes(replaceFrom)) ||
+      keywords.some((keyword) => sourceText.includes(keyword))
+    )
+  }).length
+  const rejectedCount = Math.max(0, risks.length - acceptedFindings.length)
+  const typeMismatch = /服务|外包|知识产权|项目/.test(contractType) && detectContractType(sourceText) === 'lease'
+  const tone = typeMismatch || rejectedCount > 0 ? 'warning' : 'safe'
+
+  return {
+    rawCount: risks.length,
+    verifiedRawCount,
+    acceptedCount: acceptedFindings.length,
+    rejectedCount,
+    typeMismatch,
+    tone,
+    contractType,
+  }
+}
+
 function createAiReviewPrompt(contractText, profile) {
   return `请审查下面这份中文合同。只返回 JSON，不要 Markdown，不要解释 JSON 以外的内容。
 
@@ -316,6 +345,7 @@ ${createKnowledgePrompt(profile)}
 
 JSON 格式必须为：
 {
+  "contractType": "房屋租赁合同",
   "summary": "一句话总结",
   "risks": [
     {
@@ -1058,6 +1088,67 @@ function buildRevisionItems(acceptedIds, rules = riskRules) {
     }))
 }
 
+function createRevisedContractDraft(contractText, revisionItems) {
+  const cleanText = cleanContractTextForReview(contractText)
+  let draft = cleanText
+  const appendedClauses = []
+
+  revisionItems.forEach((item) => {
+    if (item.replaceFrom && draft.includes(item.replaceFrom)) {
+      draft = draft.replace(item.replaceFrom, item.replacement)
+      return
+    }
+
+    if (item.evidence && draft.includes(item.evidence)) {
+      draft = draft.replace(item.evidence, item.replacement)
+      return
+    }
+
+    appendedClauses.push(`【${item.title}】\n${item.replacement}`)
+  })
+
+  if (!appendedClauses.length) return draft
+
+  return [
+    draft,
+    '',
+    '补充修订条款',
+    ...appendedClauses.map((clause, index) => `${index + 1}. ${clause}`),
+  ].join('\n')
+}
+
+function parseMoney(value) {
+  const amount = Number(String(value).replace(/[^\d.]/g, ''))
+  return Number.isFinite(amount) ? amount : 0
+}
+
+function formatMoney(value) {
+  return `${Math.max(0, Math.round(value)).toLocaleString('zh-CN')} 元`
+}
+
+function calculateDepositReturn(inputs) {
+  const depositAmount = parseMoney(inputs.depositAmount)
+  const unpaidFees = parseMoney(inputs.unpaidFees)
+  const repairCost = parseMoney(inputs.repairCost)
+  const cleaningCost = parseMoney(inputs.cleaningCost)
+  const hasVoucher = inputs.hasVoucher === 'yes'
+  const normalWear = inputs.normalWear === 'yes'
+  const documentedDamageDeduction = hasVoucher && !normalWear ? repairCost + cleaningCost : 0
+  const totalDeduction = Math.min(depositAmount, unpaidFees + documentedDamageDeduction)
+  const estimatedReturn = Math.max(0, depositAmount - totalDeduction)
+  const warning = !hasVoucher && (repairCost > 0 || cleaningCost > 0)
+    ? '房东未提供票据时，维修和保洁扣款建议要求照片、清单和发票。'
+    : normalWear
+      ? '正常使用损耗通常不应从押金中随意扣除。'
+      : '存在非正常损坏且有凭证时，可按实际损失协商扣除。'
+
+  return {
+    estimatedReturn,
+    totalDeduction,
+    warning,
+  }
+}
+
 function createReportText({ summary, findings, revisionItems, contractText, reviewProfile }) {
   const contractType = contractTypeOptions.find((item) => item.value === reviewProfile.contractType)?.label
   const partyRole = partyRoleOptions.find((item) => item.value === reviewProfile.partyRole)?.label
@@ -1089,6 +1180,9 @@ function createReportText({ summary, findings, revisionItems, contractText, revi
         )
         .join('\n\n')
     : '暂无已采纳修改。'
+  const revisedDraft = revisionItems.length
+    ? createRevisedContractDraft(contractText, revisionItems)
+    : '暂无修订版合同草案。'
 
   return [
     '租房安心审 AI 租房合同解读报告',
@@ -1109,7 +1203,10 @@ function createReportText({ summary, findings, revisionItems, contractText, revi
     '二、已采纳修改说明',
     revisionLines,
     '',
-    '三、当前合同文本',
+    '三、修订版合同草案',
+    revisedDraft,
+    '',
+    '四、当前合同文本',
     contractText || '暂无合同正文。',
   ].join('\n')
 }
@@ -1240,6 +1337,7 @@ function App() {
     }
   })
   const [aiFindings, setAiFindings] = useState(null)
+  const [aiQualityReport, setAiQualityReport] = useState(null)
   const [isReviewing, setIsReviewing] = useState(false)
   const [reviewError, setReviewError] = useState('')
   const [lastReviewSource, setLastReviewSource] = useState('local')
@@ -1247,6 +1345,14 @@ function App() {
     contractType: 'lease',
     partyRole: 'partyB',
     reviewDepth: 'strict',
+  })
+  const [depositInputs, setDepositInputs] = useState({
+    depositAmount: '3800',
+    unpaidFees: '0',
+    repairCost: '0',
+    cleaningCost: '400',
+    hasVoucher: 'no',
+    normalWear: 'yes',
   })
   const reviewText = useMemo(() => cleanContractTextForReview(contractText), [contractText])
   const effectiveReviewProfile = useMemo(
@@ -1258,6 +1364,8 @@ function App() {
   const summary = useMemo(() => getRiskSummary(findings), [findings])
   const dimensionScores = useMemo(() => getDimensionScores(findings), [findings])
   const revisionItems = useMemo(() => buildRevisionItems(acceptedIds, findings), [acceptedIds, findings])
+  const revisedContractDraft = useMemo(() => createRevisedContractDraft(contractText, revisionItems), [contractText, revisionItems])
+  const depositResult = useMemo(() => calculateDepositReturn(depositInputs), [depositInputs])
   const allFindingsAccepted = findings.length > 0 && findings.every((finding) => acceptedIds.has(finding.id))
 
   useEffect(() => {
@@ -1272,10 +1380,15 @@ function App() {
   const updateReviewProfile = (field, value) => {
     setReviewProfile((current) => ({ ...current, [field]: value }))
     setAiFindings(null)
+    setAiQualityReport(null)
     setAcceptedIds(new Set())
     setLastReviewSource('local')
     setReviewError('')
     setStatusMessage('已切换审查知识库，当前结果使用本地规则重新计算')
+  }
+
+  const updateDepositInput = (field, value) => {
+    setDepositInputs((current) => ({ ...current, [field]: value }))
   }
 
   const callAiModel = async (messages, options = {}) => {
@@ -1343,6 +1456,7 @@ function App() {
 
     if (!trimmedText) {
       setAiFindings(null)
+      setAiQualityReport(null)
       setLastReviewSource('local')
       setStatusMessage('请先粘贴合同正文')
       return
@@ -1350,6 +1464,7 @@ function App() {
 
     if (!aiConfig.apiKey.trim()) {
       setAiFindings(null)
+      setAiQualityReport(null)
       setLastReviewSource('local')
       setStatusMessage('未配置 API Key，已使用本地规则审查')
       return
@@ -1369,13 +1484,22 @@ function App() {
       ])
       const parsed = parseAiContent(extractAssistantContent(data))
       const nextFindings = normalizeAiFindings(parsed, trimmedText)
+      const qualityReport = buildAiQualityReport(parsed, trimmedText, nextFindings)
 
       setAiFindings(nextFindings)
+      setAiQualityReport(qualityReport)
       setLastReviewSource('ai')
       setConnectionStatus('连接成功')
-      setStatusMessage(nextFindings.length ? `AI 审查完成，发现 ${nextFindings.length} 个风险点` : 'AI 审查完成，未发现明显风险')
+      setStatusMessage(
+        qualityReport.rejectedCount
+          ? `AI 审查完成，保留 ${nextFindings.length} 条，过滤 ${qualityReport.rejectedCount} 条无证据风险`
+          : nextFindings.length
+            ? `AI 审查完成，发现 ${nextFindings.length} 个风险点`
+            : 'AI 审查完成，未发现明显风险',
+      )
     } catch (error) {
       setAiFindings(null)
+      setAiQualityReport(null)
       setLastReviewSource('local')
       setReviewError(error.message)
       setStatusMessage('AI 审查失败，已自动切换为本地规则结果')
@@ -1388,6 +1512,7 @@ function App() {
     setContractText(nextText)
     setAcceptedIds(new Set())
     setAiFindings(null)
+    setAiQualityReport(null)
     setReviewError('')
     setLastReviewSource('local')
     setStatusMessage('已重置合同版本和采纳状态')
@@ -1411,6 +1536,10 @@ function App() {
   const restoreHistorySnapshot = (snapshot) => {
     setContractText(snapshot.contractText)
     setAcceptedIds(new Set())
+    setAiFindings(null)
+    setAiQualityReport(null)
+    setReviewError('')
+    setLastReviewSource('local')
     setStatusMessage(`已恢复 ${snapshot.title}`)
   }
 
@@ -1426,6 +1555,18 @@ function App() {
     URL.revokeObjectURL(url)
     saveHistorySnapshot()
     setStatusMessage('租房解读报告已导出')
+  }
+
+  const exportRevisedDraft = () => {
+    const blob = new Blob([revisedContractDraft], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = `租房安心审-修订版合同草案-${new Date().toISOString().slice(0, 10)}.txt`
+    link.click()
+    URL.revokeObjectURL(url)
+    setStatusMessage('修订版合同草案已导出')
   }
 
   const applySuggestion = (finding) => {
@@ -1740,6 +1881,20 @@ function App() {
                 </div>
               )}
 
+              {aiQualityReport && (
+                <div className={`quality-panel ${aiQualityReport.tone}`} role="status">
+                  <div>
+                    <strong>AI 质量自检</strong>
+                    <span>
+                      返回 {aiQualityReport.rawCount} 条，证据命中 {aiQualityReport.verifiedRawCount} 条，保留 {aiQualityReport.acceptedCount} 条，过滤 {aiQualityReport.rejectedCount} 条
+                    </span>
+                  </div>
+                  {aiQualityReport.typeMismatch && (
+                    <p>模型疑似识别成“{aiQualityReport.contractType}”，已按租房合同证据规则拦截。</p>
+                  )}
+                </div>
+              )}
+
               <div className={`summary-card ${summary.tone}`}>
                 <div>
                   <p className="eyebrow">租房风险评分</p>
@@ -1823,20 +1978,34 @@ function App() {
                     <h2>修改对比</h2>
                     <p>展示已采纳建议对应的原风险和替换条款。</p>
                   </div>
+                  {revisionItems.length > 0 && (
+                    <button className="ghost-button compact-button" type="button" onClick={exportRevisedDraft}>
+                      导出草案
+                    </button>
+                  )}
                 </div>
                 {revisionItems.length ? (
-                  <div className="diff-list">
-                    {revisionItems.map((item) => (
-                      <article className="diff-item" key={item.id}>
-                        <span>{item.priority}</span>
-                        <div>
-                          <strong>{item.title}</strong>
-                          <p className="diff-before">{item.evidence}</p>
-                          <p className="diff-after">{item.replacement}</p>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
+                  <>
+                    <div className="diff-list">
+                      {revisionItems.map((item) => (
+                        <article className="diff-item" key={item.id}>
+                          <span>{item.priority}</span>
+                          <div>
+                            <strong>{item.title}</strong>
+                            <p className="diff-before">{item.evidence}</p>
+                            <p className="diff-after">{item.replacement}</p>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                    <div className="draft-preview">
+                      <div>
+                        <strong>修订版合同草案</strong>
+                        <span>{revisionItems.length} 项已并入草案</span>
+                      </div>
+                      <pre>{revisedContractDraft}</pre>
+                    </div>
+                  </>
                 ) : (
                   <p className="empty-note">采纳建议后，这里会显示修改前后的对比。</p>
                 )}
@@ -1957,25 +2126,58 @@ function App() {
                   <p>如果要把这个 Demo 推成租房服务产品，优先补这些能力。</p>
                 </div>
               </div>
-              <div className="deposit-prototype" aria-label="押金计算器原型">
+              <div className="deposit-prototype" aria-label="押金计算器">
                 <div>
-                  <span>押金计算器原型</span>
-                  <strong>预计应退押金：3,800 元</strong>
-                  <p>按正常使用损耗、不存在未结清费用、房东未提供维修票据计算。</p>
+                  <span>押金计算器</span>
+                  <strong>预计应退押金：{formatMoney(depositResult.estimatedReturn)}</strong>
+                  <p>{depositResult.warning}</p>
+                  <em>预计可扣：{formatMoney(depositResult.totalDeduction)}</em>
                 </div>
                 <div className="deposit-grid">
                   <label>
-                    <span>月租金</span>
-                    <input disabled value="3,800 元" readOnly />
+                    <span>押金金额</span>
+                    <input
+                      inputMode="decimal"
+                      value={depositInputs.depositAmount}
+                      onChange={(event) => updateDepositInput('depositAmount', event.target.value)}
+                    />
                   </label>
                   <label>
-                    <span>已住时间</span>
-                    <input disabled value="10 个月" readOnly />
+                    <span>未结清费用</span>
+                    <input
+                      inputMode="decimal"
+                      value={depositInputs.unpaidFees}
+                      onChange={(event) => updateDepositInput('unpaidFees', event.target.value)}
+                    />
                   </label>
                   <label>
-                    <span>房屋损坏</span>
-                    <select disabled defaultValue="normal">
-                      <option value="normal">无，仅正常使用损耗</option>
+                    <span>维修扣款</span>
+                    <input
+                      inputMode="decimal"
+                      value={depositInputs.repairCost}
+                      onChange={(event) => updateDepositInput('repairCost', event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>保洁扣款</span>
+                    <input
+                      inputMode="decimal"
+                      value={depositInputs.cleaningCost}
+                      onChange={(event) => updateDepositInput('cleaningCost', event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>是否有票据</span>
+                    <select value={depositInputs.hasVoucher} onChange={(event) => updateDepositInput('hasVoucher', event.target.value)}>
+                      <option value="no">无票据或清单</option>
+                      <option value="yes">有照片、清单和票据</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>是否正常损耗</span>
+                    <select value={depositInputs.normalWear} onChange={(event) => updateDepositInput('normalWear', event.target.value)}>
+                      <option value="yes">是，仅正常使用损耗</option>
+                      <option value="no">否，存在非正常损坏</option>
                     </select>
                   </label>
                 </div>

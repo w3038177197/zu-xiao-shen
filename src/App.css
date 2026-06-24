@@ -890,6 +890,43 @@ textarea:focus {
   margin-top: 2px;
 }
 
+.quality-panel {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255,253,247,0.72);
+}
+
+.quality-panel.safe {
+  box-shadow: inset 4px 0 0 var(--green);
+}
+
+.quality-panel.warning {
+  box-shadow: inset 4px 0 0 var(--warning);
+}
+
+.quality-panel div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.quality-panel strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.quality-panel span,
+.quality-panel p {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 /* ============================================
    Summary Card
    ============================================ */
@@ -1232,6 +1269,41 @@ textarea:focus {
   margin-top: 8px;
   color: #064e3b;
   background: rgba(8,211,108,0.09);
+}
+
+.draft-preview {
+  margin-top: 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-soft);
+}
+
+.draft-preview > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.draft-preview strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.draft-preview span {
+  color: var(--muted-ink);
+  font-size: 12px;
+}
+
+.draft-preview pre {
+  max-height: 360px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--ink);
+  font: 12px/1.8 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 
 .empty-note {
@@ -1596,8 +1668,20 @@ textarea:focus {
   line-height: 1.7;
 }
 
+.deposit-prototype em {
+  width: fit-content;
+  padding: 4px 8px;
+  border: 1px solid rgba(8,211,108,0.38);
+  color: var(--green-dark);
+  background: rgba(8,211,108,0.1);
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .deposit-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
   gap: 10px;
 }
 
@@ -1620,6 +1704,12 @@ textarea:focus {
   font: inherit;
   font-size: 13px;
   opacity: 1;
+}
+
+.deposit-grid input:focus,
+.deposit-grid select:focus {
+  outline: 3px solid rgba(8,211,108,0.22);
+  border-color: var(--line-strong);
 }
 
 .trae-link-button {
@@ -1926,7 +2016,8 @@ textarea:focus {
   .metric-row,
   .finding-list,
   .feature-grid,
-  .backlog-list {
+  .backlog-list,
+  .deposit-grid {
     grid-template-columns: 1fr;
   }
 
