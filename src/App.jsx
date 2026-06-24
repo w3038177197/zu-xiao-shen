@@ -98,6 +98,7 @@ const STORAGE_KEYS = {
   historyLegacy: 'contract-guardian-history',
   aiConfig: 'rental-safe-ai-config',
   aiConfigLegacy: 'contract-guardian-ai-config',
+  evidencePack: 'rental-safe-evidence-pack',
 }
 
 // Legacy service-contract rules are retained only as a fallback when users manually
@@ -457,6 +458,60 @@ const evidenceToolTabs = [
   { value: 'repair', label: '维修争议' },
   { value: 'handover', label: '退租交接' },
 ]
+
+const defaultEvidenceFormData = {
+  address: '阳光花园3栋2单元601室',
+  deposit: '3800',
+  monthlyRent: '3800',
+  landlordName: '',
+  landlordPhone: '',
+  checkinDate: '',
+  checkoutDate: '',
+  handoverDate: '',
+  handoverTime: '',
+  repairItem: '',
+  repairCost: '',
+  notes: '',
+}
+
+function createEmptyEvidenceState() {
+  return Object.fromEntries(Object.entries(evidenceGroupMeta).map(([group, meta]) => [group, meta.items.map(() => false)]))
+}
+
+function createDefaultEvidencePackState() {
+  return {
+    formData: defaultEvidenceFormData,
+    evidence: createEmptyEvidenceState(),
+    actions: evidenceActions.map(() => false),
+    communicationText: '',
+  }
+}
+
+function normalizeEvidencePackState(savedState) {
+  const defaults = createDefaultEvidencePackState()
+  const savedEvidence = savedState?.evidence || {}
+
+  return {
+    formData: { ...defaults.formData, ...(savedState?.formData || {}) },
+    evidence: Object.fromEntries(
+      Object.entries(evidenceGroupMeta).map(([group, meta]) => {
+        const savedGroup = Array.isArray(savedEvidence[group]) ? savedEvidence[group] : []
+        return [group, meta.items.map((_, index) => Boolean(savedGroup[index]))]
+      }),
+    ),
+    actions: evidenceActions.map((_, index) => Boolean(savedState?.actions?.[index])),
+    communicationText: typeof savedState?.communicationText === 'string' ? savedState.communicationText : '',
+  }
+}
+
+function loadEvidencePackState() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.evidencePack)
+    return saved ? normalizeEvidencePackState(JSON.parse(saved)) : createDefaultEvidencePackState()
+  } catch {
+    return createDefaultEvidencePackState()
+  }
+}
 
 const contractTypeOptions = [
   { value: 'auto', label: '自动识别' },
@@ -1302,6 +1357,52 @@ function createEvidencePackageText({ formData, evidence, actions, communicationT
   ].join('\n')
 }
 
+function getEvidenceGapAdvice(evidenceStats, evidence) {
+  const missingGroups = Object.entries(evidenceGroupMeta)
+    .map(([group, meta]) => {
+      const missingItems = meta.items.filter((_, index) => !evidence[group][index])
+      return {
+        group,
+        title: meta.title,
+        missingItems,
+      }
+    })
+    .filter((item) => item.missingItems.length > 0)
+
+  const firstMissing = missingGroups[0]?.missingItems[0] || '证据清单已完整'
+  const summary = evidenceStats.percent >= 80
+    ? '证据包已接近完整，可以进入交接和押金退还沟通。'
+    : evidenceStats.percent >= 50
+      ? '证据包已有基础材料，建议优先补齐照片和费用凭证。'
+      : '证据链还比较薄，建议先补合同、押金凭证和退租照片。'
+
+  return {
+    summary,
+    firstMissing,
+    missingGroups,
+  }
+}
+
+async function copyTextToClipboard(text) {
+  if (!text) return false
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return true
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const success = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  return success
+}
+
 function createReportText({ summary, findings, revisionItems, contractText, reviewProfile }) {
   const contractType = contractTypeOptions.find((item) => item.value === reviewProfile.contractType)?.label
   const partyRole = partyRoleOptions.find((item) => item.value === reviewProfile.partyRole)?.label
@@ -1455,27 +1556,13 @@ function FindingItem({ finding, accepted, onApply }) {
 }
 
 function EvidencePack({ onStatus }) {
+  const [initialState] = useState(() => loadEvidencePackState())
   const [tab, setTab] = useState('info')
   const [toolType, setToolType] = useState('deposit')
-  const [formData, setFormData] = useState({
-    address: '阳光花园3栋2单元601室',
-    deposit: '3800',
-    monthlyRent: '3800',
-    landlordName: '',
-    landlordPhone: '',
-    checkinDate: '',
-    checkoutDate: '',
-    handoverDate: '',
-    handoverTime: '',
-    repairItem: '',
-    repairCost: '',
-    notes: '',
-  })
-  const [evidence, setEvidence] = useState(() =>
-    Object.fromEntries(Object.entries(evidenceGroupMeta).map(([group, meta]) => [group, meta.items.map(() => false)])),
-  )
-  const [actions, setActions] = useState(() => evidenceActions.map(() => false))
-  const [communicationText, setCommunicationText] = useState('')
+  const [formData, setFormData] = useState(initialState.formData)
+  const [evidence, setEvidence] = useState(initialState.evidence)
+  const [actions, setActions] = useState(initialState.actions)
+  const [communicationText, setCommunicationText] = useState(initialState.communicationText)
 
   const evidenceStats = useMemo(() => {
     const values = Object.values(evidence).flat()
@@ -1487,6 +1574,15 @@ function EvidencePack({ onStatus }) {
       percent: total ? Math.round((checked / total) * 100) : 0,
     }
   }, [evidence])
+  const evidenceAdvice = useMemo(() => getEvidenceGapAdvice(evidenceStats, evidence), [evidenceStats, evidence])
+  const evidencePackageText = useMemo(
+    () => createEvidencePackageText({ formData, evidence, actions, communicationText }),
+    [actions, communicationText, evidence, formData],
+  )
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.evidencePack, JSON.stringify({ formData, evidence, actions, communicationText }))
+  }, [actions, communicationText, evidence, formData])
 
   const updateField = (field, value) => {
     setFormData((current) => ({ ...current, [field]: value }))
@@ -1510,8 +1606,7 @@ function EvidencePack({ onStatus }) {
   }
 
   const exportEvidencePackage = () => {
-    const text = createEvidencePackageText({ formData, evidence, actions, communicationText })
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const blob = new Blob([evidencePackageText], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
 
@@ -1520,6 +1615,30 @@ function EvidencePack({ onStatus }) {
     link.click()
     URL.revokeObjectURL(url)
     onStatus('退租证据包摘要已导出')
+  }
+
+  const copyCommunication = async () => {
+    if (!communicationText) {
+      onStatus('请先生成沟通说明')
+      return
+    }
+
+    await copyTextToClipboard(communicationText)
+    onStatus('沟通说明已复制')
+  }
+
+  const copyEvidencePackage = async () => {
+    await copyTextToClipboard(evidencePackageText)
+    onStatus('退租证据包摘要已复制')
+  }
+
+  const resetEvidencePack = () => {
+    const nextState = createDefaultEvidencePackState()
+    setFormData(nextState.formData)
+    setEvidence(nextState.evidence)
+    setActions(nextState.actions)
+    setCommunicationText(nextState.communicationText)
+    onStatus('退租证据包已重置')
   }
 
   const progressTone = evidenceStats.percent >= 80 ? 'safe' : evidenceStats.percent >= 50 ? 'warning' : 'danger'
@@ -1531,6 +1650,10 @@ function EvidencePack({ onStatus }) {
           <p className="section-kicker">Move-out Evidence Kit</p>
           <h2>退租证据包助手</h2>
           <p>把退租时最容易遗漏的合同、照片、聊天记录和费用凭证整理成可勾选、可导出的证据包。</p>
+          <div className="evidence-hero-note">
+            <span>自动保存</span>
+            <strong>{evidenceAdvice.summary}</strong>
+          </div>
         </div>
         <div className={`evidence-score ${progressTone}`}>
           <strong>{evidenceStats.percent}%</strong>
@@ -1568,10 +1691,19 @@ function EvidencePack({ onStatus }) {
               <h2>退租信息录入</h2>
               <p>基础信息会用于生成沟通说明和证据包摘要。</p>
             </div>
-            <button className="ghost-button compact-button" type="button" onClick={exportEvidencePackage}>
-              <Download size={15} aria-hidden="true" />
-              导出证据包
-            </button>
+            <div className="panel-actions">
+              <button className="ghost-button compact-button" type="button" onClick={copyEvidencePackage}>
+                <ClipboardCheck size={15} aria-hidden="true" />
+                复制摘要
+              </button>
+              <button className="ghost-button compact-button" type="button" onClick={resetEvidencePack}>
+                重置
+              </button>
+              <button className="primary-button compact-button" type="button" onClick={exportEvidencePackage}>
+                <Download size={15} aria-hidden="true" />
+                导出证据包
+              </button>
+            </div>
           </div>
           <div className="evidence-form-grid">
             {[
@@ -1628,6 +1760,13 @@ function EvidencePack({ onStatus }) {
             </div>
             <meter className={progressTone} min="0" max="100" value={evidenceStats.percent}>{evidenceStats.percent}</meter>
           </div>
+          <div className="evidence-advice">
+            <AlertTriangle size={17} aria-hidden="true" />
+            <div>
+              <strong>优先补齐：{evidenceAdvice.firstMissing}</strong>
+              <p>{evidenceAdvice.summary}</p>
+            </div>
+          </div>
           <div className="evidence-group-grid">
             {Object.entries(evidenceGroupMeta).map(([group, meta]) => {
               const Icon = meta.Icon
@@ -1664,10 +1803,16 @@ function EvidencePack({ onStatus }) {
               <h2>沟通说明生成器</h2>
               <p>生成押金退还、维修争议、退租交接三类可复制文本。</p>
             </div>
-            <button className="primary-button" type="button" onClick={generateCommunication}>
-              <Sparkles size={16} aria-hidden="true" />
-              生成说明
-            </button>
+            <div className="panel-actions">
+              <button className="ghost-button compact-button" type="button" onClick={copyCommunication}>
+                <ClipboardCheck size={15} aria-hidden="true" />
+                复制文本
+              </button>
+              <button className="primary-button compact-button" type="button" onClick={generateCommunication}>
+                <Sparkles size={16} aria-hidden="true" />
+                生成说明
+              </button>
+            </div>
           </div>
           <div className="evidence-tool-tabs">
             {evidenceToolTabs.map((item) => (

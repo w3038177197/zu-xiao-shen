@@ -1586,6 +1586,29 @@ textarea:focus {
   line-height: 1.75;
 }
 
+.evidence-hero-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.evidence-hero-note span {
+  padding: 3px 7px;
+  border: 1px solid var(--line-strong);
+  color: #06231f;
+  background: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.evidence-hero-note strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .evidence-score {
   min-height: 150px;
   display: grid;
@@ -1679,6 +1702,37 @@ textarea:focus {
   padding: 14px;
   border: 1px solid var(--line);
   background: rgba(255,253,247,0.72);
+}
+
+.evidence-advice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(90deg, rgba(8,211,108,0.1), transparent 38%),
+    rgba(255,253,247,0.72);
+}
+
+.evidence-advice svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--green-dark);
+}
+
+.evidence-advice strong {
+  display: block;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.evidence-advice p {
+  margin: 4px 0 0;
+  color: var(--muted-ink);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .evidence-progress div {
