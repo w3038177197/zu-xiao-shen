@@ -8,6 +8,7 @@
     "dev:api": "node server/ai-proxy.mjs",
     "dev:full": "concurrently \"npm run dev\" \"npm run dev:api\"",
     "build": "vite build",
+    "start": "node server/ai-proxy.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test:ai": "node server/evaluate-rag.mjs",

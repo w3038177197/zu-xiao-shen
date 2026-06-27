@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: zu-xiao-shen
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: AI_PROXY_PROVIDER
+        value: DeepSeek
+      - key: AI_PROXY_MODEL
+        value: deepseek-v4-flash
+      - key: AI_PROXY_ALLOW_CUSTOM_UPSTREAM
+        value: "false"
+      - key: AI_PROXY_ALLOW_CLIENT_BASE_URL
+        value: "false"
+      - key: DEEPSEEK_API_KEY
+        sync: false

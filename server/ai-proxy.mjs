@@ -2,6 +2,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
 import multer from 'multer'
+import { existsSync } from 'node:fs'
 import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,10 +13,12 @@ import { evaluateKnowledgeRetrieval, searchKnowledge } from './rag-engine.mjs'
 dotenv.config({ override: true })
 
 const app = express()
-const port = Number(process.env.AI_PROXY_PORT || 8787)
+const port = Number(process.env.PORT || process.env.AI_PROXY_PORT || 8787)
 const allowedOrigin = process.env.AI_PROXY_ALLOWED_ORIGIN || 'http://localhost:5173'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.join(__dirname, '..')
+const distDir = path.join(rootDir, 'dist')
+const indexHtmlPath = path.join(distDir, 'index.html')
 const reportDir = path.join(__dirname, '..', 'generated-reports')
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -449,6 +452,17 @@ app.post('/api/ai/chat', async (request, response) => {
     response.status(502).json({ message: error.message || 'AI proxy request failed' })
   }
 })
+
+if (existsSync(indexHtmlPath)) {
+  app.use(express.static(distDir))
+  app.get(/^\/(?!api(?:\/|$)).*/, (_request, response) => {
+    response.sendFile(indexHtmlPath)
+  })
+} else {
+  app.get('/', (_request, response) => {
+    response.status(404).send('Frontend build not found. Run `npm run build` before `npm start`.')
+  })
+}
 
 app.listen(port, () => {
   console.log(`Zu Xiao Shen AI proxy listening on http://localhost:${port}`)
