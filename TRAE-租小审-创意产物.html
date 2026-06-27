@@ -1,0 +1,1171 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>租小审 - TRAE Work 创意产物</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --bg-2: #0f1620;
+      --panel: rgba(15, 22, 32, 0.88);
+      --panel-2: rgba(18, 27, 38, 0.94);
+      --line: rgba(255, 255, 255, 0.09);
+      --line-strong: rgba(255, 255, 255, 0.16);
+      --text: #edf2f7;
+      --muted: #9aa7b7;
+      --muted-2: #738296;
+      --accent: #8ee6a4;
+      --accent-2: #7bc6ff;
+      --warning: #ffcb7d;
+      --danger: #ff8f8f;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --max: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font: 15px/1.75 "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 700px at 20% -10%, rgba(124, 198, 255, 0.16), transparent 55%),
+        radial-gradient(900px 600px at 100% 0%, rgba(142, 230, 164, 0.12), transparent 50%),
+        linear-gradient(180deg, #0b0f14 0%, #0c1118 38%, #0b0f14 100%);
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+
+    .shell {
+      width: min(var(--max), calc(100% - 40px));
+      margin: 0 auto;
+      padding: 22px 0 56px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      margin-bottom: 20px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(12, 18, 26, 0.72);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+      position: sticky;
+      top: 14px;
+      z-index: 8;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, rgba(142, 230, 164, 0.18), rgba(123, 198, 255, 0.18));
+      border: 1px solid var(--line-strong);
+      color: var(--accent);
+      flex: 0 0 auto;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 15px;
+      letter-spacing: 0.2px;
+    }
+
+    .brand span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 48vw;
+    }
+
+    .nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .nav a {
+      padding: 8px 12px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      color: var(--muted);
+      transition: 0.18s ease;
+    }
+
+    .nav a:hover {
+      color: var(--text);
+      border-color: var(--line);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.25fr 0.95fr;
+      gap: 18px;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+
+    .hero-main,
+    .hero-side,
+    .section,
+    .mock-shell {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(16, 24, 35, 0.92), rgba(12, 18, 27, 0.92));
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .hero-main {
+      padding: 30px;
+      position: relative;
+      min-height: 420px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      width: fit-content;
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(142, 230, 164, 0.28);
+      background: rgba(142, 230, 164, 0.08);
+      color: #b9f2c7;
+      font-size: 12px;
+      letter-spacing: 0.3px;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 5px rgba(142, 230, 164, 0.12);
+    }
+
+    h1 {
+      margin: 18px 0 14px;
+      font-size: clamp(38px, 4vw, 58px);
+      line-height: 1.04;
+      letter-spacing: -0.02em;
+    }
+
+    .hero-main p {
+      margin: 0;
+      max-width: 62ch;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .chip,
+    .btn,
+    .stat,
+    .tag,
+    .pill,
+    .mini {
+      border-radius: 999px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 16px;
+      border: 1px solid var(--line-strong);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      cursor: default;
+    }
+
+    .btn.primary {
+      border-color: rgba(142, 230, 164, 0.35);
+      background: linear-gradient(135deg, rgba(142, 230, 164, 0.14), rgba(123, 198, 255, 0.14));
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .stat {
+      padding: 14px 14px 12px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 16px;
+      min-height: 94px;
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 24px;
+      margin-bottom: 5px;
+      letter-spacing: -0.03em;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 12px;
+      display: block;
+    }
+
+    .hero-side {
+      padding: 20px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .side-card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .side-card h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+
+    .side-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .line {
+      height: 11px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(123, 198, 255, 0.18), rgba(142, 230, 164, 0.18));
+      overflow: hidden;
+      position: relative;
+    }
+
+    .line::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+      transform: translateX(-60%);
+      animation: glide 4s linear infinite;
+    }
+
+    @keyframes glide {
+      0% { transform: translateX(-70%); }
+      100% { transform: translateX(120%); }
+    }
+
+    .section {
+      padding: 24px;
+      margin-top: 18px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 26px;
+      letter-spacing: -0.02em;
+    }
+
+    .section-head p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      max-width: 74ch;
+    }
+
+    .problem-grid,
+    .feature-grid,
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 16px;
+      padding: 16px;
+      min-height: 160px;
+    }
+
+    .card .tag,
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .card h3 {
+      margin: 12px 0 8px;
+      font-size: 16px;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .feature-grid .card {
+      min-height: 190px;
+    }
+
+    .feature-grid h3 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .feature-grid h3::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 0 0 5px rgba(124, 198, 255, 0.08);
+      flex: 0 0 auto;
+    }
+
+    .showcase {
+      display: grid;
+      grid-template-columns: 0.95fr 1.05fr;
+      gap: 14px;
+    }
+
+    .mock-shell {
+      padding: 16px;
+      background:
+        radial-gradient(1200px 400px at 50% 0%, rgba(123, 198, 255, 0.09), transparent 50%),
+        linear-gradient(180deg, rgba(14, 20, 29, 0.95), rgba(10, 15, 22, 0.95));
+    }
+
+    .mock-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 14px;
+    }
+
+    .mock-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .mock-title .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 5px rgba(142, 230, 164, 0.12);
+      flex: 0 0 auto;
+    }
+
+    .mock-title strong {
+      display: block;
+    }
+
+    .mock-title span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .tab {
+      padding: 9px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+      cursor: pointer;
+      transition: 0.18s ease;
+    }
+
+    .tab.active {
+      color: #eafaf0;
+      border-color: rgba(142, 230, 164, 0.35);
+      background: rgba(142, 230, 164, 0.09);
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 12px;
+    }
+
+    .preview-block {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      min-height: 250px;
+    }
+
+    .preview-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .preview-title strong {
+      font-size: 14px;
+    }
+
+    .risk-list,
+    .check-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .risk-item,
+    .check-item {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(8, 12, 18, 0.35);
+    }
+
+    .risk-item .badge,
+    .check-item .badge {
+      flex: 0 0 auto;
+      width: 30px;
+      height: 30px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 12px;
+      background: rgba(123, 198, 255, 0.12);
+      border: 1px solid rgba(123, 198, 255, 0.22);
+      color: #cceaff;
+    }
+
+    .risk-item h4,
+    .check-item h4 {
+      margin: 0 0 4px;
+      font-size: 14px;
+    }
+
+    .risk-item p,
+    .check-item p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .contract-preview {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+        repeating-linear-gradient(
+          180deg,
+          transparent 0 33px,
+          rgba(255, 255, 255, 0.025) 33px 34px
+        );
+      min-height: 250px;
+    }
+
+    .contract-preview h4 {
+      margin: 0 0 10px;
+      font-size: 15px;
+    }
+
+    .contract-preview .clause {
+      margin: 0 0 10px;
+      text-indent: 2em;
+      color: #e7edf4;
+      font-size: 13px;
+      line-height: 1.9;
+    }
+
+    .contract-preview .highlight {
+      padding: 2px 5px;
+      border-radius: 6px;
+      background: rgba(255, 203, 125, 0.18);
+      color: #ffe4b4;
+      border: 1px solid rgba(255, 203, 125, 0.2);
+    }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .step {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      min-height: 140px;
+      position: relative;
+    }
+
+    .step::after {
+      content: "→";
+      position: absolute;
+      right: -18px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: rgba(255, 255, 255, 0.22);
+      font-size: 18px;
+    }
+
+    .step:last-child::after { content: ""; }
+
+    .step strong {
+      display: block;
+      margin: 10px 0 6px;
+      font-size: 15px;
+    }
+
+    .step p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .results {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .result {
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      min-height: 150px;
+    }
+
+    .result strong {
+      display: block;
+      font-size: 28px;
+      margin-bottom: 8px;
+      letter-spacing: -0.03em;
+    }
+
+    .result span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .innovations {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .innovation {
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .innovation h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .innovation p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--muted);
+    }
+
+    .foot {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+      padding: 0 4px;
+      color: var(--muted-2);
+      font-size: 12px;
+    }
+
+    @media (max-width: 1100px) {
+      .hero,
+      .showcase,
+      .panel-grid,
+      .pipeline,
+      .results,
+      .innovations,
+      .problem-grid,
+      .feature-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .step::after {
+        right: 10px;
+        bottom: -20px;
+        top: auto;
+        transform: none;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .shell { width: min(100% - 18px, var(--max)); padding-top: 10px; }
+      .topbar { border-radius: 22px; position: static; }
+      .nav { justify-content: flex-start; }
+      .hero-main, .hero-side, .section, .mock-shell { border-radius: 22px; }
+      .hero-grid,
+      .problem-grid,
+      .feature-grid,
+      .showcase,
+      .panel-grid,
+      .pipeline,
+      .results,
+      .innovations {
+        grid-template-columns: 1fr;
+      }
+      .section-head {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      h1 { font-size: 34px; }
+      .hero-main { min-height: auto; padding: 24px; }
+      .hero-grid { margin-top: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">租</div>
+        <div>
+          <strong>租小审</strong>
+          <span>AI 租房合同解读器 · TRAE Work 创意产物提交版</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="#problem">解决的问题</a>
+        <a href="#features">核心功能</a>
+        <a href="#tech">技术方案</a>
+        <a href="#results">预期效果</a>
+        <a href="#innovation">创新亮点</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <article class="hero-main">
+        <div>
+          <div class="eyebrow">TRAE Work · 参赛提交</div>
+          <h1>租房签字前，先让 AI 帮你看一遍</h1>
+          <p>
+            租小审把租房合同解读、风险识别、采纳改写、退租证据包和创意提案整合到一个工作台里。
+            它面向毕业生、年轻租客和普通家庭，把押金、涨租、维修、管辖、违约金等高频坑点讲清楚，
+            再把建议直接变成可提交、可留痕、可导出的材料。
+          </p>
+        </div>
+
+        <div class="hero-actions">
+          <div class="btn primary">租房合同审查</div>
+          <div class="btn">退租证据包</div>
+          <div class="btn">创意提案展示</div>
+        </div>
+
+        <div class="hero-grid">
+          <div class="stat">
+            <strong>15+</strong>
+            <span>租房专属风险规则，覆盖押金、涨租、维修、入户、违约金、管辖等高频条款</span>
+          </div>
+          <div class="stat">
+            <strong>3 合 1</strong>
+            <span>审查、证据包、提案页整合成一个项目工作台，适合演示与报名提交</span>
+          </div>
+          <div class="stat">
+            <strong>单文件</strong>
+            <span>额外打包成可直接上传的 HTML 创意产物，便于 TRAE 社区报名</span>
+          </div>
+        </div>
+      </article>
+
+      <aside class="hero-side">
+        <div class="side-card">
+          <h3>项目定位</h3>
+          <p>AI 合同审查助手，专注租房场景，不做通用合同泛化。</p>
+          <div class="stack" aria-hidden="true">
+            <div class="line" style="width: 92%"></div>
+            <div class="line" style="width: 74%"></div>
+            <div class="line" style="width: 86%"></div>
+          </div>
+        </div>
+        <div class="side-card">
+          <h3>核心交互</h3>
+          <p>合同识别、风险高亮、逐条采纳、全部采纳、导出优化合同、导出证据包。</p>
+        </div>
+        <div class="side-card">
+          <h3>展示方式</h3>
+          <p>用深色专业风格模拟法务工具界面，让作品看起来像一个真正可落地的工作台。</p>
+        </div>
+      </aside>
+    </section>
+
+    <section id="problem" class="section">
+      <div class="section-head">
+        <div>
+          <h2>解决的问题</h2>
+          <p>租房合同里最容易出问题的地方，通常不是大标题，而是细小、分散、难以理解的条款。租小审的目标，是把这些条款翻译成普通租客能立刻看懂的行动建议。</p>
+        </div>
+      </div>
+
+      <div class="problem-grid">
+        <article class="card">
+          <div class="tag">看不懂</div>
+          <h3>合同语言过于专业</h3>
+          <p>把“格式条款”“违约责任”“管辖约定”等内容翻成白话，帮助用户快速理解签字后会发生什么。</p>
+        </article>
+        <article class="card">
+          <div class="tag">找不全</div>
+          <h3>风险点分散且隐蔽</h3>
+          <p>自动定位押金扣除、续租涨价、维修责任、换锁收房、单方解除等高频坑点，不靠人工逐字检索。</p>
+        </article>
+        <article class="card">
+          <div class="tag">不会谈</div>
+          <h3>知道有问题，不知道怎么改</h3>
+          <p>每条风险都配可直接复制的谈判话术和替换建议，让用户能把“发现问题”变成“发出修改请求”。</p>
+        </article>
+        <article class="card">
+          <div class="tag">留不住证据</div>
+          <h3>退租材料容易遗漏</h3>
+          <p>把合同、照片、聊天记录、费用凭证和退租流程整理成证据包，减少押金争议时的材料缺口。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <div class="section-head">
+        <div>
+          <h2>核心功能</h2>
+          <p>当前 Demo 已经围绕“签字前审查”和“退租后留痕”两个关键时刻做了完整闭环，同时保留了创意提案页，方便比赛展示。</p>
+        </div>
+      </div>
+
+      <div class="feature-grid">
+        <article class="card">
+          <h3>租房合同上传与识别</h3>
+          <p>支持粘贴、PDF、Word 和图片输入，结合本地解析、OCR 和 AI 识别，尽量让“能上传”变成“能读懂”。</p>
+        </article>
+        <article class="card">
+          <h3>风险高亮与证据核对</h3>
+          <p>自动标出合同原文中的危险片段，并做证据核验，避免出现不在原文里的“幻觉风险”。</p>
+        </article>
+        <article class="card">
+          <h3>逐条采纳与一键采纳</h3>
+          <p>每个风险点下方可单独采纳，也可以一键采纳全部建议，直接生成修订版合同正文。</p>
+        </article>
+        <article class="card">
+          <h3>下载优化合同</h3>
+          <p>采纳完成后可导出优化合同文档，内容只保留修改后的合同本身，更适合交给房东或中介沟通。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <h2>产品界面预览</h2>
+          <p>这个预览区模拟了真实产品工作台的三个入口：合同审查、退租证据包和创意提案。点击切换即可查看不同工作流。</p>
+        </div>
+      </div>
+
+      <div class="showcase">
+        <div class="mock-shell">
+          <div class="mock-top">
+            <div class="mock-title">
+              <div class="dot"></div>
+              <div>
+                <strong>租小审工作台</strong>
+                <span>深色专业风 · 法务工具感 · 租房场景聚焦</span>
+              </div>
+            </div>
+            <div class="pill-row">
+              <div class="pill">风险高亮</div>
+              <div class="pill">全部采纳</div>
+              <div class="pill">导出 Word</div>
+            </div>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="预览切换">
+            <button class="tab active" type="button" data-tab="review">合同审查</button>
+            <button class="tab" type="button" data-tab="evidence">退租证据包</button>
+            <button class="tab" type="button" data-tab="proposal">创意提案</button>
+          </div>
+
+          <div class="panel active" data-panel="review">
+            <div class="panel-grid">
+              <div class="preview-block">
+                <div class="preview-title">
+                  <strong>风险建议</strong>
+                  <span class="tag">一键采纳</span>
+                </div>
+                <div class="risk-list">
+                  <div class="risk-item">
+                    <div class="badge" style="color:#ffdfb1;background:rgba(255,203,125,.12);border-color:rgba(255,203,125,.22)">P0</div>
+                    <div>
+                      <h4>单方涨租和单方解约</h4>
+                      <p>把“房东可单方调价、不同意就搬离”改成需要双方书面确认的协商机制。</p>
+                    </div>
+                  </div>
+                  <div class="risk-item">
+                    <div class="badge">P0</div>
+                    <div>
+                      <h4>维修责任全甩给租客</h4>
+                      <p>区分自然损耗和人为损坏，避免把墙体开裂、水管老化都算给承租人。</p>
+                    </div>
+                  </div>
+                  <div class="risk-item">
+                    <div class="badge" style="color:#b9f2c7;background:rgba(142,230,164,.12);border-color:rgba(142,230,164,.22)">P1</div>
+                    <div>
+                      <h4>换锁收房和押金任意扣</h4>
+                      <p>要求明确扣款范围、证据、金额和争议处理方式，避免押金沦为“口头解释”。</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="contract-preview">
+                <h4>合同高亮示意</h4>
+                <p class="clause">合同到期前 30 日，如双方均未提出异议，本合同自动续期 12 个月，续期租金在当期基础上 <span class="highlight">上调 8%</span>。</p>
+                <p class="clause">乙方逾期支付租金，每逾期一日加收月租金 5% 作为滞纳金。逾期超过 7 日的，甲方有权 <span class="highlight">换锁收回房屋</span>，已收租金及押金不予退还。</p>
+                <p class="clause">租赁期内房屋及附属设施出现任何问题的，由乙方自行维修并承担费用。因水管老化、墙体开裂等自然原因造成的损坏，同样由乙方负责。</p>
+                <p class="clause">双方发生争议协商不成的，应向甲方户籍所在地人民法院起诉。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" data-panel="evidence">
+            <div class="panel-grid">
+              <div class="preview-block">
+                <div class="preview-title">
+                  <strong>证据包清单</strong>
+                  <span class="tag">可复制导出</span>
+                </div>
+                <div class="check-list">
+                  <div class="check-item">
+                    <div class="badge">1</div>
+                    <div>
+                      <h4>合同正本</h4>
+                      <p>用于确认条款原文与签字版本。</p>
+                    </div>
+                  </div>
+                  <div class="check-item">
+                    <div class="badge">2</div>
+                    <div>
+                      <h4>入住和退租照片</h4>
+                      <p>用于证明房屋状态、设施损耗和交接情况。</p>
+                    </div>
+                  </div>
+                  <div class="check-item">
+                    <div class="badge">3</div>
+                    <div>
+                      <h4>聊天记录与费用凭证</h4>
+                      <p>用于证明沟通过程、通知时点和押金扣款依据。</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="contract-preview">
+                <h4>退租证据包摘要</h4>
+                <p class="clause">本证据包聚焦退租时的房屋状态、费用清算和沟通留痕，帮助租客把零散材料整理成可提交的摘要。</p>
+                <p class="clause">建议优先补齐：<span class="highlight">入住/退租照片、押金收据、水电燃气清单、维修沟通记录</span>。</p>
+                <p class="clause">系统会根据填写的信息自动生成：退租说明、证据清单、缺口提醒、下一步行动卡片。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel" data-panel="proposal">
+            <div class="panel-grid">
+              <div class="preview-block">
+                <div class="preview-title">
+                  <strong>参赛提案要点</strong>
+                  <span class="tag">展示页</span>
+                </div>
+                <div class="risk-list">
+                  <div class="risk-item">
+                    <div class="badge">A</div>
+                    <div>
+                      <h4>项目名称</h4>
+                      <p>租小审，面向租房签字前后的风险识别与证据整理。</p>
+                    </div>
+                  </div>
+                  <div class="risk-item">
+                    <div class="badge">B</div>
+                    <div>
+                      <h4>一句话口号</h4>
+                      <p>签字前，先让 AI 帮你看一遍。</p>
+                    </div>
+                  </div>
+                  <div class="risk-item">
+                    <div class="badge">C</div>
+                    <div>
+                      <h4>比赛价值</h4>
+                      <p>同时兼顾实际使用场景、可展示性和清晰的社会服务属性。</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="contract-preview">
+                <h4>展示句式</h4>
+                <p class="clause">租小审不是通用合同 AI，而是专门面向租房合同、退租证据和押金争议的工作台。</p>
+                <p class="clause">它的重点不是“生成一份更长的报告”，而是把风险点、修改建议和证据材料变成租客能立刻用起来的动作。</p>
+                <p class="clause">单文件 HTML 版本可直接作为 TRAE Work 创意产物上传，用于完整呈现产品故事和界面效果。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="mock-shell">
+          <div class="section-head" style="margin-bottom: 14px;">
+            <div>
+              <h2 style="font-size:20px;margin:0;">你在报名页看到的内容</h2>
+              <p style="margin-top: 8px;">这一侧用来把作品的“可读性”补齐，保证社区里的人一眼就知道你在做什么。</p>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="side-card">
+              <h3>项目价值</h3>
+              <p>把法律风险拆成用户能看懂的动作：发现、解释、采纳、导出、留痕。</p>
+            </div>
+            <div class="side-card">
+              <h3>产品闭环</h3>
+              <p>审查页解决签字前，证据包解决退租时，提案页解决比赛展示。</p>
+            </div>
+            <div class="side-card">
+              <h3>提交说明</h3>
+              <p>这个 HTML 已经将项目故事、功能结构和技术思路统一成单页可浏览材料。</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tech" class="section">
+      <div class="section-head">
+        <div>
+          <h2>技术方案</h2>
+          <p>当前实现采用“本地规则 + AI 接口 + 原文证据核验 + 文件解析”的结构。它既能展示，也保留了继续演进为真实产品的接口空间。</p>
+        </div>
+      </div>
+
+      <div class="pipeline">
+        <div class="step">
+          <div class="tag">1</div>
+          <strong>输入层</strong>
+          <p>支持粘贴合同正文，并预留 PDF、Word、图片和 OCR 解析入口。</p>
+        </div>
+        <div class="step">
+          <div class="tag">2</div>
+          <strong>识别层</strong>
+          <p>先判断租房场景，再定位押金、涨租、维修、管辖、解除、违约金等风险条款。</p>
+        </div>
+        <div class="step">
+          <div class="tag">3</div>
+          <strong>校验层</strong>
+          <p>把 AI 结果和原文逐条核对，过滤掉证据不存在的“幻觉风险”。</p>
+        </div>
+        <div class="step">
+          <div class="tag">4</div>
+          <strong>生成层</strong>
+          <p>输出白话解释、谈判话术、采纳后的合同正文、退租证据摘要和正式报告。</p>
+        </div>
+        <div class="step">
+          <div class="tag">5</div>
+          <strong>导出层</strong>
+          <p>可下载优化合同文档，适合后续提交、沟通、存档和继续修改。</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="results" class="section">
+      <div class="section-head">
+        <div>
+          <h2>预期效果</h2>
+          <p>比赛里最重要的，不只是功能数量，而是看起来是否真能帮到人。租小审希望把“合同焦虑”压缩成一套清晰、可执行的流程。</p>
+        </div>
+      </div>
+
+      <div class="results">
+        <div class="result">
+          <strong>更快</strong>
+          <span>用户能在签字前迅速看到高风险条款，不需要逐字拆合同。</span>
+        </div>
+        <div class="result">
+          <strong>更准</strong>
+          <span>风险描述绑定原文证据，减少凭空编造和误判合同类型的问题。</span>
+        </div>
+        <div class="result">
+          <strong>更会谈</strong>
+          <span>把“哪里有坑”转成“这句话怎么改、怎么讲”两层输出。</span>
+        </div>
+        <div class="result">
+          <strong>更能留痕</strong>
+          <span>退租时不再只靠记忆和口头争论，而是把材料整理成证据包。</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="innovation" class="section">
+      <div class="section-head">
+        <div>
+          <h2>创新亮点</h2>
+          <p>租小审的创新点不是“再做一个聊天机器人”，而是把租房合同、谈判、证据和导出材料整合到一个以租客为中心的工作流里。</p>
+        </div>
+      </div>
+
+      <div class="innovations">
+        <div class="innovation">
+          <h3>租客视角优先</h3>
+          <p>不是通用法务系统，而是围绕租房签约、入住、退租的真实痛点做设计。</p>
+        </div>
+        <div class="innovation">
+          <h3>证据绑定风险</h3>
+          <p>每条风险都要能回到原文，避免 AI 输出看似专业但实际上不成立的内容。</p>
+        </div>
+        <div class="innovation">
+          <h3>审查 + 证据 + 提案合并</h3>
+          <p>一个项目同时解决实用价值和比赛展示价值，不需要再拆成多个孤立页面。</p>
+        </div>
+      </div>
+
+      <div class="footer-note">
+        这份 HTML 已经按报名材料思路组织为“问题 - 功能 - 技术 - 效果 - 创新”的完整结构，可直接上传到社区作为创意产物提交。
+      </div>
+    </section>
+
+    <div class="foot">
+      <div>项目名称：租小审 · AI 租房合同解读器</div>
+      <div>提交文件：TRAE-租小审-创意产物.html</div>
+    </div>
+  </div>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab');
+    const panels = document.querySelectorAll('.panel');
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        tabs.forEach((item) => item.classList.toggle('active', item === tab));
+        panels.forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === target));
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-# 合同卫士 · 优化路线图
+# 租小审 · 优化路线图
 
 > 基于当前代码状态（`App.jsx` 1911 行）的全面审查报告
 > 最后更新：2026-06-24
@@ -584,5 +584,5 @@ async function callAiModel(apiKey, model, contractText, prompt) {
 ---
 
 **文档版本**：v1.0  
-**适用项目**：`contract-guardian`（租房安心审）  
+**适用项目**：租小审
 **下次更新**：完成任一 P0 任务后

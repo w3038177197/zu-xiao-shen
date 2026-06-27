@@ -8,11 +8,21 @@ pnpm-debug.log*
 lerna-debug.log*
 *.zip
 backups/
+generated-reports/
+test-results/
+.cache/
+screenshots/
+.agents/
+.claude/
+tmp-*.png
+src/*.bak-*
+src/*.before-recover-*
 
 node_modules
 dist
 dist-ssr
 *.local
+.env
 
 # Editor directories and files
 .vscode/*

@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
   BadgeCheck,
   Bot,
-  BookOpenCheck,
   Check,
   CircleDollarSign,
   ClipboardCheck,
@@ -14,7 +13,7 @@ import {
   FileText,
   Fingerprint,
   Gavel,
-  KeyRound,
+  House,
   LockKeyhole,
   MessageSquareText,
   PlugZap,
@@ -24,7 +23,9 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Send,
   UploadCloud,
+  X,
 } from 'lucide-react'
 import './App.css'
 
@@ -93,12 +94,793 @@ const sampleContract = `房屋租赁合同
 二十、续租通知
 乙方如需续租，须在合同到期前60日书面提出申请，逾期视为放弃续租。`
 
+const demoContracts = [
+  {
+    id: 'high-risk',
+    title: '高风险整租合同',
+    tag: '押金 / 涨租 / 换锁',
+    description: '适合演示综合风险评分、全部采纳和修订草案。',
+    text: sampleContract,
+  },
+  {
+    id: 'deposit-dispute',
+    title: '退租押金争议合同',
+    tag: '扣款 / 保洁 / 票据',
+    description: '重点展示押金扣款、退租恢复、费用凭证和证据包联动。',
+    text: `房屋租赁合同
+
+出租方（甲方）：青禾公寓运营有限公司
+承租方（乙方）：李同学
+
+一、房屋信息
+甲方将位于星河湾 8 栋 1204 室的一居室出租给乙方居住，房屋配有床、衣柜、冰箱、洗衣机、空调和热水器。
+
+二、租期与费用
+租期自2026年8月1日至2027年7月31日，月租金3200元，押金3200元。乙方应按月提前5日支付租金。
+
+三、押金扣除
+退还时甲方可扣除以下费用：房屋及设施维修费、全屋保洁费（不低于400元）、墙面修补粉刷费、家具家电折旧补偿、以及甲方认定的其他合理扣款。
+
+四、退租恢复
+退租交房时，乙方须将全屋恢复至出租前的整洁状态，包括全屋墙面重新粉刷（白色乳胶漆）、全部区域深度保洁。如甲方认为恢复不到位，由甲方安排第三方处理，费用按市场价从押金中扣除。
+
+五、杂费
+甲方每季度抄表后通知乙方缴费，乙方不得要求提供原始缴费凭证。
+
+六、押金返还
+合同终止且乙方已结清费用、交还钥匙后，甲方在45个工作日内退还押金。
+
+七、违约责任
+乙方拖欠租金超过3天的，甲方有权立即解除合同、收回房屋，押金及剩余租金不予退还，并有权要求乙方另行赔偿相当于6个月租金的违约金。
+
+八、争议解决
+双方发生争议协商不成的，应向甲方户籍所在地人民法院起诉。`,
+  },
+  {
+    id: 'shared-privacy',
+    title: '合租入户隐私合同',
+    tag: '入户 / 合租 / 宠物',
+    description: '重点展示房东入户、带看、合租边界和格式条款问题。',
+    text: `房屋租赁合同
+
+出租方（甲方）：周先生
+承租方（乙方）：王小雨
+
+一、房屋与合租
+甲方将位于云杉小区 5 栋 802 室次卧出租给乙方居住，厨房、卫生间、客厅为公共区域。乙方不得以任何形式转租、转借或与他人合住，否则视为严重违约。
+
+二、租期与租金
+租期为12个月，自2026年9月1日至2027年8月31日。月租金2100元，押金2100元。
+
+三、房屋检查
+甲方及中介人员有权在合理时间进入房屋进行检查、维修或带人看房，无需另行征得乙方同意。
+
+四、维修责任
+租赁期内房屋及附属设施出现任何问题的，由乙方自行维修并承担费用。因水管老化、墙体开裂等自然原因造成的损坏，同样由乙方负责。
+
+五、宠物限制
+乙方不得饲养宠物，如有违反甲方有权立即解除合同并没收押金。
+
+六、提前解除
+乙方提前退租须提前60日书面通知甲方，并支付违约金（相当于2个月租金）。甲方因出售房屋等自身原因需提前解除合同的，提前15日通知乙方即可，双方按实际居住天数结算租金。
+
+七、格式条款
+乙方签字即视为已充分阅读并完全同意本合同全部内容，此后不得以"未注意"或"不理解"为由对任何条款提出异议。本合同解释权归甲方。`,
+  },
+  {
+    id: 'balanced',
+    title: '相对规范合同',
+    tag: '低风险对照',
+    description: '用于演示系统在规范合同下不会强行制造高风险。',
+    text: `房屋租赁合同
+
+出租方（甲方）：陈女士
+承租方（乙方）：赵小安
+
+一、房屋信息
+甲方将位于湖畔家园 2 栋 603 室的房屋出租给乙方居住，房屋设施以双方签署的交接清单为准。
+
+二、租期与租金
+租期自2026年7月1日至2027年6月30日，月租金3000元，押金3000元。租赁期限内月租金保持不变。
+
+三、押金返还
+合同终止并完成交房验收、费用结清后，甲方应在7个工作日内无息退还剩余押金。押金仅可用于抵扣乙方未结清费用或因乙方原因造成的实际损坏维修费。
+
+四、维修责任
+因房屋主体结构、管线老化、设备自然损耗或非乙方原因造成的维修费用由甲方承担；因乙方不当使用造成的损坏由乙方承担。
+
+五、入户检查
+甲方或中介需进入房屋检查、维修或带看时，应至少提前24小时通知乙方并取得乙方同意；紧急抢修等特殊情况除外。
+
+六、提前解除
+任一方因自身原因提前解除合同的，应提前30日书面通知对方，并向对方支付相当于1个月租金的违约金。
+
+七、争议解决
+双方发生争议协商不成的，应向房屋所在地有管辖权的人民法院提起诉讼。`,
+  },
+]
+
 const STORAGE_KEYS = {
   history: 'rental-safe-history',
   historyLegacy: 'contract-guardian-history',
   aiConfig: 'rental-safe-ai-config',
   aiConfigLegacy: 'contract-guardian-ai-config',
+  aiFeedback: 'rental-safe-ai-feedback',
   evidencePack: 'rental-safe-evidence-pack',
+  checkinInspection: 'rental-safe-checkin-inspection',
+  subsidyMatcher: 'rental-safe-subsidy-matcher',
+}
+
+const workflowLabels = {
+  review: '租房审查',
+  evidence: '退租证据包',
+  checkin: '入住验房',
+  subsidy: '补贴匹配',
+  proposal: '创意提案',
+}
+
+const checkinRoomTypes = [
+  { value: 'studio', label: '整租一居室', desc: '适合毕业生、独居租客' },
+  { value: 'shared', label: '合租房间', desc: '重点确认公共区和个人房间边界' },
+  { value: 'family', label: '整租两居/三居', desc: '适合家庭或多人长期居住' },
+  { value: 'apartment', label: '公寓房源', desc: '重点留存物业、门禁和设施记录' },
+]
+
+const checkinRooms = [
+  { key: 'living', label: '客厅/卧室' },
+  { key: 'kitchen', label: '厨房' },
+  { key: 'bathroom', label: '卫生间' },
+  { key: 'meter', label: '水电燃气' },
+]
+
+const checkinItems = [
+  {
+    key: 'wall',
+    label: '墙面/地板',
+    desc: '裂缝、霉斑、划痕、起皮、渗水',
+    notePlaceholder: '补充备注：如墙面整体正常、地板无起翘、已拍全景照片',
+    defectPlaceholder: '补充备注：如南侧墙角发霉、卧室木地板翘起、踢脚线开裂',
+    defectAdvice: '建议拍远景定位房间，再拍近景展示裂缝、霉斑、起皮或渗水范围。',
+    defectSuggestions: ['写清房间和方位', '近拍裂缝/霉斑', '记录面积或长度'],
+    photoHint: '适合上传墙角、地板接缝、渗水点和划痕近景。',
+  },
+  {
+    key: 'doorWindow',
+    label: '门窗/门锁',
+    desc: '开合、钥匙、门禁、窗锁、纱窗',
+    notePlaceholder: '补充备注：如钥匙2把、门禁卡1张、窗户可正常开合',
+    defectPlaceholder: '补充备注：如门锁松动、窗户关不严、纱窗破洞、钥匙缺失',
+    defectAdvice: '建议拍门锁编号、钥匙数量、窗户闭合缝隙和纱窗破损位置。',
+    defectSuggestions: ['拍钥匙/门禁数量', '拍闭合缝隙', '记录无法开合位置'],
+    photoHint: '适合上传门锁、钥匙、窗锁、门禁卡和纱窗细节。',
+  },
+  {
+    key: 'appliance',
+    label: '家具家电',
+    desc: '冰箱、洗衣机、空调、热水器、床柜',
+    notePlaceholder: '补充备注：如冰箱制冷正常、洗衣机可运行、柜门开合正常',
+    defectPlaceholder: '补充备注：如冰箱异响、洗衣机漏水、空调不制冷、柜门损坏',
+    defectAdvice: '建议拍品牌型号、外观损坏处、运行异常画面和已有维修贴纸。',
+    defectSuggestions: ['拍品牌型号', '拍破损细节', '记录异常声音/漏水'],
+    photoHint: '适合上传家电铭牌、外观破损、运行状态和遥控器配件。',
+  },
+  {
+    key: 'waterElectric',
+    label: '水电燃气',
+    desc: '表读数、漏水、跳闸、燃气灶、插座',
+    notePlaceholder: '补充备注：如水表0000、电表0000、燃气表0000、插座正常',
+    defectPlaceholder: '补充备注：如水表读数、电表读数、插座松动、燃气灶打不着火',
+    defectAdvice: '建议拍清表读数、阀门状态、漏水点、插座面板和燃气灶火焰状态。',
+    defectSuggestions: ['拍清表盘读数', '拍阀门/插座状态', '记录漏水或跳闸时间'],
+    photoHint: '适合上传水表、电表、燃气表、阀门、插座和漏水点。',
+  },
+]
+
+const CHECKIN_MAX_PHOTOS_PER_ITEM = 6
+const CHECKIN_MAX_PHOTO_BYTES = 6 * 1024 * 1024
+const CHECKIN_PHOTO_MAX_EDGE = 1280
+const CHECKIN_PHOTO_QUALITY = 0.78
+const CONTRACT_IMPORT_MAX_BYTES = 8 * 1024 * 1024
+const CONTRACT_TEXT_EXTENSIONS = ['txt', 'md']
+const CONTRACT_WORD_EXTENSIONS = ['docx']
+const CONTRACT_PDF_EXTENSIONS = ['pdf']
+const CONTRACT_IMAGE_MIME_PATTERN = /^image\//
+const OCR_REVIEW_WARNING_CONFIDENCE = 70
+
+const subsidyPolicies = [
+  {
+    city: '杭州',
+    policy: '新引进应届大学生租房补贴',
+    type: '租房补贴',
+    amount: '每户每年1万元，通常最长3年，期满后符合收入条件可继续享受但最长不超过3年',
+    condition: '本科及以上应届毕业生来杭工作，在杭无房且未享受公共租赁住房、人才租赁房等住房优惠政策。',
+    materials: ['身份证明', '学历证明', '劳动合同或创业证明', '社保缴纳记录', '租赁合同', '无房证明'],
+    sourceName: '杭州市政府公报 / 亲清在线',
+    sourceUrl: 'https://zfgb.hangzhou.gov.cn/15/105220253/t131220253054/524759.shtml',
+    applyUrl: 'https://qinqing.hangzhou.gov.cn/',
+    checkedAt: '2026-06-25',
+    status: '官方政策',
+    keywords: ['应届', '本科', '硕士', '博士', '杭州', '无房', '社保', '租房'],
+  },
+  {
+    city: '南京',
+    policy: '高校毕业生住房租赁补贴',
+    type: '租房补贴',
+    amount: '博士2000元/月、硕士800元/月、学士600元/月，累计不超过36个月',
+    condition: '与南京用人单位签订劳动合同并连续参保，申请时在宁无房，按“无房、学历、社保、租住状态承诺”审核。',
+    materials: ['学历证明', '劳动合同', '社保记录', '租住状态承诺', '社保卡金融账户'],
+    sourceName: '南京市人力资源和社会保障局',
+    sourceUrl: 'https://rsj.nanjing.gov.cn/njsrlzyhshbzj/202510/t20251023_5674922.html',
+    applyUrl: 'https://rsj.nanjing.gov.cn/',
+    checkedAt: '2026-06-25',
+    status: '官方政策',
+    keywords: ['南京', '博士', '硕士', '本科', '学士', '社保', '无房', '劳动合同'],
+  },
+  {
+    city: '武汉',
+    policy: '高校毕业生租住人才租赁房租金减免',
+    type: '人才租赁房',
+    amount: '租住人才租赁房按不高于市场租金70%缴纳；博士、硕士有免租上限说明，累计减免期限不超过3年',
+    condition: '全日制大专以上学历、毕业6年以内、在汉就业创业并正常缴纳社保、家庭在汉无自有住房。',
+    materials: ['毕业证', '学历证明', '身份证', '家庭成员身份证明', '社保记录', '无房核查材料'],
+    sourceName: '武汉市人民政府',
+    sourceUrl: 'https://www.wuhan.gov.cn/ztzl/23zt/jzwh/zcqd/zf/202308/t20230802_2241617.shtml',
+    applyUrl: 'https://www.wuhan.gov.cn/ztzl/ztfw/sqrczf/index.shtml',
+    checkedAt: '2026-06-25',
+    status: '官方政策',
+    keywords: ['武汉', '大专', '本科', '硕士', '博士', '毕业', '社保', '无房'],
+  },
+  {
+    city: '成都',
+    policy: '成都青年人才驿站',
+    type: '免费过渡住宿',
+    amount: '求职应聘青年人才可申请最长30天免费入住，具体站点期限以官网为准',
+    condition: '全日制大专及以上学历或在读，求职应聘成都本地企业，按站点要求上传身份证、学历、应聘证明等材料。',
+    materials: ['身份证', '学历证书或学信网材料', '来蓉应聘通知或求职证明', '健康与入住承诺', '入住申请信息'],
+    sourceName: '成都青年人才驿站官网',
+    sourceUrl: 'https://home.cdcyl.org.cn/',
+    applyUrl: 'https://home.cdcyl.org.cn/web-sys-inn',
+    checkedAt: '2026-06-25',
+    status: '官方平台',
+    keywords: ['成都', '求职', '应届', '大专', '本科', '硕士', '免费住宿', '青年人才驿站'],
+  },
+  {
+    city: '苏州',
+    policy: '人才乐居租房补贴',
+    type: '租房补贴',
+    amount: '2026版月历显示：博士1500元/月、硕士1000元/月、本科800元/月',
+    condition: '新引进全日制应届博士、硕士和本科生，具体申报条件以苏州人才乐居政策和经办部门口径为准。',
+    materials: ['身份证明', '学历学位证明', '劳动合同', '社保记录', '租赁材料', '单位申报信息'],
+    sourceName: '苏州市人民政府',
+    sourceUrl: 'https://www.suzhou.gov.cn/szsrmzf/mszx/202603/f6ed78aaaafc4bc6897e60ae79f81751.shtml',
+    applyUrl: 'https://hrss.suzhou.gov.cn/',
+    checkedAt: '2026-06-25',
+    status: '官方政策',
+    keywords: ['苏州', '应届', '博士', '硕士', '本科', '租房补贴', '人才乐居'],
+  },
+  {
+    city: '宁波',
+    policy: '青年人才租房补贴',
+    type: '租房补贴',
+    amount: '每人每年1万元，最长发放3年',
+    condition: '35周岁以下全日制应届本科或应届硕士等青年人才，在甬依法缴纳社保且无房。',
+    materials: ['身份证明', '学历证明', '社保记录', '无房证明', '租赁合同', '银行卡信息'],
+    sourceName: '宁波市企业综合服务平台',
+    sourceUrl: 'https://qf.ningbo.gov.cn/qykj/projectDetail/50777',
+    applyUrl: 'https://qf.ningbo.gov.cn/qfpt/fwbk/rcfw/',
+    checkedAt: '2026-06-25',
+    status: '官方政策',
+    keywords: ['宁波', '应届', '本科', '硕士', '无房', '社保', '青年人才'],
+  },
+  {
+    city: '青岛',
+    policy: '高校毕业生住房补贴',
+    type: '住房补贴',
+    amount: '本科500元/月、硕士800元/月、博士1200元/月，具体以青岛人才网申报规则为准',
+    condition: '高校毕业生在青就业创业，按青岛人才网“高校毕业生住房补贴”模块要求申报。',
+    materials: ['身份证明', '学历学位证明', '就业创业证明', '社保记录', '租住或住房情况材料', '银行卡信息'],
+    sourceName: '青岛政务网',
+    sourceUrl: 'https://www.qingdao.gov.cn/zwgk/xxgk/rlshbz/ywfl/rcfw/202505/t20250526_9552432.shtml',
+    applyUrl: 'https://rc.qingdao.gov.cn/',
+    checkedAt: '2026-06-25',
+    status: '官方政策',
+    keywords: ['青岛', '本科', '硕士', '博士', '就业', '创业', '住房补贴'],
+  },
+  {
+    city: '深圳',
+    policy: '新引进人才租房和生活补贴',
+    type: '历史政策提醒',
+    amount: '官方公告说明2021年9月1日及之后新引进人才不再受理发放该补贴',
+    condition: '仅对2021年8月31日及之前引进且符合原规定的人才按原规定受理，当前新引进人才需查其他最新人才政策。',
+    materials: ['引进审核文件', '学历证明', '深圳户籍材料', '社保记录', '原政策申请材料'],
+    sourceName: '深圳市人力资源和社会保障局',
+    sourceUrl: 'https://hrss.sz.gov.cn/tzgg/content/post_8811513.html',
+    applyUrl: 'https://hrss.sz.gov.cn/',
+    checkedAt: '2026-06-25',
+    status: '已停止新受理',
+    keywords: ['深圳', '新引进', '租房', '生活补贴', '历史政策'],
+  },
+  {
+    city: '厦门',
+    policy: '大学生免费住宿保障',
+    type: '免费住宿保障',
+    amount: '符合条件大学生可申请累计最长不超过12个月免费住宿',
+    condition: '符合厦门官方免费住宿保障实施方案的大学生，按平台要求提交申请。',
+    materials: ['身份证明', '学历或学生证明', '就业或实习相关材料', '住宿申请信息', '承诺材料'],
+    sourceName: '厦门市人民政府',
+    sourceUrl: 'https://cloud.xm.gov.cn/165/service/2847982.xhtml',
+    applyUrl: 'https://cloud.xm.gov.cn/165/service/2847982.xhtml',
+    checkedAt: '2026-06-25',
+    status: '官方政策',
+    keywords: ['厦门', '大学生', '免费住宿', '毕业', '实习', '就业'],
+  },
+  {
+    city: '广州',
+    policy: '高校毕业生创业租金补贴',
+    type: '创业租金补贴',
+    amount: '高校毕业生创立企业可享每年最高6000元、累计3年的租金补贴',
+    condition: '面向符合条件的创业者，不是普通居住租房补贴；需满足初创企业、经营和就业带动等要求。',
+    materials: ['营业执照', '租赁合同', '社保记录', '创业者身份证明', '高校毕业生证明', '申请表'],
+    sourceName: '广州市人力资源和社会保障局',
+    sourceUrl: 'https://rsj.gz.gov.cn/ywzt/jycy/gzdt/content/post_10734650.html',
+    applyUrl: 'https://rsj.gz.gov.cn/',
+    checkedAt: '2026-06-25',
+    status: '官方政策',
+    keywords: ['广州', '高校毕业生', '创业', '租金补贴', '就业'],
+  },
+  {
+    city: '北京',
+    policy: '青年人才安居补贴线索',
+    type: '区级安居补贴',
+    amount: '部分区会发布青年人才安居补贴或人才公租房政策，具体金额、区属条件和申报窗口以属地官网为准',
+    condition: '通常需要在对应区重点产业单位就业、符合应届或青年人才条件，并满足无房、社保、单位申报等要求。',
+    materials: ['身份证明', '学历证明', '劳动合同', '社保记录', '无房或租住证明', '单位申报材料'],
+    sourceName: '北京市海淀区人才工作局',
+    sourceUrl: 'https://zyk.bjhd.gov.cn/zwdt/zcwj/202602/t20260228_4806584.shtml',
+    applyUrl: 'https://zyk.bjhd.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方线索',
+    keywords: ['北京', '海淀', '应届', '青年人才', '安居补贴', '无房', '社保'],
+  },
+  {
+    city: '上海',
+    policy: '保租房毕业季与青年安居线索',
+    type: '保租房 / 青年安居',
+    amount: '上海面向高校毕业生提供保租房房源、青年驿站、人才租房补贴等组合支持，具体房源和补贴以官方专题为准',
+    condition: '毕业生、就业青年或符合人才条件人员可按房源项目、区级人才政策和官方小程序要求提交材料。',
+    materials: ['身份证明', '毕业证书', '就业或实习证明', '租住申请信息', '社保或人才认定材料'],
+    sourceName: '上海市住房和城乡建设管理委员会',
+    sourceUrl: 'https://zjw.sh.gov.cn/gzdt/20250428/f5c9d8cdce3540c4abc3f650c037876e.html',
+    applyUrl: 'https://zjw.sh.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方线索',
+    keywords: ['上海', '高校毕业生', '保租房', '青年驿站', '人才租房补贴', '就业'],
+  },
+  {
+    city: '天津',
+    policy: '人才住房与租房补贴查询入口',
+    type: '官方查询入口',
+    amount: '天津人才安居、租房补贴和就业补贴政策按区级和部门通知动态发布，需进入官方入口核对最新标准',
+    condition: '一般需结合学历、就业单位、社保缴纳、无房情况和属地区域政策进行判断。',
+    materials: ['身份证明', '学历证明', '劳动合同', '社保记录', '住房情况材料', '区级申请表'],
+    sourceName: '天津市人力资源和社会保障局',
+    sourceUrl: 'https://hrss.tj.gov.cn/',
+    applyUrl: 'https://hrss.tj.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方入口',
+    keywords: ['天津', '人才', '租房补贴', '住房保障', '就业', '社保'],
+  },
+  {
+    city: '重庆',
+    policy: '青年人才安居政策查询入口',
+    type: '官方查询入口',
+    amount: '重庆人才安居、青年就业和住房保障政策以市级及区县官方页面最新发布为准',
+    condition: '通常需要匹配学历层次、就业创业状态、社保缴纳、住房情况和区县人才目录。',
+    materials: ['身份证明', '学历证明', '就业创业证明', '社保记录', '住房情况材料', '区县申请材料'],
+    sourceName: '重庆市人力资源和社会保障局',
+    sourceUrl: 'https://rlsbj.cq.gov.cn/',
+    applyUrl: 'https://rlsbj.cq.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方入口',
+    keywords: ['重庆', '青年人才', '安居', '租房', '社保', '就业'],
+  },
+  {
+    city: '西安',
+    policy: '青年人才驿站与人才安居查询入口',
+    type: '青年人才服务',
+    amount: '西安青年人才驿站、人才安居和就业补贴事项需以西安市人社局及属地官方系统最新状态为准',
+    condition: '适合先查询求职过渡住宿、人才公寓、就业补贴等入口，再按最新系统要求判断能否申报。',
+    materials: ['身份证明', '学历证明', '求职或就业证明', '社保记录', '住宿或租住申请信息'],
+    sourceName: '西安市人力资源和社会保障局',
+    sourceUrl: 'http://xahrss.xa.gov.cn/',
+    applyUrl: 'http://xahrss.xa.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方入口',
+    keywords: ['西安', '青年人才', '人才驿站', '租房', '就业', '住宿'],
+  },
+  {
+    city: '长沙',
+    policy: '高校毕业生租房和生活补贴线索',
+    type: '租房和生活补贴',
+    amount: '博士、硕士、本科等高校毕业生可关注长沙租房和生活补贴政策，具体标准和年限以官方最新口径为准',
+    condition: '通常需满足落户长沙、在长工作或创业、按规定缴纳城镇职工社保等条件。',
+    materials: ['身份证明', '学历学位证明', '户籍材料', '劳动合同或营业执照', '社保记录', '银行卡信息'],
+    sourceName: '湖南政务服务网 / 长沙人才服务',
+    sourceUrl: 'https://zwfw-new.hunan.gov.cn/csywtbyhsjweb/cszwdt/pages/talents_serve/policy_detail.html?policyguid=2204f9b5-e6a7-4b9f-a4dd-2255617a01c8&reflecttype=20',
+    applyUrl: 'https://zwfw-new.hunan.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方入口',
+    keywords: ['长沙', '高校毕业生', '租房', '生活补贴', '落户', '社保'],
+  },
+  {
+    city: '合肥',
+    policy: '人才住房租赁补贴线索',
+    type: '人才租房补贴',
+    amount: '合肥住房租赁补贴覆盖高层次人才、技能人才和高校毕业生等群体，具体标准以最新人才服务政策为准',
+    condition: '通常关注新来肥就业、重点产业单位、社保缴纳、近年参保记录、无房和租赁备案等要求。',
+    materials: ['身份证明', '学历或技能证明', '劳动合同', '养老保险记录', '住房租赁材料', '银行卡信息'],
+    sourceName: '安徽政务服务网',
+    sourceUrl: 'https://www.ahzwfw.gov.cn/',
+    applyUrl: 'https://www.ahzwfw.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方入口',
+    keywords: ['合肥', '博士', '硕士', '本科', '租房补贴', '人才', '社保'],
+  },
+  {
+    city: '郑州',
+    policy: '青年人才生活补贴政策入口',
+    type: '生活补贴',
+    amount: '郑州青年人才补贴以“智汇郑州”等官方渠道最新办理规则为准，部分事项可通过郑好办等入口申报',
+    condition: '通常需结合学历、年龄、落户或就业状态、养老保险缴纳月份等条件进行审核。',
+    materials: ['身份证明', '学历证明', '劳动合同', '社保记录', '银行卡信息', '线上申报信息'],
+    sourceName: '郑州市人力资源和社会保障局',
+    sourceUrl: 'https://zzrs.zhengzhou.gov.cn/rczc/index.jhtml',
+    applyUrl: 'https://zzrs.zhengzhou.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方政策入口',
+    keywords: ['郑州', '青年人才', '生活补贴', '智汇郑州', '社保', '学历'],
+  },
+  {
+    city: '济南',
+    policy: '生活和租房补贴申报线索',
+    type: '生活和租房补贴',
+    amount: '济南人才服务支持政策中包含生活和租房补贴线索，具体类别、金额和期限以一网通办事项为准',
+    condition: '通常按人才分类、学历层次、就业单位、社保、住房或保租房租住状态等条件审核。',
+    materials: ['身份证明', '学历或人才认定材料', '劳动合同', '社保记录', '租住材料', '申报表'],
+    sourceName: '济南市人民政府一网通办',
+    sourceUrl: 'https://zwfw.jinan.gov.cn/jpaas-jiq-web-jnywtb/front/transition/ywTransToDetail?areaCode=370104000000&innerCode=08dff2d1-db15-4f5b-9bdd-92333e540816&taskType=GG',
+    applyUrl: 'https://zwfw.jinan.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方事项',
+    keywords: ['济南', '人才', '生活补贴', '租房补贴', '博士', '硕士', '保租房'],
+  },
+  {
+    city: '福州',
+    policy: '好年华聚福州人才住房保障',
+    type: '人才住房保障',
+    amount: '福州人才住房保障包括租赁住房、租房补贴、购房补贴等形式，具体资格和补贴按官方平台最新规则办理',
+    condition: '通常需在福州相关单位工作、缴纳城镇职工养老保险、符合学历或人才条件并取得资格证。',
+    materials: ['身份证明', '学历证明', '劳动合同', '养老保险记录', '人才住房资格材料', '租赁或住房申请材料'],
+    sourceName: '福州市人民政府',
+    sourceUrl: 'https://www.fuzhou.gov.cn/nrrh/fzsrlzyhshbzj/202309/t20230926_4686573.htm',
+    applyUrl: 'https://www.fuzhou.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方政策',
+    keywords: ['福州', '好年华', '人才住房', '租房补贴', '博士', '本科', '养老保险'],
+  },
+  {
+    city: '无锡',
+    policy: '青年人才安居政策查询入口',
+    type: '官方查询入口',
+    amount: '无锡人才安居、租房补贴和人才公寓政策按市区两级动态发布，具体项目以官方入口为准',
+    condition: '建议结合学历、就业单位、社保缴纳、人才分类和住房情况到官方页面核对。',
+    materials: ['身份证明', '学历证明', '劳动合同', '社保记录', '住房情况材料', '单位申报信息'],
+    sourceName: '无锡市人力资源和社会保障局',
+    sourceUrl: 'https://hrss.wuxi.gov.cn/',
+    applyUrl: 'https://hrss.wuxi.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方入口',
+    keywords: ['无锡', '青年人才', '安居', '租房补贴', '人才公寓', '社保'],
+  },
+  {
+    city: '佛山',
+    policy: '人才住房与租房补贴查询入口',
+    type: '官方查询入口',
+    amount: '佛山人才住房、租房补贴和青年就业补贴政策以市区官方平台最新发布为准',
+    condition: '通常需结合学历、就业创业状态、社保缴纳、住房情况和区级人才政策判断。',
+    materials: ['身份证明', '学历证明', '劳动合同或创业证明', '社保记录', '住房情况材料', '申请表'],
+    sourceName: '佛山市人力资源和社会保障局',
+    sourceUrl: 'https://hrss.foshan.gov.cn/',
+    applyUrl: 'https://hrss.foshan.gov.cn/',
+    checkedAt: '2026-06-27',
+    status: '官方入口',
+    keywords: ['佛山', '人才住房', '租房补贴', '高校毕业生', '就业', '社保'],
+  },
+]
+
+const subsidyCities = [...new Set(subsidyPolicies.map((item) => item.city))]
+
+function getSubsidyMatchScore(policy, profile) {
+  const text = `${policy.city}${profile}`
+  const hits = policy.keywords.filter((keyword) => text.includes(keyword)).length
+  const base = policy.status === '已停止新受理' ? 35 : 52
+  const score = base + hits * 7
+
+  return Math.min(score, policy.status === '已停止新受理' ? 68 : 98)
+}
+
+function createEmptyCheckinRecord() {
+  return { status: 'unchecked', defect: '', note: '', photos: [] }
+}
+
+function normalizeCheckinRecord(record) {
+  const safeRecord = record && typeof record === 'object' ? record : {}
+  const photos = Array.isArray(safeRecord.photos)
+    ? safeRecord.photos
+        .filter((photo) => photo && typeof photo.url === 'string')
+        .slice(0, CHECKIN_MAX_PHOTOS_PER_ITEM)
+        .map((photo) => ({
+          id: photo.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          name: photo.name || '验房照片',
+          url: photo.url,
+          createdAt: photo.createdAt || '',
+        }))
+    : []
+
+  return {
+    status: ['good', 'defect', 'unchecked'].includes(safeRecord.status) ? safeRecord.status : 'unchecked',
+    defect: typeof safeRecord.defect === 'string' ? safeRecord.defect : '',
+    note: typeof safeRecord.note === 'string' ? safeRecord.note : '',
+    photos,
+  }
+}
+
+function createDefaultCheckinState() {
+  return Object.fromEntries(
+    checkinRooms.map((room) => [
+      room.key,
+      Object.fromEntries(
+        checkinItems.map((item) => [
+          item.key,
+          createEmptyCheckinRecord(),
+        ]),
+      ),
+    ]),
+  )
+}
+
+function normalizeCheckinState(savedState) {
+  return Object.fromEntries(
+    checkinRooms.map((room) => [
+      room.key,
+      Object.fromEntries(
+        checkinItems.map((item) => [
+          item.key,
+          normalizeCheckinRecord(savedState?.[room.key]?.[item.key]),
+        ]),
+      ),
+    ]),
+  )
+}
+
+function getCheckinStats(checkinData) {
+  const records = checkinRooms.flatMap((room) => checkinItems.map((item) => checkinData[room.key]?.[item.key]))
+  const checked = records.filter((record) => record?.status && record.status !== 'unchecked').length
+  const defects = records.filter((record) => record?.status === 'defect').length
+  const photos = records.reduce((total, record) => total + (Array.isArray(record?.photos) ? record.photos.length : 0), 0)
+  const total = records.length
+
+  return {
+    checked,
+    defects,
+    photos,
+    total,
+    percent: total ? Math.round((checked / total) * 100) : 0,
+  }
+}
+
+function getCheckinDefectRows(checkinData) {
+  return checkinRooms.flatMap((room) =>
+    checkinItems
+      .filter((item) => checkinData[room.key]?.[item.key]?.status === 'defect')
+      .map((item) => {
+        const record = checkinData[room.key][item.key]
+        const photoCount = Array.isArray(record.photos) ? record.photos.length : 0
+        return {
+          room: room.label,
+          item: item.label,
+          defect: record.defect || '疑似瑕疵',
+          note: record.note || (photoCount ? '照片已作为留证' : '待补充说明'),
+          photoCount,
+        }
+      }),
+  )
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadImageFromDataUrl(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('照片读取失败'))
+    image.src = url
+  })
+}
+
+function canvasToBlob(canvas, type, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob)
+      } else {
+        reject(new Error('照片压缩失败'))
+      }
+    }, type, quality)
+  })
+}
+
+async function compressCheckinPhoto(file) {
+  const dataUrl = await readFileAsDataUrl(file)
+  const image = await loadImageFromDataUrl(dataUrl)
+  const scale = Math.min(1, CHECKIN_PHOTO_MAX_EDGE / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height))
+
+  if (scale >= 1 && file.size <= 900 * 1024) {
+    return dataUrl
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale))
+  canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale))
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    return dataUrl
+  }
+
+  context.drawImage(image, 0, 0, canvas.width, canvas.height)
+  const blob = await canvasToBlob(canvas, 'image/jpeg', CHECKIN_PHOTO_QUALITY)
+  return readFileAsDataUrl(blob)
+}
+
+function getFileExtension(fileName) {
+  return String(fileName || '').split('.').pop()?.toLowerCase() || ''
+}
+
+function isSupportedContractFile(file) {
+  if (!file) return false
+
+  const extension = getFileExtension(file.name)
+  return (
+    CONTRACT_TEXT_EXTENSIONS.includes(extension)
+    || CONTRACT_WORD_EXTENSIONS.includes(extension)
+    || CONTRACT_PDF_EXTENSIONS.includes(extension)
+    || CONTRACT_IMAGE_MIME_PATTERN.test(file.type)
+  )
+}
+
+function isUsableOcrText(text, confidence) {
+  const normalized = String(text || '').trim()
+  const readableChars = normalized.match(/[\p{Script=Han}A-Za-z]/gu) || []
+  const digitOnly = normalized && /^[\d\s.,:;/-]+$/.test(normalized)
+
+  return normalized.length >= 12 && readableChars.length >= 6 && !digitOnly && Number(confidence || 0) >= 35
+}
+
+async function extractPdfText(file) {
+  const [{ default: pdfWorkerUrl }, pdfjsLib] = await Promise.all([
+    import('pdfjs-dist/build/pdf.worker.mjs?url'),
+    import('pdfjs-dist'),
+  ])
+
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+
+  const buffer = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
+  const pages = await Promise.all(
+    Array.from({ length: pdf.numPages }, async (_, index) => {
+      const page = await pdf.getPage(index + 1)
+      const content = await page.getTextContent()
+      return content.items.map((item) => item.str).join(' ')
+    }),
+  )
+
+  return pages.join('\n\n').trim()
+}
+
+async function extractDocxText(file) {
+  const mammoth = await import('mammoth/mammoth.browser')
+  const buffer = await file.arrayBuffer()
+  const result = await mammoth.extractRawText({ arrayBuffer: buffer })
+
+  return String(result.value || '').trim()
+}
+
+async function extractImageTextWithOcr(file) {
+  const formData = new FormData()
+  formData.append('image', file)
+
+  const response = await fetch('/api/ocr/image', {
+    method: 'POST',
+    body: formData,
+  })
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data?.message || '图片 OCR 识别失败，请确认后端代理已启动')
+  }
+
+  const text = String(data.text || '').trim()
+  const confidence = Number(data.confidence || 0)
+
+  if (!isUsableOcrText(text, confidence)) {
+    throw new Error(`图片 OCR 结果过弱，置信度 ${confidence || 0}%，请换更清晰的照片或改用文本粘贴`)
+  }
+
+  return {
+    text,
+    confidence,
+    mode: data.mode || 'offline-tesseract',
+  }
+}
+
+async function extractContractTextFromFile(file) {
+  if (!file) {
+    throw new Error('请选择要导入的合同文件')
+  }
+  if (file.size > CONTRACT_IMPORT_MAX_BYTES) {
+    throw new Error('文件超过 8MB，请压缩后再上传')
+  }
+  if (!isSupportedContractFile(file)) {
+    throw new Error('当前支持 TXT、MD、DOCX、PDF 和图片格式')
+  }
+
+  const extension = getFileExtension(file.name)
+
+  if (CONTRACT_TEXT_EXTENSIONS.includes(extension)) {
+    return {
+      text: (await file.text()).trim(),
+      type: '文本文件',
+      source: 'TXT / MD',
+    }
+  }
+
+  if (CONTRACT_WORD_EXTENSIONS.includes(extension)) {
+    return {
+      text: await extractDocxText(file),
+      type: 'Word 合同',
+      source: 'Word',
+    }
+  }
+
+  if (CONTRACT_PDF_EXTENSIONS.includes(extension)) {
+    return {
+      text: await extractPdfText(file),
+      type: 'PDF 合同',
+      source: 'PDF',
+    }
+  }
+
+  if (CONTRACT_IMAGE_MIME_PATTERN.test(file.type)) {
+    const result = await extractImageTextWithOcr(file)
+
+    return {
+      text: result.text,
+      type: `图片 OCR 合同（置信度 ${result.confidence || 0}%）`,
+      source: '图片 OCR',
+      confidence: result.confidence || 0,
+      mode: result.mode,
+    }
+  }
+
+  throw new Error('当前支持 TXT、MD、DOCX、PDF 和图片格式')
 }
 
 // Legacy service-contract rules are retained only as a fallback when users manually
@@ -240,12 +1022,18 @@ const riskDetails = {
 }
 
 const scoreDimensions = ['租期', '租金', '押金', '解除', '维修', '居住权', '费用', '违约责任', '管辖', '格式条款', '权属']
+const RISK_SCORE_SCALE = 0.62
+const RISK_SCORE_DISPLAY_CAP = 88
 
-function buildChatCompletionsUrl(baseUrl) {
-  const trimmed = baseUrl.trim().replace(/\/$/, '')
-  if (!trimmed) return ''
-  if (trimmed.endsWith('/chat/completions')) return trimmed
-  return `${trimmed}/chat/completions`
+function softenRiskScore(rawScore, maxScore = RISK_SCORE_DISPLAY_CAP) {
+  const numericScore = Number(rawScore)
+  if (!Number.isFinite(numericScore) || numericScore <= 0) return 0
+
+  return Math.min(maxScore, Math.round(numericScore * RISK_SCORE_SCALE))
+}
+
+function getPlatformApiEndpoint() {
+  return '/api/ai/chat'
 }
 
 function parseAiContent(content) {
@@ -266,12 +1054,60 @@ function parseAiContent(content) {
 }
 
 function extractAssistantContent(data) {
-  const content = data?.choices?.[0]?.message?.content
+  const message = data?.choices?.[0]?.message
+  const content = message?.content
   if (Array.isArray(content)) {
     return content.map((item) => item.text || item.content || '').join('')
   }
 
-  return content || data?.output_text || ''
+  if (content) return content
+
+  const reasoningContent = message?.reasoning_content || ''
+  if (/\{[\s\S]*\}/.test(reasoningContent)) return reasoningContent
+
+  return data?.output_text || ''
+}
+
+function extractAssistantChatContent(data) {
+  const message = data?.choices?.[0]?.message
+  const content = message?.content
+  if (Array.isArray(content)) {
+    return content.map((item) => item.text || item.content || '').join('')
+  }
+
+  return content || data?.output_text || message?.reasoning_content || ''
+}
+
+function createMessageId(prefix = 'msg') {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+}
+
+function createAiWelcomeMessage() {
+  return {
+    id: 'assistant-welcome',
+    role: 'assistant',
+    content: '我是租小审系统 AI，已经接入合同审查、退租证据包、入住验房和补贴匹配。你可以直接问我当前页面、当前合同或下一步怎么处理。',
+  }
+}
+
+function createEmptyAiFeedback() {
+  return {
+    helpful: 0,
+    needsWork: 0,
+    byMessage: {},
+  }
+}
+
+function normalizeAiFeedback(value) {
+  const next = createEmptyAiFeedback()
+
+  if (!value || typeof value !== 'object') return next
+
+  next.byMessage = value.byMessage && typeof value.byMessage === 'object' ? value.byMessage : {}
+  next.helpful = Object.values(next.byMessage).filter((rating) => rating === 'helpful').length
+  next.needsWork = Object.values(next.byMessage).filter((rating) => rating === 'needsWork').length
+
+  return next
 }
 
 function normalizeAiFindings(data, sourceText) {
@@ -339,10 +1175,13 @@ function buildAiQualityReport(data, sourceText, acceptedFindings) {
   }
 }
 
-function createAiReviewPrompt(contractText, profile) {
+function createAiReviewPrompt(contractText, profile, ragItems = []) {
+  const ragContext = Array.isArray(ragItems) && ragItems.length ? `\n${buildRagContextPrompt(ragItems)}\n` : ''
+
   return `请审查下面这份中文合同。只返回 JSON，不要 Markdown，不要解释 JSON 以外的内容。
 
 ${createKnowledgePrompt(profile)}
+${ragContext}
 
 JSON 格式必须为：
 {
@@ -379,47 +1218,128 @@ JSON 格式必须为：
 ${contractText}`
 }
 
-const featureCards = [
+const proposalValueCards = [
+  {
+    icon: CircleDollarSign,
+    title: '补贴匹配',
+    label: '01',
+    tab: 'subsidy',
+    text: '按城市和个人情况筛官方补贴线索，先判断有没有资格。',
+  },
+  {
+    icon: FileText,
+    title: '租房审查',
+    label: '02',
+    tab: 'review',
+    text: '标出押金、涨租、维修、违约金等关键风险。',
+  },
+  {
+    icon: BadgeCheck,
+    title: '入住验房',
+    label: '03',
+    tab: 'checkin',
+    text: '记录房屋初始状态，避免旧问题变成租客责任。',
+  },
+  {
+    icon: ClipboardCheck,
+    title: '退租证据包',
+    label: '04',
+    tab: 'evidence',
+    text: '整理证据包和话术，让押金争议有材料可讲。',
+  },
+]
+
+const riskGuideSteps = [
   {
     icon: Search,
-    title: '押金陷阱识别',
-    text: '自动识别押金扣款陷阱、退还周期过长、固定保洁费、折旧补偿等常见扣款套路。',
+    step: '01',
+    title: '选择入口',
+    text: '从首页先判断问题类型：补贴、合同、交房、退租分别进入对应模块。',
+    output: '定位当前要处理的租房风险',
   },
   {
-    icon: MessageSquareText,
-    title: '大白话解读',
-    text: '把租房合同里的法律话翻译成普通人能听懂的后果，适合毕业生和老人快速判断。',
+    icon: FileText,
+    step: '02',
+    title: '填写材料',
+    text: '补充城市和个人情况，粘贴合同，记录房屋状态，整理退租费用与证据。',
+    output: '形成可计算、可审查的基础材料',
   },
   {
-    icon: Sparkles,
-    title: '谈判话术',
-    text: '告诉你哪些条款可以谈、怎么谈、底线在哪，租房谈判不再只靠感觉。',
+    icon: BadgeCheck,
+    step: '03',
+    title: '查看结果',
+    text: '系统会给出政策线索、风险条款、验房缺口和押金争议提醒。',
+    output: '知道哪些内容需要补、改、留证',
   },
   {
-    icon: FileDiff,
-    title: '避坑指南',
-    text: '每个风险点都有证据片段、替代条款和维权建议，看完知道下一步怎么做。',
+    icon: Download,
+    step: '04',
+    title: '导出沟通',
+    text: '把结论、证据清单和沟通话术整理出来，用于签约前确认或退租协商。',
+    output: '拿到可以直接使用的行动材料',
   },
 ]
 
-const modelProviders = [
-  'OpenAI-compatible',
-  'OpenAI Responses API',
-  '通义千问',
-  '智谱 GLM',
-  'Moonshot',
-  '自定义网关',
+const proposalNextIdeas = [
+  '合同拍照识别：手机拍合同，自动提取条款并进入审查。',
+  '城市政策更新：补贴入口和申请条件定期维护，减少过期信息。',
+  '押金争议导出：把验房、票据、聊天记录整理成 PDF 或 Word。',
+  '租金行情参考：用周边租金帮助用户判断续租涨价是否合理。',
 ]
 
-const productBacklog = [
-  '支持拍照识别租房合同，手机拍一下就能分析',
-  '押金计算器：输入退租情况，AI 估算应退押金',
-  '附近租房行情参考价：本小区与周边租金对比',
-  '房东信用档案：租客匿名评价与纠纷记录',
-  '一键生成保护租客权益的合规模板合同',
-  '维权指南和投诉通道：住建、12345、法院入口',
-  '涨租预警系统：合同到期前提醒提前沟通',
-]
+const defaultDepositInputs = {
+  depositAmount: '3800',
+  unpaidFees: '0',
+  repairCost: '0',
+  cleaningCost: '400',
+  hasVoucher: 'no',
+  normalWear: 'yes',
+}
+
+const providerPresets = {
+  DeepSeek: {
+    label: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com',
+    defaultModel: 'deepseek-v4-flash',
+    models: ['deepseek-v4-flash', 'deepseek-chat', 'deepseek-reasoner'],
+    note: '适合中文合同审查，OpenAI 兼容格式。',
+  },
+  通义千问: {
+    label: '通义千问',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    defaultModel: 'qwen-plus',
+    models: ['qwen-plus', 'qwen-max', 'qwen-turbo'],
+    note: '阿里云百炼兼容模式，适合国内部署演示。',
+  },
+  智谱GLM: {
+    label: '智谱 GLM',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    defaultModel: 'glm-4-flash',
+    models: ['glm-4-flash', 'glm-4-plus', 'glm-4-air'],
+    note: '国产通用模型，接口走兼容聊天格式。',
+  },
+  Moonshot: {
+    label: 'Moonshot',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    defaultModel: 'moonshot-v1-8k',
+    models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
+    note: '长文本合同可切换更大上下文模型。',
+  },
+  OpenAICompatible: {
+    label: 'OpenAI Compatible',
+    baseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4.1-mini',
+    models: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini'],
+    note: '适合任意 OpenAI 兼容网关或自建代理。',
+  },
+  Custom: {
+    label: '自定义网关',
+    baseUrl: 'https://api.example.com/v1',
+    defaultModel: 'custom-model',
+    models: ['custom-model'],
+    note: '填写你自己的代理地址、模型名和密钥。',
+  },
+}
 
 const evidenceGroupMeta = {
   contract: {
@@ -513,6 +1433,40 @@ function loadEvidencePackState() {
   }
 }
 
+function loadCheckinInspectionState() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.checkinInspection)
+    return saved ? normalizeCheckinState(JSON.parse(saved)) : createDefaultCheckinState()
+  } catch {
+    return createDefaultCheckinState()
+  }
+}
+
+function createDefaultSubsidyMatcherState() {
+  return {
+    city: '杭州',
+    profile: '我是2026年应届本科毕业生，刚到杭州工作，公司已缴纳社保，目前租房居住，本市无房。',
+  }
+}
+
+function normalizeSubsidyMatcherState(savedState) {
+  const defaults = createDefaultSubsidyMatcherState()
+
+  return {
+    city: subsidyCities.includes(savedState?.city) ? savedState.city : defaults.city,
+    profile: typeof savedState?.profile === 'string' ? savedState.profile : defaults.profile,
+  }
+}
+
+function loadSubsidyMatcherState() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.subsidyMatcher)
+    return saved ? normalizeSubsidyMatcherState(JSON.parse(saved)) : createDefaultSubsidyMatcherState()
+  } catch {
+    return createDefaultSubsidyMatcherState()
+  }
+}
+
 const contractTypeOptions = [
   { value: 'auto', label: '自动识别' },
   { value: 'service', label: '服务 / 外包合同' },
@@ -539,33 +1493,346 @@ const knowledgeBaseItems = [
     title: '民法典租赁规则',
     tag: '租房核心',
     text: '关注租期、维修义务、租赁物使用、解除责任、买卖不破租赁等租房基础规则。',
+    source: '中国政府网',
+    sourceUrl: 'https://www.gov.cn/xinwen/2020-06/01/content_5516649.htm',
   },
   {
     title: '商品房屋租赁管理办法',
     tag: '租赁合规',
     text: '关注租赁备案、隔断房限制、群租风险、消防安全、房屋用途和出租合规。',
+    source: '住房城乡建设部规章',
+    sourceUrl: 'https://www.moj.gov.cn/pub/sfbgw/flfggz/flfggzbmgz/201102/t20110225_144920.html',
   },
   {
-    title: '租房常见陷阱库',
-    tag: '避坑指南',
-    text: '识别押金扣款、自动涨租、维修推诿、固定保洁费、家电折旧费、单方解释权。',
+    title: '住房租赁条例',
+    tag: '监管趋势',
+    text: '补充出租安全、合同备案、押金约定、经纪机构责任和禁止非法腾退等监管要求。',
+    source: '国务院令第812号',
+    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
   },
   {
-    title: '押金纠纷裁判思路',
+    title: '格式条款提示义务',
+    tag: '格式条款',
+    text: '识别签字即同意、解释权归甲方、押金不退等加重租客责任或限制租客权利的表述。',
+    source: '民法典第四百九十六条',
+    sourceUrl: 'https://www.gov.cn/xinwen/2020-06/01/content_5516649.htm',
+  },
+  {
+    title: '押金返还与扣减',
     tag: '押金守护',
-    text: '押金扣除通常要有实际损失、合理必要和凭证支持，正常使用损耗不应随意扣款。',
+    text: '押金扣除应有明确项目、实际损失、合理必要和凭证支持，正常使用损耗不应随意扣款。',
+    source: '住房租赁条例 + 裁判常识',
+    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
   },
   {
-    title: '租客维权指南',
-    tag: '权益保护',
-    text: '覆盖换锁收房、单方涨租、无故扣押金、拒绝维修等场景的协商和投诉路径。',
+    title: '出租人维修义务',
+    tag: '维修责任',
+    text: '自然老化、水管老化、墙体开裂等不宜笼统转嫁给租客，需要结合原因和证据判断。',
+    source: '民法典第七百一十二条',
+    sourceUrl: 'https://www.gov.cn/xinwen/2020-06/01/content_5516649.htm',
+  },
+  {
+    title: '禁止非法腾退',
+    tag: '退租安全',
+    text: '对换锁、断水断电、威胁收房等场景，优先提示留证、沟通和投诉路径。',
+    source: '住房租赁条例第十二条',
+    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+  },
+  {
+    title: '入住验房留证',
+    tag: '入住留证',
+    text: '覆盖墙面地板、门窗门锁、家具家电、水电燃气表读数和已有瑕疵确认。',
+    source: '产品流程库',
+    sourceUrl: '',
+  },
+  {
+    title: '退租证据包清单',
+    tag: '退租留证',
+    text: '整理合同、押金付款凭证、费用结清凭证、交接照片、维修票据、聊天记录和钥匙交还记录。',
+    source: '产品流程库',
+    sourceUrl: '',
+  },
+  {
+    title: '续租涨租审查',
+    tag: '涨租续租',
+    text: '检查自动续租、单方涨租、到期通知、涨幅边界和双方确认方式。',
+    source: '产品规则库',
+    sourceUrl: '',
+  },
+  {
+    title: '城市租房补贴线索',
+    tag: '政策补贴',
+    text: '按城市、学历、社保、无房、劳动合同等条件筛政策，结果必须提示以官方最新申报口径为准。',
+    source: '各地政府公开入口',
+    sourceUrl: '',
   },
   {
     title: '租房谈判策略',
     tag: '话术技巧',
     text: '提供押金、维修、提前解约、涨租限制、杂费凭证等条款的谈判话术。',
+    source: '产品话术库',
+    sourceUrl: '',
   },
 ]
+
+const aiResponseSkills = [
+  {
+    title: '租赁合同审查顾问',
+    rule: '只围绕合同原文、当前模块数据和知识库回答，优先指出对租客最有实际影响的条款。',
+  },
+  {
+    title: '证据核验员',
+    rule: '涉及押金、维修、退租、验房时，必须提示需要照片、票据、聊天记录、交接单等证据支撑。',
+  },
+  {
+    title: '专业沟通稿助手',
+    rule: '需要行动建议时，给出可以直接发给房东、中介或平台的克制话术。',
+  },
+  {
+    title: '回复排版编辑',
+    rule: '用清晰短句和固定栏目输出，避免 Markdown 符号、堆叠分隔线、夸张语气和无依据判断。',
+  },
+  {
+    title: '依据引用员',
+    rule: '每次给建议都必须输出“依据”栏目，并优先引用知识库命中的标题、来源和适用范围。',
+  },
+]
+
+const aiReplySections = ['结论', '重点风险', '建议动作', '可发给房东的话', '依据', '提醒', '下一步', '话术']
+
+function buildAiResponseSkillPrompt() {
+  return [
+    '【已加载 AI 回复技能】',
+    ...aiResponseSkills.map((skill, index) => `${index + 1}. ${skill.title}：${skill.rule}`),
+    '【回复样式硬性要求】',
+    '1. 必须先给结论，再给风险和行动建议。',
+    '2. 必须使用“依据”栏目，列出至少 1 条知识库命中标题或系统内置规则；没有命中时要说明依据不足并建议核实。',
+    '3. 优先使用这些栏目：结论、重点风险、建议动作、可发给房东的话、依据。没有必要的栏目不要硬凑。',
+    '4. 不要输出 Markdown 装饰符号，包括 **、###、---、代码块、表格和连续项目符号。',
+    '5. 每段尽量短，语气专业克制，不使用夸张表达，不编造法律结论。',
+    '6. 涉及政策、补贴或法规时，提醒以官方最新页面和经办部门口径为准。',
+  ].join('\n')
+}
+
+function buildLocalKnowledgeContext() {
+  return knowledgeBaseItems
+    .map((item, index) => `${index + 1}. ${item.title}（${item.tag}）：${item.text}`)
+    .join('\n')
+}
+
+function pickLocalKnowledgeForPrompt(prompt, activeTab) {
+  const query = `${prompt} ${workflowLabels[activeTab] || activeTab}`
+  const normalizedQuery = query.toLowerCase()
+  const rawTokens = normalizedQuery.match(/[\u4e00-\u9fa5]{2,}|[a-z0-9-]{2,}/gi) || []
+  const gramTokens = rawTokens.flatMap((token) => {
+    if (!/^[\u4e00-\u9fa5]+$/.test(token)) return [token]
+    const grams = []
+    for (let size = 2; size <= Math.min(4, token.length); size += 1) {
+      for (let index = 0; index <= token.length - size; index += 1) {
+        grams.push(token.slice(index, index + size))
+      }
+    }
+    return grams
+  })
+  const queryTokens = Array.from(new Set([...rawTokens, ...gramTokens]))
+
+  const matches = knowledgeBaseItems
+    .map((item) => {
+      const haystack = `${item.title} ${item.tag} ${item.text}`.toLowerCase()
+      const directScore = [item.title, item.tag].some((value) => normalizedQuery.includes(String(value).toLowerCase())) ? 8 : 0
+      const score = queryTokens.reduce((total, token) => (haystack.includes(token.toLowerCase()) ? total + 1 : total), directScore)
+      return { ...item, score }
+    })
+    .sort((a, b) => b.score - a.score)
+
+  const picked = matches.filter((item) => item.score > 0).slice(0, 3)
+  return picked.length ? picked : knowledgeBaseItems.slice(0, 3)
+}
+
+function createLocalAiFallbackReply({ prompt, activeTab, findings, depositResult, ragItems }) {
+  const topFinding = findings[0]
+  const knowledge = (Array.isArray(ragItems) && ragItems.length ? ragItems : pickLocalKnowledgeForPrompt(prompt, activeTab)).slice(0, 3)
+
+  const riskLine = topFinding
+    ? `当前最值得先处理的是“${topFinding.title}”，证据片段是“${compactText(topFinding.evidence, 72)}”。`
+    : '当前页面没有明显高风险结论，但仍建议按材料、证据、沟通三个方向核对。'
+
+  const moduleAction = {
+    review: '先把合同里押金、维修、涨租、解除、入户和违约金条款逐条过一遍，优先修改会直接影响钱和居住安全的内容。',
+    evidence: '先补齐押金付款、费用结清、交接照片、维修票据、聊天记录和钥匙交还记录，再和房东确认扣款明细。',
+    checkin: '先拍墙面地板、门窗门锁、家具家电和水电燃气表读数，并把已有瑕疵发给房东或中介确认。',
+    subsidy: '先确认城市、学历、社保、无房、劳动合同和申报入口，政策结果以官方最新页面和经办部门口径为准。',
+    proposal: '先用首页四个入口演示完整链路：补贴匹配、租房审查、入住验房、退租证据包。',
+  }[activeTab] || '先明确当前问题属于补贴、合同、入住验房还是退租押金，再进入对应模块处理。'
+
+  return normalizeAiReplyText([
+    '结论：当前模型暂时不可用，我先按本地知识库和当前页面数据给你可执行建议。',
+    `重点风险：${riskLine}`,
+    `建议动作：${moduleAction}`,
+    `押金提醒：当前押金估算预计应退 ${formatMoney(depositResult.estimatedReturn)}。如对方要扣款，要求提供照片、维修清单、票据和扣款依据。`,
+    `依据：${knowledge
+      .map((item) => {
+        const source = item.source || item.sourceName || '租小审内置知识库'
+        const scope = item.scope ? `，适用范围：${item.scope}` : ''
+        const updatedAt = item.updatedAt ? `，更新：${item.updatedAt}` : ''
+        return `${item.title}（${source}${scope}${updatedAt}）：${item.text}`
+      })
+      .join('；')}`,
+    '下一步：把对方要求、合同原文或扣款明细发给系统 AI，我会继续按证据和话术帮你拆解。',
+  ].join('\n'))
+}
+
+function normalizeAiReplyText(text) {
+  const sectionPattern = aiReplySections.join('|')
+
+  return String(text ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1（$2）')
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[a-z]*|```/gi, '').trim())
+    .replace(/^[ \t]*[-*_\u2014]{3,}[ \t]*$/gm, '')
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]*/gm, '')
+    .replace(/^[ \t]*>[ \t]?/gm, '')
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/__([^_\n]+)__/g, '$1')
+    .replace(/~~([^~\n]+)~~/g, '$1')
+    .replace(/\*\*/g, '')
+    .replace(/__/g, '')
+    .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/^[ \t]*[-*•]\s+/gm, '')
+    .replace(new RegExp(`([。；;!?！？])\\s*(${sectionPattern})\\s*[：:]\\s*`, 'g'), '$1\n$2：')
+    .replace(new RegExp(`(^|\\n)\\s*(${sectionPattern})\\s*[：:]\\s*`, 'g'), '$1$2：')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function formatAiMessageBlocks(content) {
+  const normalized = normalizeAiReplyText(content)
+  const lines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (!lines.length) {
+    return [{ title: '', lines: [{ marker: '', text: '暂无内容' }] }]
+  }
+
+  const blocks = []
+  let current = { title: '', lines: [] }
+  const sectionPattern = new RegExp(`^(${aiReplySections.join('|')})[：:]?\\s*(.*)$`)
+
+  const flush = () => {
+    if (current.title || current.lines.length) {
+      blocks.push(current)
+    }
+  }
+
+  lines.forEach((rawLine) => {
+    const sectionMatch = rawLine.match(sectionPattern)
+    if (sectionMatch) {
+      flush()
+      current = { title: sectionMatch[1], lines: [] }
+      if (sectionMatch[2]) {
+        current.lines.push({ marker: '', text: sectionMatch[2] })
+      }
+      return
+    }
+
+    const orderedMatch = rawLine.match(/^(\d+)[.、)]\s*(.+)$/)
+    const cnOrderedMatch = rawLine.match(/^([一二三四五六七八九十]+)[.、)]\s*(.+)$/)
+    if (orderedMatch) {
+      current.lines.push({ marker: orderedMatch[1], text: orderedMatch[2] })
+      return
+    }
+    if (cnOrderedMatch) {
+      current.lines.push({ marker: cnOrderedMatch[1], text: cnOrderedMatch[2] })
+      return
+    }
+
+    current.lines.push({ marker: '', text: rawLine })
+  })
+
+  flush()
+  return blocks
+}
+
+function buildRagSearchQuery({ prompt, activeTab, reviewText, findings }) {
+  const riskText = findings
+    .slice(0, 5)
+    .map((finding) => `${finding.title} ${finding.evidence || ''}`)
+    .join(' ')
+
+  return compactText(
+    [
+      prompt,
+      `当前模块：${workflowLabels[activeTab] || activeTab}`,
+      `合同摘要：${reviewText || ''}`,
+      `风险线索：${riskText}`,
+    ].join('\n'),
+    1400,
+  )
+}
+
+function buildRagContextPrompt(items) {
+  const rows = Array.isArray(items) ? items : []
+  if (!rows.length) {
+    return `【知识库检索】未命中专门条目。可使用内置知识库回答：\n${buildLocalKnowledgeContext()}`
+  }
+
+  return [
+    '【知识库检索命中】',
+    ...rows.map((item, index) => {
+      const source = item.source || item.sourceName || '租小审内置知识库'
+      const url = item.sourceUrl ? `｜链接：${item.sourceUrl}` : ''
+      const scope = item.scope ? `｜适用范围：${item.scope}` : ''
+      const updatedAt = item.updatedAt ? `｜更新：${item.updatedAt}` : ''
+      return `${index + 1}. ${item.title}（${item.tag || '知识'}）｜来源：${source}${scope}${updatedAt}${url}\n要点：${item.text}`
+    }),
+    '回答时必须在“依据”栏目引用这些命中标题；没有依据的判断要说明需要进一步核实。',
+  ].join('\n')
+}
+
+async function searchAiKnowledge(query, limit = 5) {
+  try {
+    const response = await fetch(`/api/rag/search?q=${encodeURIComponent(query)}&limit=${limit}`)
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok || !Array.isArray(data.items)) {
+      throw new Error(data?.message || '知识库检索失败')
+    }
+
+    return data.items
+  } catch {
+    return knowledgeBaseItems.slice(0, limit).map((item, index) => ({
+      ...item,
+      id: `local-knowledge-${index + 1}`,
+      source: '租小审内置知识库',
+      sourceUrl: '',
+      score: 0,
+    }))
+  }
+}
+
+function AiMessageContent({ content }) {
+  const blocks = formatAiMessageBlocks(content)
+
+  return (
+    <div className="ai-message-content">
+      {blocks.map((block, blockIndex) => (
+        <section className="ai-message-section" key={`${block.title || 'paragraph'}-${blockIndex}`}>
+          {block.title && <strong className="ai-message-section-title">{block.title}</strong>}
+          {block.lines.map((line, lineIndex) => (
+            <p className={`ai-message-line ${line.marker ? 'listed' : ''}`} key={`${line.text}-${lineIndex}`}>
+              {line.marker && <em>{line.marker}</em>}
+              <span>{line.text}</span>
+            </p>
+          ))}
+        </section>
+      ))}
+    </div>
+  )
+}
 
 function includesAny(text, terms) {
   return terms.some((term) => text.includes(term))
@@ -585,8 +1852,202 @@ function extractEvidenceSnippet(text, keywords) {
   return `${prefix}${text.slice(start, end).trim()}${suffix}`
 }
 
+function extractClauseAroundKeyword(text, keywords) {
+  const source = String(text ?? '')
+  const matchedKeywords = keywords.filter((term) => source.includes(term))
+  const keyword = matchedKeywords[0]
+
+  if (!keyword) return ''
+
+  const indexes = matchedKeywords.map((term) => source.indexOf(term)).filter((index) => index >= 0)
+  const index = Math.min(...indexes)
+  const lastIndex = Math.max(...matchedKeywords.map((term) => source.indexOf(term) + term.length))
+  const boundaryPattern = /[。！？；\n]/g
+  let start = 0
+  let end = source.length
+  let match = boundaryPattern.exec(source)
+
+  while (match && match.index < index) {
+    start = match.index + 1
+    match = boundaryPattern.exec(source)
+  }
+
+  if (match && match.index >= lastIndex) {
+    end = match.index + 1
+  } else {
+    while (match && match.index < lastIndex) {
+      match = boundaryPattern.exec(source)
+    }
+    if (match) {
+      end = match.index + 1
+    }
+  }
+
+  const clause = source.slice(start, end).trim()
+
+  if (!clause) return ''
+  if (clause.length <= 500) return clause
+
+  const snippet = extractEvidenceSnippet(source, [keyword]).replace(/^\.\.\./, '').replace(/\.\.\.$/, '').trim()
+  return snippet
+}
+
 function cleanContractTextForReview(text) {
-  return text.replace(/\n*【[^】]+修改建议】[\s\S]*?(?=\n\n【[^】]+修改建议】|$)/g, '').trim()
+  return String(text ?? '')
+    .replace(/\n*【[^】]+修改建议】[\s\S]*?(?=\n\n【[^】]+修改建议】|$)/g, '')
+    .replace(/\n*【补充修订条款】[\s\S]*$/g, '')
+    .replace(/\n*补充修订条款[\s\S]*$/g, '')
+    .trim()
+}
+
+function normalizeForLooseMatch(value) {
+  return String(value ?? '').replace(/\s+/g, '')
+}
+
+function findLooseTextRange(text, needle) {
+  const source = String(text ?? '')
+  const target = normalizeForLooseMatch(needle)
+  if (!source || !target) return null
+
+  let normalizedIndex = 0
+  const indexMap = []
+
+  for (let index = 0; index < source.length; index += 1) {
+    if (/\s/.test(source[index])) continue
+    indexMap[normalizedIndex] = index
+    normalizedIndex += 1
+  }
+
+  const compactSource = normalizeForLooseMatch(source)
+  const compactStart = compactSource.indexOf(target)
+  if (compactStart < 0) return null
+
+  const start = indexMap[compactStart]
+  const end = indexMap[compactStart + target.length - 1] + 1
+  return Number.isFinite(start) && Number.isFinite(end) ? { start, end } : null
+}
+
+function appendRevisionClause(text, item) {
+  const draft = String(text ?? '').trim()
+  const title = item.title || '补充修订建议'
+  const replacement = item.replacement || item.suggestion || '建议结合合同原文补充更明确、对等、可执行的条款。'
+  const hasSection = draft.includes('【补充修订条款】')
+  const block = hasSection ? `\n${title}：${replacement}` : `\n\n【补充修订条款】\n${title}：${replacement}`
+
+  if (draft.includes(`${title}：${replacement}`)) return draft
+  return `${draft}${block}`
+}
+
+function applyRevisionItem(text, item, options = {}) {
+  const draft = String(text ?? '')
+  const rawCandidates = [item.replaceFrom, item.evidence].filter(Boolean)
+  const meaningfulCandidates = rawCandidates.filter((candidate) => normalizeForLooseMatch(candidate).length >= 12)
+
+  if (item.replacement && draft.includes(item.replacement)) {
+    return { text: draft, mode: 'unchanged' }
+  }
+
+  for (const candidate of meaningfulCandidates) {
+    if (draft.includes(candidate)) {
+      return { text: draft.replace(candidate, item.replacement), mode: 'exact' }
+    }
+  }
+
+  for (const candidate of meaningfulCandidates) {
+    const range = findLooseTextRange(draft, candidate)
+    if (range) {
+      return {
+        text: `${draft.slice(0, range.start)}${item.replacement}${draft.slice(range.end)}`,
+        mode: 'loose',
+      }
+    }
+  }
+
+  const currentClause = Array.isArray(item.hits) ? extractClauseAroundKeyword(draft, item.hits) : ''
+  if (currentClause && !rawCandidates.includes(currentClause)) {
+    if (draft.includes(currentClause)) {
+      return { text: draft.replace(currentClause, item.replacement), mode: 'clause' }
+    }
+
+    const range = findLooseTextRange(draft, currentClause)
+    if (range) {
+      return {
+        text: `${draft.slice(0, range.start)}${item.replacement}${draft.slice(range.end)}`,
+        mode: 'clause',
+      }
+    }
+  }
+
+  for (const candidate of rawCandidates) {
+    if (draft.includes(candidate)) {
+      return { text: draft.replace(candidate, item.replacement), mode: 'exact' }
+    }
+  }
+
+  if (options.appendIfMissing) {
+    const appendedText = appendRevisionClause(draft, item)
+    return { text: appendedText, mode: appendedText === draft ? 'unchanged' : 'appended' }
+  }
+
+  return { text: draft, mode: 'unchanged' }
+}
+
+function applyRevisionItemToText(text, item, options = {}) {
+  return applyRevisionItem(text, item, options).text
+}
+
+function mergeRevisionItems(current, items) {
+  const next = [...current]
+  const knownIds = new Set(next.map((item) => item.id))
+
+  items.forEach((item) => {
+    if (!item?.id || knownIds.has(item.id)) return
+    next.push(item)
+    knownIds.add(item.id)
+  })
+
+  return next
+}
+
+function normalizeComparableText(value) {
+  return cleanContractTextForReview(value)
+    .replace(/^\.\.\./, '')
+    .replace(/\.\.\.$/, '')
+    .replace(/\s+/g, '')
+}
+
+function findingsOverlap(first, second) {
+  if (!first || !second) return false
+  if (first.id && first.id === second.id) return true
+
+  const firstEvidence = normalizeComparableText(first.replaceFrom || first.evidence)
+  const secondEvidence = normalizeComparableText(second.replaceFrom || second.evidence)
+
+  if (
+    firstEvidence.length >= 16
+    && secondEvidence.length >= 16
+    && (firstEvidence.includes(secondEvidence) || secondEvidence.includes(firstEvidence))
+  ) {
+    return true
+  }
+
+  const firstHits = new Set(Array.isArray(first.hits) ? first.hits : [])
+  const secondHits = Array.isArray(second.hits) ? second.hits : []
+  const sharedHits = secondHits.filter((hit) => firstHits.has(hit))
+
+  return sharedHits.length >= 2 && first.dimension === second.dimension
+}
+
+function mergeFindings(baseFindings, extraFindings) {
+  const merged = [...baseFindings]
+
+  extraFindings.forEach((finding) => {
+    if (!merged.some((existing) => findingsOverlap(existing, finding))) {
+      merged.push(finding)
+    }
+  })
+
+  return merged
 }
 
 function detectContractType(text) {
@@ -635,6 +2096,7 @@ function makeProfessionalFinding({
   negotiation,
   replacement,
   replaceFrom,
+  minHits,
 }) {
   return {
     id,
@@ -655,6 +2117,7 @@ function makeProfessionalFinding({
     evidence,
     legalBasis,
     negotiation,
+    minHits,
   }
 }
 
@@ -672,6 +2135,8 @@ function makeLeaseFinding({
   legalBasis = '参考《民法典》合同编关于租赁合同、格式条款、公平原则、违约责任和合同解除的规则。',
   negotiation,
   replacement,
+  replaceFrom,
+  minHits,
 }) {
   return makeProfessionalFinding({
     id,
@@ -687,6 +2152,8 @@ function makeLeaseFinding({
     legalBasis,
     negotiation,
     replacement,
+    replaceFrom,
+    minHits,
   })
 }
 
@@ -694,15 +2161,17 @@ function getLeaseFindings(text) {
   const findings = []
   const add = (finding) => {
     const hits = finding.keywords.filter((keyword) => text.includes(keyword))
+    const minHits = finding.minHits || 1
 
-    if (!hits.length) return
+    if (hits.length < minHits) return
 
     const hasExactEvidence = text.includes(finding.evidence)
+    const fallbackClause = hasExactEvidence ? '' : extractClauseAroundKeyword(text, hits)
     findings.push({
       ...finding,
-      evidence: hasExactEvidence ? finding.evidence : extractEvidenceSnippet(text, hits),
+      evidence: hasExactEvidence ? finding.evidence : fallbackClause || extractEvidenceSnippet(text, hits),
       hits,
-      replaceFrom: hasExactEvidence ? finding.replaceFrom : '',
+      replaceFrom: hasExactEvidence ? finding.replaceFrom : fallbackClause,
     })
   }
 
@@ -759,6 +2228,7 @@ function getLeaseFindings(text) {
     dimension: '违约责任',
     priority: 'P0',
     keywords: ['每逾期一日', '月租金5%', '滞纳金'],
+    minHits: 2,
     evidence: '乙方逾期支付租金，每逾期一日加收月租金5%作为滞纳金。',
     explain: '按月租金每日 5% 计算，逾期 20 天就相当于一个月租金，明显偏高。',
     suggestion: '建议改为每日万分之三至万分之五，或设置总额上限。',
@@ -812,6 +2282,38 @@ function getLeaseFindings(text) {
   }))
 
   add(makeLeaseFinding({
+    id: 'lease-cleaning-repair-no-voucher',
+    title: '保洁维修扣款缺少凭证边界',
+    level: 'medium',
+    score: 11,
+    dimension: '费用',
+    priority: 'P1',
+    keywords: ['保洁费', '维修费', '从押金中扣除'],
+    minHits: 2,
+    evidence: '退还时甲方可扣除以下费用：房屋及设施维修费、全屋保洁费（不低于400元）、墙面修补粉刷费、家具家电折旧补偿、以及甲方认定的其他合理扣款。',
+    explain: '保洁、维修、粉刷等费用如果没有照片、清单、票据和责任归属，退租时容易变成固定扣款。',
+    suggestion: '建议写明扣款必须基于实际损坏或未结费用，并提供照片、明细和有效票据。',
+    negotiation: '可以承担自己造成的损坏，但不接受无明细、无票据或固定金额扣押金。',
+    replacement: '甲方主张保洁、维修、粉刷等费用扣款的，应提供交接照片、费用明细、维修或保洁票据，并说明该费用系乙方原因造成且实际发生；无法提供有效凭证的，不得从押金中扣除。',
+  }))
+
+  add(makeLeaseFinding({
+    id: 'lease-appliance-depreciation-deduction',
+    title: '家具家电折旧转嫁给租客',
+    level: 'medium',
+    score: 10,
+    dimension: '押金',
+    priority: 'P1',
+    keywords: ['家具家电折旧补偿', '押金', '扣除'],
+    minHits: 2,
+    evidence: '退还时甲方可扣除以下费用：房屋及设施维修费、全屋保洁费（不低于400元）、墙面修补粉刷费、家具家电折旧补偿、以及甲方认定的其他合理扣款。',
+    explain: '家具家电正常折旧属于租赁使用中的自然损耗，不应当然由承租人从押金中补偿。',
+    suggestion: '建议区分自然折旧和人为损坏，只有承租人原因造成的实际损坏才可扣款。',
+    negotiation: '退租时先按入住验房照片和设备清单核对，正常老化不应算承租人责任。',
+    replacement: '家具家电因正常使用产生的自然折旧不作为扣款依据；因乙方不当使用造成损坏的，乙方按维修实际支出承担责任，甲方应提供照片、维修清单和票据。',
+  }))
+
+  add(makeLeaseFinding({
     id: 'lease-all-maintenance-tenant',
     title: '自然损耗维修全部转嫁承租人',
     level: 'high',
@@ -842,6 +2344,38 @@ function getLeaseFindings(text) {
   }))
 
   add(makeLeaseFinding({
+    id: 'lease-pet-forfeiture-no-cure',
+    title: '宠物违约直接没收押金',
+    level: 'medium',
+    score: 11,
+    dimension: '违约责任',
+    priority: 'P1',
+    keywords: ['不得饲养宠物', '立即解除合同', '没收押金'],
+    minHits: 2,
+    evidence: '乙方不得饲养宠物，如有违反甲方有权立即解除合同并没收押金。',
+    explain: '宠物限制可以约定，但直接解除并没收全部押金缺少整改期和实际损失边界，责任偏重。',
+    suggestion: '建议改为事先书面同意机制，违规时先通知整改，押金只赔偿实际损坏。',
+    negotiation: '如果确实不养宠物，也建议保留“实际损失 + 整改期”表述，避免轻微争议被无限放大。',
+    replacement: '未经甲方书面同意，乙方不得饲养宠物。乙方违反约定的，甲方应先书面通知整改；如造成房屋或设施实际损坏，乙方按有效凭证承担修复费用。',
+  }))
+
+  add(makeLeaseFinding({
+    id: 'lease-sublet-share-overbroad',
+    title: '转租合住限制过宽',
+    level: 'medium',
+    score: 10,
+    dimension: '居住权',
+    priority: 'P1',
+    keywords: ['不得以任何形式转租', '与他人合住', '视为严重违约'],
+    minHits: 2,
+    evidence: '乙方不得以任何形式转租、转借或与他人合住，否则视为严重违约。',
+    explain: '禁止转租有合理性，但把临时同住、家庭成员居住等都直接列为严重违约，边界过宽。',
+    suggestion: '建议区分转租、转借、长期新增居住人和短期访客，并允许经书面同意调整居住人。',
+    negotiation: '可承诺不擅自转租牟利，但应保留家庭成员、短期访客和经同意合住的空间。',
+    replacement: '未经甲方书面同意，乙方不得将房屋转租、转借或用于经营性合租。乙方新增长期共同居住人的，应提前告知甲方并经书面确认；正常亲友短期探访不视为转租或严重违约。',
+  }))
+
+  add(makeLeaseFinding({
     id: 'lease-excessive-restoration',
     title: '退租恢复义务过重',
     level: 'medium',
@@ -854,6 +2388,22 @@ function getLeaseFindings(text) {
     suggestion: '建议限于非正常使用造成的损坏，正常使用痕迹不应要求全屋翻新。',
     negotiation: '可承诺基本清洁交付，但不接受把正常折旧变成翻新义务。',
     replacement: '乙方退租时应保持房屋基本清洁并返还钥匙。正常使用损耗不构成违约；因乙方原因造成明显损坏的，乙方按实际维修费用承担责任。',
+  }))
+
+  add(makeLeaseFinding({
+    id: 'lease-decoration-use-overrestriction',
+    title: '装修改造限制过细',
+    level: 'low',
+    score: 7,
+    dimension: '居住权',
+    priority: 'P2',
+    keywords: ['不得对房屋进行任何形式的装修改造', '墙面打孔', '更换家具位置'],
+    minHits: 2,
+    evidence: '乙方不得对房屋进行任何形式的装修改造，包括但不限于墙面打孔、贴墙纸、更换家具位置。',
+    explain: '禁止破坏结构合理，但把移动家具、轻微安装也全部禁止，可能影响正常居住使用。',
+    suggestion: '建议把限制范围收窄到结构改造、破坏性装修和不可恢复行为。',
+    negotiation: '可承诺退租恢复原状，但希望保留合理布置家具和非破坏性使用空间。',
+    replacement: '未经甲方书面同意，乙方不得进行改变房屋结构、损坏墙体或影响安全的装修改造。乙方可在不损坏房屋和设施的前提下合理摆放家具；退租时按交接清单返还。',
   }))
 
   add(makeLeaseFinding({
@@ -939,7 +2489,8 @@ function getLeaseFindings(text) {
     dimension: '格式条款',
     priority: 'P1',
     keywords: ['不得以"未注意"或"不理解"', '本合同解释权归甲方'],
-    evidence: '本合同自双方签字之日起生效。乙方签字即视为已充分阅读并完全同意本合同全部内容，此后不得以"未注意"或"不理解"为由对任何条款提出异议。\n\n　　本合同解释权归甲方。',
+    evidence: '乙方签字即视为已充分阅读并完全同意本合同全部内容，此后不得以"未注意"或"不理解"为由对任何条款提出异议。本合同解释权归甲方。',
+    replaceFrom: '乙方签字即视为已充分阅读并完全同意本合同全部内容，此后不得以"未注意"或"不理解"为由对任何条款提出异议。本合同解释权归甲方。',
     explain: '该条款试图排除承租人对格式条款的异议，并把解释权单方交给出租方，容易削弱承租人救济。',
     suggestion: '建议删除单方解释权，改为双方协商解释，争议由法院依法判断。',
     negotiation: '合同解释不能由一方最终决定，尤其是格式条款。',
@@ -1100,7 +2651,7 @@ function createKnowledgePrompt(profile) {
 内置知识库：
 ${knowledgeLines}
 
-房屋租赁合同必须重点检查：自动续租涨租、单方调价、押金扣款和退还周期、维修责任归属、出租人入户权、逾期滞纳金比例、换锁收房条款、提前解除不对等、剩余租金没收、违约金过高、杂费凭证、管辖地偏好、格式条款效力、权属瑕疵责任、退租恢复义务、免责范围过宽。`
+房屋租赁合同必须重点检查：自动续租涨租、单方调价、押金扣款和退还周期、保洁维修扣款凭证、家具家电自然折旧、维修责任归属、出租人入户权、宠物违约责任、转租合住边界、装修恢复义务、逾期滞纳金比例、换锁收房条款、提前解除不对等、剩余租金没收、违约金过高、杂费凭证、管辖地偏好、格式条款效力、权属瑕疵责任、退租恢复义务、免责范围过宽。`
   }
 
   return `审查画像：
@@ -1140,7 +2691,8 @@ function analyzeContract(text, profile = { contractType: 'lease', partyRole: 'pa
 }
 
 function getRiskSummary(findings) {
-  const score = Math.min(100, findings.reduce((total, item) => total + item.score, 0))
+  const rawScore = findings.reduce((total, item) => total + item.score, 0)
+  const score = softenRiskScore(rawScore)
   const highCount = findings.filter((item) => item.level === 'high').length
   const mediumCount = findings.filter((item) => item.level === 'medium').length
 
@@ -1157,12 +2709,10 @@ function getRiskSummary(findings) {
 
 function getDimensionScores(findings) {
   return scoreDimensions.map((dimension) => {
-    const score = Math.min(
-      100,
-      findings
-        .filter((finding) => finding.dimension === dimension)
-        .reduce((total, finding) => total + finding.score * 3, 0),
-    )
+    const rawScore = findings
+      .filter((finding) => finding.dimension === dimension)
+      .reduce((total, finding) => total + finding.score * 3, 0)
+    const score = softenRiskScore(rawScore)
 
     return {
       dimension,
@@ -1172,42 +2722,9 @@ function getDimensionScores(findings) {
   })
 }
 
-function buildRevisionItems(acceptedIds, rules = riskRules) {
-  return rules
-    .filter((rule) => acceptedIds.has(rule.id))
-    .map((rule) => ({
-      ...rule,
-      ...riskDetails[rule.id],
-    }))
-}
-
 function createRevisedContractDraft(contractText, revisionItems) {
   const cleanText = cleanContractTextForReview(contractText)
-  let draft = cleanText
-  const appendedClauses = []
-
-  revisionItems.forEach((item) => {
-    if (item.replaceFrom && draft.includes(item.replaceFrom)) {
-      draft = draft.replace(item.replaceFrom, item.replacement)
-      return
-    }
-
-    if (item.evidence && draft.includes(item.evidence)) {
-      draft = draft.replace(item.evidence, item.replacement)
-      return
-    }
-
-    appendedClauses.push(`【${item.title}】\n${item.replacement}`)
-  })
-
-  if (!appendedClauses.length) return draft
-
-  return [
-    draft,
-    '',
-    '补充修订条款',
-    ...appendedClauses.map((clause, index) => `${index + 1}. ${clause}`),
-  ].join('\n')
+  return revisionItems.reduce((draft, item) => applyRevisionItemToText(draft, item, { appendIfMissing: true }), cleanText).trim()
 }
 
 function parseMoney(value) {
@@ -1245,6 +2762,103 @@ function calculateDepositReturn(inputs) {
 function formatEvidenceDate(value) {
   if (!value) return '待确认'
   return value
+}
+
+function compactText(text, maxLength = 1200) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) return normalized
+
+  return `${normalized.slice(0, maxLength)}...`
+}
+
+function getEvidenceContextSummary(state) {
+  const evidenceState = normalizeEvidencePackState(state)
+  const values = Object.values(evidenceState.evidence).flat()
+  const checked = values.filter(Boolean).length
+  const total = values.length
+  const percent = total ? Math.round((checked / total) * 100) : 0
+  const missingGroups = Object.entries(evidenceGroupMeta)
+    .map(([group, meta]) => {
+      const missing = meta.items.filter((_, index) => !evidenceState.evidence[group][index])
+      return missing.length ? `${meta.title}缺${missing.length}项` : ''
+    })
+    .filter(Boolean)
+
+  return [
+    `完整度：${percent}%（${checked}/${total}）`,
+    `地址：${evidenceState.formData.address || '待填写'}`,
+    `押金：${evidenceState.formData.deposit || '待填写'} 元，月租：${evidenceState.formData.monthlyRent || '待填写'} 元`,
+    `退租/交接：${formatEvidenceDate(evidenceState.formData.checkoutDate)} / ${formatEvidenceDate(evidenceState.formData.handoverDate)} ${evidenceState.formData.handoverTime || ''}`.trim(),
+    `缺口：${missingGroups.slice(0, 5).join('；') || '暂无明显缺口'}`,
+    `沟通说明：${compactText(evidenceState.communicationText || '尚未生成', 260)}`,
+  ].join('\n')
+}
+
+function getCheckinContextSummary(checkinData) {
+  const state = checkinData || createDefaultCheckinState()
+  const stats = getCheckinStats(state)
+  const defectRows = getCheckinDefectRows(state)
+
+  return [
+    `完成度：${stats.percent}%（${stats.checked}/${stats.total}）`,
+    `疑似瑕疵：${stats.defects} 处`,
+    `已上传验房照片：${stats.photos} 张`,
+    `瑕疵摘要：${defectRows.length ? defectRows.slice(0, 6).map((row) => `${row.room}-${row.item}：${row.defect}（${row.note}；照片${row.photoCount}张）`).join('；') : '暂无明显瑕疵'}`,
+  ].join('\n')
+}
+
+function getSubsidyContextSummary(state) {
+  const subsidyState = normalizeSubsidyMatcherState(state)
+  const matches = subsidyPolicies
+    .filter((item) => item.city === subsidyState.city)
+    .map((policy) => ({
+      ...policy,
+      matchScore: getSubsidyMatchScore(policy, subsidyState.profile),
+    }))
+    .sort((a, b) => b.matchScore - a.matchScore)
+
+  return [
+    `城市：${subsidyState.city}`,
+    `个人情况：${compactText(subsidyState.profile, 260)}`,
+    `政策线索：${matches.slice(0, 3).map((policy) => `${policy.policy}（${policy.matchScore}%｜${policy.status}）`).join('；') || '暂无匹配政策'}`,
+  ].join('\n')
+}
+
+function buildSystemAiContext({
+  activeTab,
+  reviewText,
+  effectiveReviewProfile,
+  findings,
+  summary,
+  acceptedIds,
+  revisionItems,
+  depositInputs,
+  depositResult,
+  reviewHistory,
+}) {
+  const evidenceState = loadEvidencePackState()
+  const checkinState = loadCheckinInspectionState()
+  const subsidyState = loadSubsidyMatcherState()
+  const topFindings = findings.slice(0, 6).map((finding) => `${finding.levelText || finding.level}：${finding.title}｜证据：${compactText(finding.evidence, 90)}`)
+  const acceptedCount = acceptedIds.size
+
+  return [
+    '【租小审系统上下文】',
+    `当前模块：${workflowLabels[activeTab] || activeTab}`,
+    `合同审查画像：${getContractTypeLabel(effectiveReviewProfile.contractType)}｜${partyRoleOptions.find((item) => item.value === effectiveReviewProfile.partyRole)?.label || effectiveReviewProfile.partyRole}｜${reviewDepthOptions.find((item) => item.value === effectiveReviewProfile.reviewDepth)?.label || effectiveReviewProfile.reviewDepth}`,
+    `合同正文摘要：${compactText(reviewText || '暂无合同正文', 1200)}`,
+    `风险概览：${summary.label}，评分 ${summary.score}/100，高风险 ${summary.highCount}，中风险 ${summary.mediumCount}，已采纳 ${acceptedCount}`,
+    `主要风险：${topFindings.join('；') || '暂无明显风险'}`,
+    `已采纳修改：${revisionItems.map((item) => item.title).join('；') || '暂无'}`,
+    `押金估算：押金 ${depositInputs.depositAmount || '0'}，未结费用 ${depositInputs.unpaidFees || '0'}，维修扣款 ${depositInputs.repairCost || '0'}，保洁扣款 ${depositInputs.cleaningCost || '0'}，预计应退 ${formatMoney(depositResult.estimatedReturn)}，提示：${depositResult.warning}`,
+    '【退租证据包】',
+    getEvidenceContextSummary(evidenceState),
+    '【入住验房】',
+    getCheckinContextSummary(checkinState),
+    '【补贴匹配】',
+    getSubsidyContextSummary(subsidyState),
+    `【审查历史】最近 ${reviewHistory.length} 条：${reviewHistory.slice(0, 3).map((item) => `${item.title}（${item.score}分，高风险${item.highCount}）`).join('；') || '暂无'}`,
+  ].join('\n')
 }
 
 function buildEvidenceCommunication(type, formData) {
@@ -1328,7 +2942,7 @@ function createEvidencePackageText({ formData, evidence, actions, communicationT
   const actionLines = evidenceActions.map((item, index) => `${actions[index] ? '[已完成]' : '[待完成]'} ${item.title}：${item.desc}`)
 
   return [
-    '租房安心审 退租证据包摘要',
+    '租小审 退租证据包摘要',
     `生成时间：${new Date().toLocaleString()}`,
     '',
     '一、退租基础信息',
@@ -1403,6 +3017,197 @@ async function copyTextToClipboard(text) {
   return success
 }
 
+async function buildContractDocxBlob(contractDraft) {
+  const {
+    AlignmentType,
+    Document,
+    Packer,
+    Paragraph,
+    TextRun,
+    convertInchesToTwip,
+  } = await import('docx')
+
+  const lines = String(contractDraft ?? '')
+    .replace(/\r\n/g, '\n')
+    .trim()
+    .split('\n')
+
+  const createTextRun = (text, options = {}) =>
+    new TextRun({
+      text,
+      font: 'SimSun',
+      size: options.size || 24,
+      bold: options.bold || false,
+    })
+
+  const children = lines
+    .map((line, index) => {
+      const trimmed = line.trim()
+      if (!trimmed) {
+        return new Paragraph({
+          children: [createTextRun('')],
+          spacing: { after: 120 },
+        })
+      }
+
+      if (index === 0) {
+        return new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 320 },
+          children: [createTextRun(trimmed, { bold: true, size: 36 })],
+        })
+      }
+
+      if (/^[一二三四五六七八九十]+、/.test(trimmed)) {
+        return new Paragraph({
+          spacing: { before: 220, after: 100 },
+          children: [createTextRun(trimmed, { bold: true, size: 25 })],
+        })
+      }
+
+      const isSignatureLine = /^(甲方|乙方|日期|签字|联系电话|身份证号|经甲、乙双方)/.test(trimmed)
+
+      return new Paragraph({
+        alignment: isSignatureLine ? AlignmentType.LEFT : AlignmentType.JUSTIFIED,
+        indent: isSignatureLine ? undefined : { firstLine: 480 },
+        spacing: { after: 160, line: 444 },
+        children: [createTextRun(trimmed)],
+      })
+    })
+
+  const document = new Document({
+    title: '租小审-优化合同',
+    creator: '租小审',
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: {
+              top: convertInchesToTwip(0.86),
+              right: convertInchesToTwip(0.71),
+              bottom: convertInchesToTwip(0.79),
+              left: convertInchesToTwip(0.71),
+            },
+          },
+        },
+        children,
+      },
+    ],
+  })
+
+  return Packer.toBlob(document)
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = filename
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+async function buildTextReportDocxBlob(reportText, title = '租小审报告') {
+  const {
+    AlignmentType,
+    BorderStyle,
+    Document,
+    HeadingLevel,
+    Packer,
+    Paragraph,
+    TextRun,
+    convertInchesToTwip,
+  } = await import('docx')
+  const lines = String(reportText || title)
+    .replace(/\r\n/g, '\n')
+    .trim()
+    .split('\n')
+
+  const createRun = (text, options = {}) =>
+    new TextRun({
+      text,
+      font: 'SimSun',
+      size: options.size || 23,
+      bold: options.bold || false,
+      color: options.color || '171713',
+    })
+
+  const children = lines.map((line, index) => {
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      return new Paragraph({
+        children: [createRun('')],
+        spacing: { after: 80 },
+      })
+    }
+
+    if (index === 0) {
+      return new Paragraph({
+        alignment: AlignmentType.CENTER,
+        heading: HeadingLevel.TITLE,
+        spacing: { after: 260 },
+        border: {
+          bottom: {
+            color: '08D36C',
+            size: 8,
+            space: 12,
+            style: BorderStyle.SINGLE,
+          },
+        },
+        children: [createRun(trimmed, { bold: true, size: 34 })],
+      })
+    }
+
+    if (/^[一二三四五六七八九十]+、/.test(trimmed)) {
+      return new Paragraph({
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 240, after: 120 },
+        children: [createRun(trimmed, { bold: true, size: 27 })],
+      })
+    }
+
+    if (/^\d+\./.test(trimmed)) {
+      return new Paragraph({
+        spacing: { before: 120, after: 80, line: 390 },
+        children: [createRun(trimmed, { bold: true, size: 24 })],
+      })
+    }
+
+    const isMetaLine = /^(生成时间|房屋类型|验房完成度|疑似瑕疵|已上传照片|合同类型|用户身份|审查深度|综合风险值|高风险|中风险|低风险|原文摘要)/.test(trimmed)
+
+    return new Paragraph({
+      alignment: AlignmentType.JUSTIFIED,
+      spacing: { after: isMetaLine ? 90 : 140, line: 420 },
+      indent: isMetaLine ? undefined : { firstLine: 420 },
+      children: [createRun(trimmed, { bold: isMetaLine })],
+    })
+  })
+
+  const document = new Document({
+    title,
+    creator: '租小审',
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: {
+              top: convertInchesToTwip(0.78),
+              right: convertInchesToTwip(0.72),
+              bottom: convertInchesToTwip(0.78),
+              left: convertInchesToTwip(0.72),
+            },
+          },
+        },
+        children,
+      },
+    ],
+  })
+
+  return Packer.toBlob(document)
+}
+
 function createReportText({ summary, findings, revisionItems, contractText, reviewProfile }) {
   const contractType = contractTypeOptions.find((item) => item.value === reviewProfile.contractType)?.label
   const partyRole = partyRoleOptions.find((item) => item.value === reviewProfile.partyRole)?.label
@@ -1439,7 +3244,7 @@ function createReportText({ summary, findings, revisionItems, contractText, revi
     : '暂无修订版合同草案。'
 
   return [
-    '租房安心审 AI 租房合同解读报告',
+    '租小审 AI 租房合同解读报告',
     `生成时间：${new Date().toLocaleString()}`,
     '',
     `合同类型：${contractType}`,
@@ -1563,6 +3368,7 @@ function EvidencePack({ onStatus }) {
   const [evidence, setEvidence] = useState(initialState.evidence)
   const [actions, setActions] = useState(initialState.actions)
   const [communicationText, setCommunicationText] = useState(initialState.communicationText)
+  const [isExportingEvidenceDocx, setIsExportingEvidenceDocx] = useState(false)
 
   const evidenceStats = useMemo(() => {
     const values = Object.values(evidence).flat()
@@ -1605,16 +3411,21 @@ function EvidencePack({ onStatus }) {
     onStatus('已生成退租沟通说明')
   }
 
-  const exportEvidencePackage = () => {
-    const blob = new Blob([evidencePackageText], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
+  const exportEvidencePackage = async () => {
+    if (isExportingEvidenceDocx) return
 
-    link.href = url
-    link.download = `租房安心审-退租证据包-${new Date().toISOString().slice(0, 10)}.txt`
-    link.click()
-    URL.revokeObjectURL(url)
-    onStatus('退租证据包摘要已导出')
+    setIsExportingEvidenceDocx(true)
+    onStatus('正在生成 Word 退租证据包')
+
+    try {
+      const blob = await buildTextReportDocxBlob(evidencePackageText, '租小审-退租证据包')
+      downloadBlob(blob, `租小审-退租证据包-${new Date().toISOString().slice(0, 10)}.docx`)
+      onStatus('退租证据包已生成 DOCX，可下载 Word')
+    } catch (error) {
+      onStatus(`退租证据包 DOCX 生成失败：${error.message}`)
+    } finally {
+      setIsExportingEvidenceDocx(false)
+    }
   }
 
   const copyCommunication = async () => {
@@ -1699,9 +3510,9 @@ function EvidencePack({ onStatus }) {
               <button className="ghost-button compact-button" type="button" onClick={resetEvidencePack}>
                 重置
               </button>
-              <button className="primary-button compact-button" type="button" onClick={exportEvidencePackage}>
+              <button className="primary-button compact-button" type="button" onClick={exportEvidencePackage} disabled={isExportingEvidenceDocx}>
                 <Download size={15} aria-hidden="true" />
-                导出证据包
+                {isExportingEvidenceDocx ? '正在生成 Word' : '导出 Word 证据包'}
               </button>
             </div>
           </div>
@@ -1861,12 +3672,482 @@ function EvidencePack({ onStatus }) {
   )
 }
 
+function CheckinInspection({ onStatus }) {
+  const [roomType, setRoomType] = useState('studio')
+  const [activeRoom, setActiveRoom] = useState(checkinRooms[0].key)
+  const [checkinData, setCheckinData] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.checkinInspection)
+    if (!saved) return createDefaultCheckinState()
+
+    try {
+      return normalizeCheckinState(JSON.parse(saved))
+    } catch {
+      return createDefaultCheckinState()
+    }
+  })
+  const [report, setReport] = useState('')
+  const [isExportingCheckinDocx, setIsExportingCheckinDocx] = useState(false)
+
+  const stats = useMemo(() => getCheckinStats(checkinData), [checkinData])
+  const defectRows = useMemo(() => getCheckinDefectRows(checkinData), [checkinData])
+  const selectedRoomType = checkinRoomTypes.find((item) => item.value === roomType)?.label || '租住房屋'
+  const activeRoomLabel = checkinRooms.find((room) => room.key === activeRoom)?.label || '当前房间'
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.checkinInspection, JSON.stringify(checkinData))
+    } catch {
+      onStatus('验房照片较多，本地保存空间不足，请删除部分照片后再继续')
+    }
+  }, [checkinData, onStatus])
+
+  const updateRecord = (roomKey, itemKey, patch) => {
+    setCheckinData((current) => ({
+      ...current,
+      [roomKey]: {
+        ...current[roomKey],
+        [itemKey]: {
+          ...normalizeCheckinRecord(current[roomKey]?.[itemKey]),
+          ...patch,
+        },
+      },
+    }))
+  }
+
+  const uploadCheckinPhotos = async (roomKey, item, files) => {
+    const incomingFiles = Array.from(files || [])
+    const selectedFiles = incomingFiles.filter((file) => file.type.startsWith('image/'))
+    const acceptedFiles = selectedFiles.filter((file) => file.size <= CHECKIN_MAX_PHOTO_BYTES)
+    const currentPhotos = checkinData[roomKey]?.[item.key]?.photos || []
+    const availableSlots = Math.max(0, CHECKIN_MAX_PHOTOS_PER_ITEM - currentPhotos.length)
+    const filesToRead = acceptedFiles.slice(0, availableSlots)
+    const roomLabel = checkinRooms.find((room) => room.key === roomKey)?.label || activeRoomLabel
+    const oversizedCount = selectedFiles.length - acceptedFiles.length
+    const skippedByLimit = Math.max(0, acceptedFiles.length - filesToRead.length)
+
+    if (!selectedFiles.length) {
+      onStatus('请选择图片格式的验房照片')
+      return
+    }
+    if (!filesToRead.length) {
+      onStatus(oversizedCount ? '照片超过 6MB，请压缩后再上传' : `${roomLabel}-${item.label} 已达到 ${CHECKIN_MAX_PHOTOS_PER_ITEM} 张照片上限`)
+      return
+    }
+
+    try {
+      const photos = await Promise.all(
+        filesToRead.map(async (file) => ({
+          id: `${Date.now()}-${file.name}-${Math.random().toString(16).slice(2)}`,
+          name: file.name,
+          url: await compressCheckinPhoto(file),
+          createdAt: new Date().toLocaleString(),
+        })),
+      )
+
+      setCheckinData((current) => {
+        const currentRecord = normalizeCheckinRecord(current[roomKey]?.[item.key])
+
+        return {
+          ...current,
+          [roomKey]: {
+            ...current[roomKey],
+            [item.key]: {
+              ...currentRecord,
+              photos: [...currentRecord.photos, ...photos].slice(0, CHECKIN_MAX_PHOTOS_PER_ITEM),
+              note: currentRecord.note || (currentRecord.status === 'defect' ? '' : `已上传${roomLabel}-${item.label}照片`),
+            },
+          },
+        }
+      })
+
+      const skippedText = [
+        oversizedCount ? `${oversizedCount} 张超过 6MB 已跳过` : '',
+        skippedByLimit ? `${skippedByLimit} 张超过上限未添加` : '',
+      ].filter(Boolean).join('，')
+      onStatus(`已上传 ${photos.length} 张${roomLabel}-${item.label}照片${skippedText ? `，${skippedText}` : ''}`)
+    } catch {
+      onStatus('照片读取失败，请重新选择图片')
+    }
+  }
+
+  const removeCheckinPhoto = (roomKey, itemKey, photoId) => {
+    const currentPhotos = checkinData[roomKey]?.[itemKey]?.photos || []
+    updateRecord(roomKey, itemKey, {
+      photos: currentPhotos.filter((photo) => photo.id !== photoId),
+    })
+    onStatus('已删除验房照片')
+  }
+
+  const resetCheckin = () => {
+    setCheckinData(createDefaultCheckinState())
+    setReport('')
+    onStatus('入住验房记录已重置')
+  }
+
+  const generateReport = () => {
+    const defectSummary = defectRows.length
+      ? defectRows.map((row) => `${row.room}-${row.item}：${row.defect}（${row.note}；照片${row.photoCount}张）`).join('\n')
+      : '本次验房未记录明显瑕疵。'
+    const nextReport = [
+      '租小审入住验房报告',
+      `生成时间：${new Date().toLocaleString()}`,
+      `房屋类型：${selectedRoomType}`,
+      `验房完成度：${stats.checked}/${stats.total}`,
+      `疑似瑕疵：${stats.defects} 处`,
+      `已上传照片：${stats.photos} 张`,
+      '',
+      '一、瑕疵记录',
+      defectSummary,
+      '',
+      '二、发给房东/中介的确认话术',
+      defectRows.length
+        ? `您好，我今天入住${selectedRoomType}时已按房间拍摄并整理验房记录。记录中标注了${defectRows.slice(0, 3).map((row) => row.defect).join('、')}等疑似入住前已存在情况。麻烦确认这些问题为入住时现状，后续退租时不作为我的责任扣除押金。`
+        : `您好，我今天入住${selectedRoomType}时已按房间拍摄了入住验房照片。当前未发现明显瑕疵，我会保留全屋照片和水电燃气表读数，作为退租时双方核对的基准。麻烦确认收到，谢谢。`,
+    ].join('\n')
+
+    setReport(nextReport)
+    onStatus(`入住验房报告已生成，发现 ${stats.defects} 处疑似瑕疵`)
+  }
+
+  const exportReport = async () => {
+    if (isExportingCheckinDocx) return
+
+    const content = report || '请先生成入住验房报告。'
+    setIsExportingCheckinDocx(true)
+    onStatus('正在生成 Word 入住验房报告')
+
+    try {
+      const blob = await buildTextReportDocxBlob(content, '租小审-入住验房报告')
+      downloadBlob(blob, `租小审-入住验房报告-${new Date().toISOString().slice(0, 10)}.docx`)
+      onStatus('入住验房报告已生成 DOCX，可下载 Word')
+    } catch (error) {
+      onStatus(`入住验房报告 DOCX 生成失败：${error.message}`)
+    } finally {
+      setIsExportingCheckinDocx(false)
+    }
+  }
+
+  return (
+    <div className="checkin-inspection">
+      <section className="checkin-hero work-panel">
+        <div>
+          <p className="section-kicker">Check-in Inspection</p>
+          <h2>入住当天先验房，退租时才有对比基准</h2>
+          <p>按房屋类型和房间逐项记录状态，疑似瑕疵会自动汇总成房东确认话术和验房报告。</p>
+          <div className="checkin-hero-actions">
+            <button className="primary-button" type="button" onClick={generateReport}>
+              <Sparkles size={17} aria-hidden="true" />
+              生成验房报告
+            </button>
+            <button className="ghost-button" type="button" onClick={exportReport} disabled={isExportingCheckinDocx}>
+              <Download size={17} aria-hidden="true" />
+              {isExportingCheckinDocx ? '正在生成 Word' : '导出 Word 报告'}
+            </button>
+          </div>
+        </div>
+        <div className={`evidence-score ${stats.percent >= 80 ? 'safe' : stats.percent >= 50 ? 'warning' : 'danger'}`}>
+          <strong>{stats.percent}%</strong>
+          <span>验房完成度</span>
+          <em>{stats.defects} 处疑似瑕疵</em>
+        </div>
+      </section>
+
+      <section className="work-panel checkin-type-panel">
+        <div className="panel-head compact">
+          <div>
+            <h2>选择房屋类型</h2>
+            <p>不同房源重点不同，整租看全屋，合租要看公共区边界。</p>
+          </div>
+        </div>
+        <div className="checkin-type-grid">
+          {checkinRoomTypes.map((item) => (
+            <button className={roomType === item.value ? 'active' : ''} key={item.value} type="button" onClick={() => setRoomType(item.value)}>
+              <strong>{item.label}</strong>
+              <span>{item.desc}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="work-panel checkin-workbench">
+        <div className="panel-head compact">
+          <div>
+            <h2>逐房间验房记录</h2>
+            <p>标记正常、疑似瑕疵，并补充具体说明。</p>
+          </div>
+          <button className="ghost-button compact-button" type="button" onClick={resetCheckin}>
+            重置验房
+          </button>
+        </div>
+        <div className="checkin-room-tabs" role="tablist" aria-label="验房房间">
+          {checkinRooms.map((room) => {
+            const defectCount = checkinItems.filter((item) => checkinData[room.key][item.key].status === 'defect').length
+            return (
+              <button className={activeRoom === room.key ? 'active' : ''} key={room.key} type="button" onClick={() => setActiveRoom(room.key)}>
+                {room.label}
+                {defectCount > 0 && <em>{defectCount}</em>}
+              </button>
+            )
+          })}
+        </div>
+        <div className="checkin-item-list">
+          {checkinItems.map((item) => {
+            const record = normalizeCheckinRecord(checkinData[activeRoom]?.[item.key])
+            const inputValue = record.status === 'defect' ? record.defect : record.note
+            return (
+              <article className={`checkin-item ${record.status}`} key={item.key}>
+                <div className="checkin-item-main">
+                  <strong>{item.label}</strong>
+                  <span>{item.desc}</span>
+                </div>
+                <div className="checkin-status-row">
+                  {[
+                    { value: 'good', label: '正常' },
+                    { value: 'defect', label: '有瑕疵' },
+                    { value: 'unchecked', label: '待确认' },
+                  ].map((option) => (
+                    <button
+                      className={record.status === option.value ? 'active' : ''}
+                      key={option.value}
+                      type="button"
+                      onClick={() => updateRecord(activeRoom, item.key, { status: option.value })}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="checkin-detail-cell">
+                  <input
+                    value={inputValue}
+                    onChange={(event) =>
+                      updateRecord(activeRoom, item.key, record.status === 'defect' ? { defect: event.target.value } : { note: event.target.value })
+                    }
+                    placeholder={record.status === 'defect' ? item.defectPlaceholder : item.notePlaceholder}
+                  />
+                  <p className="checkin-item-advice">{record.status === 'defect' ? item.defectAdvice : item.photoHint}</p>
+                  {record.status === 'defect' ? (
+                    <div className="checkin-defect-tips" aria-label={`${item.label}瑕疵留证建议`}>
+                      {item.defectSuggestions.map((suggestion) => (
+                        <span key={suggestion}>{suggestion}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="checkin-photo-tools">
+                    <label className="checkin-inline-upload">
+                      <UploadCloud size={15} aria-hidden="true" />
+                      <span>{record.photos.length ? `继续上传照片 (${record.photos.length}/${CHECKIN_MAX_PHOTOS_PER_ITEM})` : '上传该部位照片'}</span>
+                      <input
+                        accept="image/*"
+                        multiple
+                        type="file"
+                        onChange={(event) => {
+                          uploadCheckinPhotos(activeRoom, item, event.target.files)
+                          event.target.value = ''
+                        }}
+                      />
+                    </label>
+                    <small>{item.photoHint}</small>
+                  </div>
+                  {record.photos.length ? (
+                    <div className="checkin-inline-photos" aria-label={`${activeRoomLabel}-${item.label}照片`}>
+                      {record.photos.map((photo, index) => (
+                        <figure key={photo.id}>
+                          <img alt={`${activeRoomLabel}${item.label}验房照片${index + 1}`} src={photo.url} />
+                          <figcaption>
+                            <strong>照片 {index + 1}</strong>
+                            <span>{photo.createdAt || photo.name}</span>
+                          </figcaption>
+                          <button type="button" onClick={() => removeCheckinPhoto(activeRoom, item.key, photo.id)}>
+                            删除
+                          </button>
+                        </figure>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="work-panel checkin-report-panel">
+        <div className="panel-head compact">
+          <div>
+            <h2>押金自保验房报告</h2>
+            <p>生成后可作为退租证据包里的“入住状态基准”。</p>
+          </div>
+        </div>
+        {report ? (
+          <div className="checkin-report-grid">
+            <div className="checkin-report-summary">
+              <strong>{stats.defects} 处</strong>
+              <span>疑似瑕疵已记录</span>
+              <p>{stats.checked}/{stats.total} 项完成验房，已上传 {stats.photos} 张照片</p>
+            </div>
+            <div className="checkin-defect-list">
+              {defectRows.length ? (
+                defectRows.map((row) => (
+                  <div key={`${row.room}-${row.item}`}>
+                    <strong>{row.room} · {row.item}</strong>
+                    <span>{row.defect}，{row.note}，照片 {row.photoCount} 张</span>
+                  </div>
+                ))
+              ) : (
+                <div>
+                  <strong>暂无明显瑕疵</strong>
+                  <span>建议仍保留全屋照片和表读数。</span>
+                </div>
+              )}
+            </div>
+            <div className="communication-preview checkin-script">
+              <pre>{report}</pre>
+            </div>
+          </div>
+        ) : (
+          <p className="empty-note">点击“生成验房报告”后，这里会展示瑕疵汇总和可发给房东的确认话术。</p>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function SubsidyMatcher({ onStatus }) {
+  const [initialState] = useState(() => loadSubsidyMatcherState())
+  const [city, setCity] = useState(initialState.city)
+  const [profile, setProfile] = useState(initialState.profile)
+  const selectedPolicies = useMemo(() => subsidyPolicies.filter((item) => item.city === city), [city])
+  const policyMatches = useMemo(
+    () =>
+      selectedPolicies
+        .map((policy) => ({
+          ...policy,
+          matchScore: getSubsidyMatchScore(policy, profile),
+        }))
+        .sort((a, b) => b.matchScore - a.matchScore),
+    [profile, selectedPolicies],
+  )
+  const matchScore = policyMatches[0]?.matchScore || 0
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.subsidyMatcher, JSON.stringify({ city, profile }))
+  }, [city, profile])
+
+  const matchPolicy = () => {
+    onStatus(`已匹配${city}${policyMatches.length}条官方补贴/安居线索，最高匹配度 ${matchScore}%`)
+  }
+
+  return (
+    <div className="subsidy-layout">
+      <section className="work-panel subsidy-hero">
+        <div>
+          <p className="section-kicker">Rental Subsidy</p>
+          <h2>毕业生租房补贴线索匹配</h2>
+          <p>按城市和个人情况快速整理可能相关的租房补贴入口。政策口径会变化，正式申请前仍需以官方最新发布为准。</p>
+        </div>
+        <div className={`evidence-score ${matchScore >= 80 ? 'safe' : matchScore >= 65 ? 'warning' : 'danger'}`}>
+          <strong>{matchScore}%</strong>
+          <span>最高匹配度</span>
+          <em>{city} · {policyMatches.length}条</em>
+        </div>
+      </section>
+
+      <section className="work-panel subsidy-panel">
+        <div className="panel-head">
+          <div>
+            <h2>填写基础情况</h2>
+            <p>选择城市后只展示该城市政策线索，避免杭州页面混入其他地区。</p>
+          </div>
+          <button className="primary-button compact-button" type="button" onClick={matchPolicy}>
+            <Search size={15} aria-hidden="true" />
+            匹配补贴线索
+          </button>
+        </div>
+        <div className="config-grid">
+          <label className="field">
+            <span>城市</span>
+            <select value={city} onChange={(event) => setCity(event.target.value)}>
+              {subsidyCities.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field subsidy-profile-field">
+            <span>个人情况</span>
+            <textarea value={profile} onChange={(event) => setProfile(event.target.value)} />
+          </label>
+        </div>
+      </section>
+
+      <section className="work-panel subsidy-result-panel">
+        <div className="panel-head compact">
+          <div>
+            <h2>{city}官方政策卡片</h2>
+            <p>当前只显示所选城市。每张卡片都绑定官方来源，点击卡片可跳转到政策官网或申报入口。</p>
+          </div>
+          <span className="knowledge-count">{matchScore}%</span>
+        </div>
+        <div className="subsidy-result-grid">
+          {policyMatches.map((policy) => (
+            <a className="subsidy-policy-card" href={policy.applyUrl || policy.sourceUrl} key={`${policy.city}-${policy.policy}`} target="_blank" rel="noreferrer">
+              <div className="subsidy-card-head">
+                <span>{policy.type}</span>
+                <em>{policy.matchScore}%</em>
+              </div>
+              <strong>{policy.policy}</strong>
+              <p>{policy.amount}</p>
+              <dl>
+                <div>
+                  <dt>常见条件</dt>
+                  <dd>{policy.condition}</dd>
+                </div>
+                <div>
+                  <dt>官方依据</dt>
+                  <dd>{policy.sourceName} · 核对 {policy.checkedAt}</dd>
+                </div>
+              </dl>
+              <div className="subsidy-materials">
+                {policy.materials.slice(0, 6).map((item) => (
+                  <span key={item}>
+                    <Check size={14} aria-hidden="true" />
+                    {item}
+                  </span>
+                ))}
+              </div>
+              <div className="subsidy-card-foot">
+                <span>{policy.status}</span>
+                <strong>打开官网 →</strong>
+              </div>
+            </a>
+          ))}
+        </div>
+        <div className="footer-note">
+          提示：补贴政策属于强时效信息。本页只收录已绑定官方链接的政策卡片，提交申请前仍应以跳转后的官方页面、申报系统和经办部门最新口径为准。
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function App() {
   const [contractText, setContractText] = useState(sampleContract)
-  const [activeTab, setActiveTab] = useState('review')
+  const [selectedDemoContractId, setSelectedDemoContractId] = useState(demoContracts[0].id)
+  const [activeTab, setActiveTab] = useState('proposal')
   const [showAiConfig, setShowAiConfig] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
   const evidenceRef = useRef(null)
+  const workspaceRef = useRef(null)
+  const findingsListRef = useRef(null)
+  const guideTriggerRef = useRef(null)
+  const guideCloseRef = useRef(null)
+  const pendingScrollRestoreRef = useRef(null)
+  const pendingModuleEntryRef = useRef(null)
+  const moduleActivationTimerRef = useRef(null)
+  const moduleTransitionTimerRef = useRef(null)
   const [acceptedIds, setAcceptedIds] = useState(() => new Set())
+  const [acceptedRevisionItems, setAcceptedRevisionItems] = useState([])
   const [reviewHistory, setReviewHistory] = useState(() => {
     const savedHistory = localStorage.getItem(STORAGE_KEYS.history) || localStorage.getItem(STORAGE_KEYS.historyLegacy)
     if (!savedHistory) return []
@@ -1878,96 +4159,393 @@ function App() {
     }
   })
   const [statusMessage, setStatusMessage] = useState('')
-  const [connectionStatus, setConnectionStatus] = useState('未连接')
-  const [aiConfig, setAiConfig] = useState(() => {
-    const savedConfig = localStorage.getItem(STORAGE_KEYS.aiConfig) || localStorage.getItem(STORAGE_KEYS.aiConfigLegacy)
-    const defaultConfig = {
-      provider: 'OpenAI-compatible',
-      baseUrl: 'https://api.example.com/v1',
-      model: 'gpt-4.1-mini',
-      apiKey: '',
-    }
-
-    if (!savedConfig) return defaultConfig
+  const [isExportingDocx, setIsExportingDocx] = useState(false)
+  const [isExportingReportDocx, setIsExportingReportDocx] = useState(false)
+  const [aiMessages, setAiMessages] = useState(() => [createAiWelcomeMessage()])
+  const [aiDraft, setAiDraft] = useState('')
+  const [aiSending, setAiSending] = useState(false)
+  const [aiKnowledgeHits, setAiKnowledgeHits] = useState([])
+  const [aiFeedback, setAiFeedback] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.aiFeedback)
+    if (!saved) return createEmptyAiFeedback()
 
     try {
-      return { ...defaultConfig, ...JSON.parse(savedConfig) }
+      return normalizeAiFeedback(JSON.parse(saved))
     } catch {
-      return defaultConfig
+      return createEmptyAiFeedback()
+    }
+  })
+  const [aiConfig] = useState(() => {
+    const defaultPreset = providerPresets.DeepSeek
+    return {
+      accessMode: 'platform',
+      provider: 'DeepSeek',
+      baseUrl: defaultPreset.baseUrl,
+      model: defaultPreset.defaultModel,
+      apiKey: '',
     }
   })
   const [aiFindings, setAiFindings] = useState(null)
   const [aiQualityReport, setAiQualityReport] = useState(null)
+  const [findingListMinHeight, setFindingListMinHeight] = useState(0)
+  const [moduleEntering, setModuleEntering] = useState(false)
   const [isReviewing, setIsReviewing] = useState(false)
-  const [reviewError, setReviewError] = useState('')
-  const [lastReviewSource, setLastReviewSource] = useState('local')
+  const [isImportingContract, setIsImportingContract] = useState(false)
+  const [importedContractMeta, setImportedContractMeta] = useState(null)
   const [reviewProfile, setReviewProfile] = useState({
     contractType: 'lease',
     partyRole: 'partyB',
     reviewDepth: 'strict',
   })
-  const [depositInputs, setDepositInputs] = useState({
-    depositAmount: '3800',
-    unpaidFees: '0',
-    repairCost: '0',
-    cleaningCost: '400',
-    hasVoucher: 'no',
-    normalWear: 'yes',
-  })
+  const [depositInputs, setDepositInputs] = useState(defaultDepositInputs)
   const reviewText = useMemo(() => cleanContractTextForReview(contractText), [contractText])
   const effectiveReviewProfile = useMemo(
     () => resolveReviewProfile(reviewProfile, reviewText),
     [reviewProfile, reviewText],
   )
   const localFindings = useMemo(() => analyzeContract(reviewText, effectiveReviewProfile), [reviewText, effectiveReviewProfile])
-  const findings = aiFindings || localFindings
+  const findings = useMemo(
+    () => (aiFindings ? mergeFindings(aiFindings, localFindings) : localFindings),
+    [aiFindings, localFindings],
+  )
+  const visibleFindings = useMemo(() => findings.filter((finding) => !acceptedIds.has(finding.id)), [findings, acceptedIds])
   const summary = useMemo(() => getRiskSummary(findings), [findings])
   const dimensionScores = useMemo(() => getDimensionScores(findings), [findings])
-  const revisionItems = useMemo(() => buildRevisionItems(acceptedIds, findings), [acceptedIds, findings])
+  const revisionItems = acceptedRevisionItems
   const revisedContractDraft = useMemo(() => createRevisedContractDraft(contractText, revisionItems), [contractText, revisionItems])
   const depositResult = useMemo(() => calculateDepositReturn(depositInputs), [depositInputs])
-  const allFindingsAccepted = findings.length > 0 && findings.every((finding) => acceptedIds.has(finding.id))
+  const selectedDemoContract = useMemo(
+    () => demoContracts.find((contract) => contract.id === selectedDemoContractId) || demoContracts[0],
+    [selectedDemoContractId],
+  )
+  const allFindingsAccepted = findings.length > 0 && visibleFindings.length === 0
+  const visibleKnowledgeItems = useMemo(
+    () => (aiKnowledgeHits.length ? aiKnowledgeHits : knowledgeBaseItems),
+    [aiKnowledgeHits],
+  )
+  const knowledgePanelDescription = aiKnowledgeHits.length
+    ? '优先展示本次 RAG 命中的依据，AI 回复会先引用这些内容。'
+    : '本地规则与 AI Prompt 会共同引用这些租房审查依据。'
+  const aiFeedbackText = `反馈：${aiFeedback.helpful} 有帮助 / ${aiFeedback.needsWork} 需改进`
+  const importedIsOcr = Boolean(importedContractMeta?.source === '图片 OCR' || importedContractMeta?.type?.includes('OCR'))
+  const importedConfidence = Number(importedContractMeta?.confidence || 0)
+  const importedNeedsManualCheck = importedIsOcr && importedConfidence < OCR_REVIEW_WARNING_CONFIDENCE
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(reviewHistory))
+    try {
+      if (reviewHistory.length) {
+        localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(reviewHistory))
+      } else {
+        localStorage.removeItem(STORAGE_KEYS.history)
+      }
+    } catch {
+      // localStorage may be unavailable in private browsing or restricted environments.
+    }
   }, [reviewHistory])
 
-  const updateAiConfig = (field, value) => {
-    setAiConfig((current) => ({ ...current, [field]: value }))
-    setConnectionStatus('待验证')
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.aiFeedback, JSON.stringify(aiFeedback))
+  }, [aiFeedback])
+
+  useLayoutEffect(() => {
+    const shouldAnimateModuleEntry = pendingModuleEntryRef.current === activeTab
+    if (!shouldAnimateModuleEntry) return undefined
+
+    pendingModuleEntryRef.current = null
+    setModuleEntering(true)
+
+    window.clearTimeout(moduleTransitionTimerRef.current)
+    moduleTransitionTimerRef.current = window.setTimeout(() => {
+      setModuleEntering(false)
+    }, 520)
+
+    return () => {
+      window.clearTimeout(moduleTransitionTimerRef.current)
+    }
+  }, [activeTab])
+
+  useLayoutEffect(() => {
+    const restore = pendingScrollRestoreRef.current
+    if (!restore) return undefined
+
+    const restoreScroll = () => {
+      const anchor = findingsListRef.current
+      if (!anchor) {
+        window.scrollTo({
+          top: restore.scrollY,
+          left: restore.scrollX,
+          behavior: 'auto',
+        })
+        return
+      }
+
+      const nextTop = anchor.getBoundingClientRect().top
+      const delta = nextTop - restore.anchorTop
+
+      if (Math.abs(delta) > 1) {
+        window.scrollBy({
+          top: delta,
+          left: 0,
+          behavior: 'auto',
+        })
+      }
+    }
+
+    restoreScroll()
+    const firstFrameId = window.requestAnimationFrame(() => {
+      restoreScroll()
+      window.requestAnimationFrame(restoreScroll)
+    })
+    const timeoutId = window.setTimeout(restoreScroll, 120)
+
+    pendingScrollRestoreRef.current = null
+
+    return () => {
+      window.cancelAnimationFrame(firstFrameId)
+      window.clearTimeout(timeoutId)
+    }
+  }, [findingListMinHeight, visibleFindings.length])
+
+  useEffect(() => {
+    if (!showGuide) return undefined
+
+    const previouslyFocused = document.activeElement
+    guideCloseRef.current?.focus({ preventScroll: true })
+
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') {
+        setShowGuide(false)
+      }
+    }
+
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape)
+      if (previouslyFocused instanceof HTMLElement) {
+        previouslyFocused.focus({ preventScroll: true })
+      }
+    }
+  }, [showGuide])
+
+  const activeProviderPreset = providerPresets[aiConfig.provider] || providerPresets.DeepSeek
+  const modelConnectionLabel = `${activeProviderPreset.label} 平台模型`
+  const openRiskGuide = () => {
+    setShowGuide(true)
   }
 
-  const updateReviewProfile = (field, value) => {
-    setReviewProfile((current) => ({ ...current, [field]: value }))
-    setAiFindings(null)
-    setAiQualityReport(null)
-    setAcceptedIds(new Set())
-    setLastReviewSource('local')
-    setReviewError('')
-    setStatusMessage('已切换审查知识库，当前结果使用本地规则重新计算')
+  const navigateToModule = (tab, options = {}) => {
+    const anchor = workspaceRef.current
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const stickyOffset = ['.sidebar', '.announcement-strip'].reduce((total, selector) => {
+      const element = document.querySelector(selector)
+      if (!element) return total
+
+      const style = window.getComputedStyle(element)
+      const isVisible = style.display !== 'none' && style.visibility !== 'hidden'
+      const isSticky = style.position === 'sticky' || style.position === 'fixed'
+
+      return isVisible && isSticky ? total + element.getBoundingClientRect().height : total
+    }, 0)
+    const visualGap = 0
+    const top = anchor ? Math.max(0, anchor.getBoundingClientRect().top + window.scrollY - stickyOffset - visualGap) : 0
+    const shouldPrepareAtTop = anchor && window.scrollY > top + 24
+
+    window.clearTimeout(moduleTransitionTimerRef.current)
+    window.clearTimeout(moduleActivationTimerRef.current)
+
+    const activateModule = () => {
+      pendingModuleEntryRef.current = tab
+      setActiveTab(tab)
+    }
+
+    if (shouldPrepareAtTop) {
+      window.scrollTo({
+        top,
+        left: 0,
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      })
+      moduleActivationTimerRef.current = window.setTimeout(activateModule, prefersReducedMotion ? 0 : 220)
+    } else {
+      activateModule()
+      if (anchor) {
+        window.scrollTo({
+          top,
+          left: 0,
+          behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        })
+      }
+    }
+
+    if (options.closeGuide) {
+      setShowGuide(false)
+    }
+    if (options.message) {
+      setStatusMessage(options.message)
+    }
+  }
+
+  const jumpFromGuide = (tab) => {
+    navigateToModule(tab, {
+      closeGuide: true,
+      message: `已进入${workflowLabels[tab] || tab}首页，可以按避坑流程继续操作`,
+    })
+  }
+
+  const enterModuleFromCard = (tab) => {
+    navigateToModule(tab, {
+      message: `正在进入${workflowLabels[tab] || tab}首页`,
+    })
+  }
+
+  const switchModuleFromNav = (tab) => {
+    navigateToModule(tab)
+  }
+
+  const openAiExpert = () => {
+    setShowAiConfig(true)
+    setStatusMessage(`已打开系统 AI，当前接入：${workflowLabels[activeTab] || activeTab}`)
+  }
+
+  const closeAiExpert = () => {
+    setShowAiConfig(false)
+  }
+
+  const resetAiChat = () => {
+    setAiMessages([createAiWelcomeMessage()])
+    setAiKnowledgeHits([])
+  }
+
+  const rateAiMessage = (messageId, rating) => {
+    setAiFeedback((current) => {
+      const nextByMessage = { ...current.byMessage, [messageId]: rating }
+      return normalizeAiFeedback({ byMessage: nextByMessage })
+    })
+    setStatusMessage(`已记录 AI 回复反馈：${rating === 'helpful' ? '有帮助' : '需改进'}`)
   }
 
   const updateDepositInput = (field, value) => {
     setDepositInputs((current) => ({ ...current, [field]: value }))
   }
 
+  const submitAiChat = async (rawPrompt) => {
+    const prompt = String(rawPrompt || '').trim()
+    if (!prompt || aiSending) return
+
+    const nextUserMessage = { id: createMessageId('user'), role: 'user', content: prompt }
+    const nextAssistantId = createMessageId('assistant')
+    const nextMessages = [...aiMessages, nextUserMessage]
+
+    setAiMessages([
+      ...nextMessages,
+      { id: nextAssistantId, role: 'assistant', content: '正在思考中…', pending: true },
+    ])
+    setAiDraft('')
+    setAiSending(true)
+    setStatusMessage('系统 AI 正在检索知识库并读取当前业务上下文')
+
+    let ragItems = []
+
+    try {
+      ragItems = await searchAiKnowledge(
+        buildRagSearchQuery({
+          prompt,
+          activeTab,
+          reviewText,
+          findings,
+        }),
+        5,
+      )
+      setAiKnowledgeHits(ragItems)
+
+      const systemContext = buildSystemAiContext({
+        activeTab,
+        reviewText,
+        effectiveReviewProfile,
+        findings,
+        summary,
+        acceptedIds,
+        revisionItems,
+        depositInputs,
+        depositResult,
+        reviewHistory,
+      })
+      const response = await callAiModel(
+        [
+          {
+            role: 'system',
+            content:
+              '你是“租小审系统 AI”，已经接入整个租小审产品。你可以使用系统上下文回答合同审查、押金估算、退租证据包、入住验房、补贴匹配和参赛提案问题。回答时优先结合当前模块、合同原文、证据状态和知识库命中条目，给出能直接执行的建议。保持简洁、准确、专业、可操作；不要输出与租房无关的内容；不要编造法律条文或政策口径。',
+          },
+          {
+            role: 'system',
+            content: buildAiResponseSkillPrompt(),
+          },
+          {
+            role: 'system',
+            content: systemContext,
+          },
+          {
+            role: 'system',
+            content: buildRagContextPrompt(ragItems),
+          },
+          ...nextMessages.map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        ],
+        { temperature: 0.2, maxTokens: 1200 },
+      )
+
+      const reply = normalizeAiReplyText(extractAssistantChatContent(response)) || '我暂时没有拿到明确回复，请再把问题说具体一点。'
+      setAiMessages([...nextMessages, { id: nextAssistantId, role: 'assistant', content: reply }])
+      setStatusMessage(`系统 AI 已结合当前业务上下文和 ${ragItems.length} 条知识库内容回复`)
+    } catch (error) {
+      const fallbackReply = createLocalAiFallbackReply({
+        prompt,
+        activeTab,
+        findings,
+        depositResult,
+        ragItems,
+      })
+      setAiMessages([
+        ...nextMessages,
+        {
+          id: nextAssistantId,
+          role: 'assistant',
+          content: fallbackReply,
+        },
+      ])
+      setStatusMessage(`模型暂时不可用，已切换本地知识库兜底：${error.message}`)
+    } finally {
+      setAiSending(false)
+    }
+  }
+
+  const sendAiDraft = () => {
+    submitAiChat(aiDraft)
+  }
+
+  const updateReviewProfile = (field, value) => {
+    setFindingListMinHeight(0)
+    setReviewProfile((current) => ({ ...current, [field]: value }))
+    setAiFindings(null)
+    setAiQualityReport(null)
+    setAcceptedIds(new Set())
+    setAcceptedRevisionItems([])
+    setStatusMessage('已切换审查知识库，当前结果使用本地规则重新计算')
+  }
+
   const callAiModel = async (messages, options = {}) => {
-    const endpoint = buildChatCompletionsUrl(aiConfig.baseUrl)
-
-    if (!endpoint) throw new Error('请先填写 Base URL')
-    if (!aiConfig.model.trim()) throw new Error('请先填写模型名称')
-    if (!aiConfig.apiKey.trim()) throw new Error('请先填写 API Key')
-
-    const response = await fetch(endpoint, {
+    const response = await fetch(getPlatformApiEndpoint(), {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${aiConfig.apiKey.trim()}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        provider: aiConfig.provider,
         model: aiConfig.model.trim(),
         temperature: options.temperature ?? 0.2,
-        max_tokens: options.maxTokens ?? 2200,
+        maxTokens: options.maxTokens ?? 2200,
         messages,
       }),
     })
@@ -1982,65 +4560,40 @@ function App() {
     return data
   }
 
-  const testAiConnection = async () => {
-    setConnectionStatus('连接中')
-    setReviewError('')
-
-    try {
-      await callAiModel(
-        [
-          { role: 'system', content: '你是接口连通性测试助手。' },
-          { role: 'user', content: '请只回复 OK。' },
-        ],
-        { maxTokens: 8, temperature: 0 },
-      )
-      setConnectionStatus('连接成功')
-      setStatusMessage('AI 接口连接成功')
-    } catch (error) {
-      setConnectionStatus('连接失败')
-      setReviewError(error.message)
-      setStatusMessage('AI 接口连接失败，已保留本地规则兜底')
-    }
-  }
-
-  const saveAiConfig = () => {
-    localStorage.setItem(STORAGE_KEYS.aiConfig, JSON.stringify(aiConfig))
-    setConnectionStatus(connectionStatus === '连接成功' ? '连接成功' : '接口入口已保存')
-    setStatusMessage('AI 接入配置已保存到本地浏览器')
-  }
-
   const startReview = async () => {
     const trimmedText = reviewText.trim()
     setAcceptedIds(new Set())
-    setReviewError('')
+    setAcceptedRevisionItems([])
 
     if (!trimmedText) {
       setAiFindings(null)
       setAiQualityReport(null)
-      setLastReviewSource('local')
       setStatusMessage('请先粘贴合同正文')
       return
     }
 
-    if (!aiConfig.apiKey.trim()) {
-      setAiFindings(null)
-      setAiQualityReport(null)
-      setLastReviewSource('local')
-      setStatusMessage('未配置 API Key，已使用本地规则审查')
-      return
-    }
-
     setIsReviewing(true)
-    setStatusMessage('正在调用 AI 大模型审查合同')
+    setStatusMessage('正在检索知识库并调用平台 AI 模型审查合同')
 
     try {
+      const ragItems = await searchAiKnowledge(
+        buildRagSearchQuery({
+          prompt: '租房合同审查 押金 维修 涨租 解除 违约 入户 管辖',
+          activeTab: 'review',
+          reviewText: trimmedText,
+          findings: localFindings,
+        }),
+        6,
+      )
+      setAiKnowledgeHits(ragItems)
+
       const data = await callAiModel([
         {
           role: 'system',
           content:
             '你是严谨的租房合同解读助手，擅长识别押金、涨租、维修、入户、解除、违约金和管辖风险。必须只返回合法 JSON，且证据必须来自原文。',
         },
-        { role: 'user', content: createAiReviewPrompt(trimmedText, effectiveReviewProfile) },
+        { role: 'user', content: createAiReviewPrompt(trimmedText, effectiveReviewProfile, ragItems) },
       ])
       const parsed = parseAiContent(extractAssistantContent(data))
       const nextFindings = normalizeAiFindings(parsed, trimmedText)
@@ -2048,8 +4601,6 @@ function App() {
 
       setAiFindings(nextFindings)
       setAiQualityReport(qualityReport)
-      setLastReviewSource('ai')
-      setConnectionStatus('连接成功')
       setStatusMessage(
         qualityReport.rejectedCount
           ? `AI 审查完成，保留 ${nextFindings.length} 条，过滤 ${qualityReport.rejectedCount} 条无证据风险`
@@ -2057,25 +4608,97 @@ function App() {
             ? `AI 审查完成，发现 ${nextFindings.length} 个风险点`
             : 'AI 审查完成，未发现明显风险',
       )
-    } catch (error) {
+    } catch {
       setAiFindings(null)
       setAiQualityReport(null)
-      setLastReviewSource('local')
-      setReviewError(error.message)
       setStatusMessage('AI 审查失败，已自动切换为本地规则结果')
     } finally {
       setIsReviewing(false)
     }
   }
 
-  const resetContractText = (nextText) => {
+  const replaceContractText = (nextText, options = {}) => {
+    setFindingListMinHeight(0)
     setContractText(nextText)
     setAcceptedIds(new Set())
+    setAcceptedRevisionItems([])
     setAiFindings(null)
     setAiQualityReport(null)
-    setReviewError('')
-    setLastReviewSource('local')
-    setStatusMessage('已重置合同版本和采纳状态')
+
+    if (options.importMeta) {
+      setImportedContractMeta(options.importMeta)
+    } else if (options.clearImportMeta !== false) {
+      setImportedContractMeta(null)
+    }
+
+    if (options.statusMessage) {
+      setStatusMessage(options.statusMessage)
+    }
+  }
+
+  const resetContractText = (nextText) => {
+    replaceContractText(nextText, {
+      statusMessage: '已重置合同版本和采纳状态',
+    })
+  }
+
+  const handleContractTextChange = (nextText) => {
+    replaceContractText(nextText, {
+      statusMessage: importedContractMeta ? '已切换为手动编辑，导入状态已清除' : undefined,
+    })
+  }
+
+  const importContractFile = async (file) => {
+    if (!file || isImportingContract) return
+
+    setIsImportingContract(true)
+    setStatusMessage(`正在解析合同文件：${file.name}`)
+
+    try {
+      const result = await extractContractTextFromFile(file)
+      const importedText = String(result.text || '').trim()
+
+      if (!importedText) {
+        throw new Error('没有识别到可用合同文字，请换一个更清晰的文件或直接粘贴正文')
+      }
+
+      replaceContractText(importedText, {
+        importMeta: {
+          name: file.name,
+          source: result.source || result.type,
+          type: result.type,
+          size: importedText.length,
+          confidence: result.confidence,
+          mode: result.mode,
+          importedAt: new Date().toISOString(),
+        },
+        statusMessage: `已导入${result.type}：${file.name}，共 ${importedText.length} 字`,
+      })
+      setReviewProfile((current) => ({ ...current, contractType: 'lease' }))
+    } catch (error) {
+      setStatusMessage(`合同导入失败：${error.message}`)
+    } finally {
+      setIsImportingContract(false)
+    }
+  }
+
+  const handleContractFileChange = (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    importContractFile(file)
+  }
+
+  const handleContractFileDrop = (event) => {
+    event.preventDefault()
+    const file = event.dataTransfer.files?.[0]
+    importContractFile(file)
+  }
+
+  const loadDemoContract = (contract = selectedDemoContract) => {
+    setSelectedDemoContractId(contract.id)
+    resetContractText(contract.text)
+    setReviewProfile((current) => ({ ...current, contractType: 'lease' }))
+    setStatusMessage(`已载入演示合同：${contract.title}`)
   }
 
   const saveHistorySnapshot = () => {
@@ -2093,86 +4716,139 @@ function App() {
     setStatusMessage('已保存到本地审查历史')
   }
 
+  const clearReviewHistory = () => {
+    if (!reviewHistory.length) {
+      setStatusMessage('当前没有可清空的审查历史')
+      return
+    }
+
+    setReviewHistory([])
+
+    try {
+      localStorage.removeItem(STORAGE_KEYS.history)
+      localStorage.removeItem(STORAGE_KEYS.historyLegacy)
+    } catch {
+      // localStorage may be unavailable in private browsing or restricted environments.
+    }
+
+    setStatusMessage('已清空本地审查历史')
+  }
+
   const restoreHistorySnapshot = (snapshot) => {
-    setContractText(snapshot.contractText)
-    setAcceptedIds(new Set())
-    setAiFindings(null)
-    setAiQualityReport(null)
-    setReviewError('')
-    setLastReviewSource('local')
-    setStatusMessage(`已恢复 ${snapshot.title}`)
+    replaceContractText(snapshot.contractText, {
+      statusMessage: `已恢复 ${snapshot.title}`,
+    })
   }
 
-  const exportReport = () => {
-    const report = createReportText({ summary, findings, revisionItems, contractText: reviewText, reviewProfile: effectiveReviewProfile })
-    const blob = new Blob([report], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
+  const exportReport = async () => {
+    if (isExportingReportDocx) return
 
-    link.href = url
-    link.download = `租房安心审-解读报告-${new Date().toISOString().slice(0, 10)}.txt`
-    link.click()
-    URL.revokeObjectURL(url)
-    saveHistorySnapshot()
-    setStatusMessage('租房解读报告已导出')
+    setIsExportingReportDocx(true)
+    setStatusMessage('正在生成 Word 租房解读报告')
+
+    try {
+      const report = createReportText({ summary, findings, revisionItems, contractText: reviewText, reviewProfile: effectiveReviewProfile })
+      const blob = await buildTextReportDocxBlob(report, '租小审-解读报告')
+      downloadBlob(blob, `租小审-解读报告-${new Date().toISOString().slice(0, 10)}.docx`)
+      saveHistorySnapshot()
+      setStatusMessage('租房解读报告已生成 DOCX，可下载 Word')
+    } catch (error) {
+      setStatusMessage(`租房解读报告 DOCX 生成失败：${error.message}`)
+    } finally {
+      setIsExportingReportDocx(false)
+    }
   }
 
-  const exportRevisedDraft = () => {
-    const blob = new Blob([revisedContractDraft], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
+  const exportRevisedDraft = async () => {
+    if (isExportingDocx) return
 
-    link.href = url
-    link.download = `租房安心审-修订版合同草案-${new Date().toISOString().slice(0, 10)}.txt`
-    link.click()
-    URL.revokeObjectURL(url)
-    setStatusMessage('修订版合同草案已导出')
+    setIsExportingDocx(true)
+    setStatusMessage('正在生成 DOCX 优化合同')
+
+    try {
+      const blob = await buildContractDocxBlob(revisedContractDraft)
+      downloadBlob(blob, `租小审-优化合同-${new Date().toISOString().slice(0, 10)}.docx`)
+      setStatusMessage('优化版合同已生成 DOCX，可下载 Word')
+    } catch (error) {
+      setStatusMessage(`DOCX 生成失败：${error.message}`)
+    } finally {
+      setIsExportingDocx(false)
+    }
   }
 
   const applySuggestion = (finding) => {
     if (acceptedIds.has(finding.id)) return
 
-    setContractText((currentText) => {
-      if (finding.replaceFrom && currentText.includes(finding.replaceFrom)) {
-        return currentText.replace(finding.replaceFrom, finding.replacement)
-      }
-
-      return `${currentText}\n\n【${finding.title}修改建议】\n${finding.replacement}`
-    })
+    const result = applyRevisionItem(contractText, finding, { appendIfMissing: true })
+    setContractText(result.text)
+    setAiFindings(null)
+    setAiQualityReport(null)
     setAcceptedIds((current) => new Set(current).add(finding.id))
+    setAcceptedRevisionItems((current) => mergeRevisionItems(current, [finding]))
+
+    if (result.mode === 'appended') {
+      setStatusMessage(`已采纳：${finding.title}，已作为补充修订条款加入草案`)
+      return
+    }
+
     setStatusMessage(`已采纳：${finding.title}`)
   }
 
   const applyAllSuggestions = () => {
-    if (!findings.length || allFindingsAccepted) return
+    if (!visibleFindings.length || allFindingsAccepted) return
 
-    findings.forEach((finding) => {
-      setContractText((currentText) => {
-        if (finding.replaceFrom && currentText.includes(finding.replaceFrom)) {
-          return currentText.replace(finding.replaceFrom, finding.replacement)
-        }
-
-        if (currentText.includes(`【${finding.title}修改建议】`)) {
-          return currentText
-        }
-
-        return `${currentText}\n\n【${finding.title}修改建议】\n${finding.replacement}`
-      })
-    })
-
-    setAcceptedIds(new Set(findings.map((finding) => finding.id)))
-    setStatusMessage('已采纳全部风险修改建议')
-  }
-
-  const handleSourceAction = () => {
-    if (lastReviewSource === 'ai') {
-      evidenceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      setStatusMessage('已定位到 AI 结果对应的原文证据')
-      return
+    const currentListHeight = findingsListRef.current?.getBoundingClientRect().height || 0
+    const currentListTop = findingsListRef.current?.getBoundingClientRect().top || 0
+    pendingScrollRestoreRef.current = {
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+      anchorTop: currentListTop,
     }
 
-    setShowAiConfig(true)
-    setStatusMessage('已打开 AI 接口配置入口')
+    if (currentListHeight > 0) {
+      setFindingListMinHeight(Math.ceil(currentListHeight))
+    }
+
+    let nextText = contractText
+    let directCount = 0
+    let appendedCount = 0
+    let unchangedCount = 0
+
+    visibleFindings.forEach((finding) => {
+      const result = applyRevisionItem(nextText, finding, { appendIfMissing: true })
+      nextText = result.text
+
+      if (result.mode === 'exact' || result.mode === 'loose') {
+        directCount += 1
+      } else if (result.mode === 'appended') {
+        appendedCount += 1
+      } else {
+        unchangedCount += 1
+      }
+    })
+
+    setContractText(nextText)
+    setAiFindings(null)
+    setAiQualityReport(null)
+    setAcceptedIds((current) => {
+      const merged = new Set(current)
+      visibleFindings.forEach((finding) => merged.add(finding.id))
+      return merged
+    })
+    setAcceptedRevisionItems((current) => mergeRevisionItems(current, visibleFindings))
+
+    const newAcceptedCount = visibleFindings.length
+    const detailText = [
+      directCount ? `${directCount} 条直接改写` : '',
+      appendedCount ? `${appendedCount} 条补充到修订条款` : '',
+      unchangedCount ? `${unchangedCount} 条已在草案中` : '',
+    ].filter(Boolean).join('，')
+
+    setStatusMessage(
+      detailText
+        ? `已采纳 ${newAcceptedCount} 条，其中 ${detailText}`
+        : '已采纳全部风险修改建议',
+    )
   }
 
   const topbarCopy = {
@@ -2180,44 +4856,77 @@ function App() {
       kicker: 'Rental Contract Copilot',
       title: '租房签字前，先让 AI 帮你看一遍',
       subtitle: '聚焦押金、涨租、维修、入户、管辖和违约金，把租房合同里的坑讲成大白话。',
+      stage: '合同审查',
+      state: `${findings.length} 个风险点`,
+      action: revisionItems.length ? `${revisionItems.length} 条已采纳建议` : '可生成审查报告',
     },
     evidence: {
       kicker: 'Move-out Evidence Kit',
       title: '退租前，把证据包整理好',
       subtitle: '把合同、照片、沟通记录和费用凭证整理成可导出的证据摘要，减少押金争议中的材料遗漏。',
+      stage: '退租证据包',
+      state: '证据材料整理',
+      action: '合同、照片和沟通记录统一汇总',
+    },
+    checkin: {
+      kicker: 'Check-in Inspection',
+      title: '入住当天先验房，退租时才有底稿',
+      subtitle: '按房间记录墙面、门窗、家具家电和水电燃气状态，生成可发给房东确认的验房报告。',
+      stage: '入住验房',
+      state: '入住状态基准',
+      action: '生成可确认的验房记录',
+    },
+    subsidy: {
+      kicker: 'Rental Subsidy',
+      title: '毕业生租房补贴，先把线索筛出来',
+      subtitle: '按城市和个人情况匹配补贴线索，只展示当前城市，避免不同地区政策混在一起。',
+      stage: '补贴匹配',
+      state: '城市政策线索',
+      action: '只展示当前城市官方入口',
     },
     proposal: {
-      kicker: 'Creative Proposal',
-      title: '租房安心审参赛提案',
-      subtitle: '展示签约前审合同、退租时整理证据、押金计算和 AI 质量自检的租房全周期方案。',
+      kicker: '首页',
+      title: '租小审使用总览',
+      subtitle: '先选择当前租房阶段，再进入补贴、审查、验房或退租证据处理。',
+      stage: '使用总览',
+      state: '四个模块入口',
+      action: '串联审查、验房、证据和补贴',
     },
   }[activeTab]
 
   return (
     <main className="app-shell">
-      <aside className="sidebar" aria-label="租房安心审导航">
+      <aside className="sidebar" aria-label="租小审导航">
         <div className="brand">
           <div className="brand-mark">
             <ShieldCheck size={26} aria-hidden="true" />
           </div>
-          <div>
-            <strong>租房安心审</strong>
-            <span>AI 租房合同解读器</span>
+          <div className="brand-copy">
+            <strong>租小审</strong>
+            <span>租房全流程风控助手</span>
           </div>
         </div>
 
         <nav className="nav-list">
-          <button className={activeTab === 'review' ? 'active' : ''} type="button" onClick={() => setActiveTab('review')}>
+          <button className={activeTab === 'proposal' ? 'active' : ''} type="button" onClick={() => switchModuleFromNav('proposal')}>
+            <House size={18} aria-hidden="true" />
+            首页
+          </button>
+          <button className={activeTab === 'subsidy' ? 'active' : ''} type="button" onClick={() => switchModuleFromNav('subsidy')}>
+            <CircleDollarSign size={18} aria-hidden="true" />
+            补贴匹配
+          </button>
+          <button className={activeTab === 'review' ? 'active' : ''} type="button" onClick={() => switchModuleFromNav('review')}>
             <FileText size={18} aria-hidden="true" />
             租房审查
           </button>
-          <button className={activeTab === 'evidence' ? 'active' : ''} type="button" onClick={() => setActiveTab('evidence')}>
+          <button className={activeTab === 'checkin' ? 'active' : ''} type="button" onClick={() => switchModuleFromNav('checkin')}>
+            <BadgeCheck size={18} aria-hidden="true" />
+            入住验房
+          </button>
+          <button className={activeTab === 'evidence' ? 'active' : ''} type="button" onClick={() => switchModuleFromNav('evidence')}>
             <ClipboardCheck size={18} aria-hidden="true" />
             退租证据包
-          </button>
-          <button className={activeTab === 'proposal' ? 'active' : ''} type="button" onClick={() => setActiveTab('proposal')}>
-            <BookOpenCheck size={18} aria-hidden="true" />
-            创意提案
           </button>
         </nav>
 
@@ -2231,10 +4940,79 @@ function App() {
       <div className="announcement-strip">
         <span>● 100% 本地演示</span>
         <strong>押金扣款、单方涨租、维修转嫁、换锁收房等风险实时识别</strong>
-        <span>查看避坑流程 →</span>
+        <button className="announcement-link" type="button" ref={guideTriggerRef} onClick={openRiskGuide}>
+          查看避坑流程
+          <ArrowRight size={14} aria-hidden="true" />
+        </button>
       </div>
 
-      <section className="workspace">
+      {showGuide && (
+        <div className="guide-backdrop" role="presentation" onMouseDown={() => setShowGuide(false)}>
+          <section
+            className="guide-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="risk-guide-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="guide-header">
+              <div>
+                <p className="runtime-kicker">Flow Tutorial</p>
+                <h2 id="risk-guide-title">租小审避坑流程</h2>
+                <p>按四步完成一次租房风险检查，从找补贴到退租留证都能顺着走。</p>
+              </div>
+              <button
+                className="guide-close"
+                type="button"
+                aria-label="关闭避坑流程教程"
+                ref={guideCloseRef}
+                onClick={() => setShowGuide(false)}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="guide-note" aria-label="给租小审用户的话">
+              <div>
+                <span>给正在使用租小审的你</span>
+                <h3>先把眼前这一步看清楚</h3>
+              </div>
+              <p>
+                不用一次弄懂所有租房规则。你只需要按当前阶段放入必要材料，系统会把合同风险、验房缺口、押金争议和补贴线索拆成能执行的下一步。重要决定仍以合同原文、书面沟通和当地政策为准，租小审帮你先看清、先留证、先沟通。
+              </p>
+            </div>
+
+            <div className="guide-step-grid">
+              {riskGuideSteps.map((item, index) => {
+                const StepIcon = item.icon
+                const entry = proposalValueCards[index]
+                const EntryIcon = entry.icon
+                return (
+                  <article className="guide-step" key={item.title}>
+                    <div className="guide-step-icon">
+                      <StepIcon size={19} aria-hidden="true" />
+                    </div>
+                    <div className="guide-step-body">
+                      <div>
+                        <span>{item.step}</span>
+                        <h3>{item.title}</h3>
+                        <p>{item.text}</p>
+                        <strong>{item.output}</strong>
+                      </div>
+                      <button className="guide-step-action" type="button" onClick={() => jumpFromGuide(entry.tab)}>
+                        <EntryIcon size={16} aria-hidden="true" />
+                        <span>{entry.title}</span>
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+        </div>
+      )}
+
+      <section className={`workspace ${moduleEntering ? 'module-entering' : ''}`} ref={workspaceRef}>
         <header className="topbar">
           <div className="hero-copy">
             <p className="section-kicker">{topbarCopy.kicker}</p>
@@ -2242,33 +5020,16 @@ function App() {
             <p className="hero-subtitle">{topbarCopy.subtitle}</p>
           </div>
           <div className="topbar-actions">
-            {activeTab === 'review' ? (
-              <>
-                <button className="ghost-button" type="button" onClick={() => setShowAiConfig(true)}>
-                  <Settings size={17} aria-hidden="true" />
-                  AI 接入
-                </button>
-                <button className="ghost-button" type="button" onClick={() => resetContractText(sampleContract)}>
-                  <RefreshCw size={17} aria-hidden="true" />
-                  示例租房合同
-                </button>
-                <button className="primary-button" type="button" onClick={exportReport}>
-                  <Download size={17} aria-hidden="true" />
-                  导出报告
-                </button>
-              </>
-            ) : (
-              <>
-                <button className="ghost-button" type="button" onClick={() => setActiveTab('review')}>
-                  <FileText size={17} aria-hidden="true" />
-                  返回审查
-                </button>
-                <button className="primary-button" type="button" onClick={() => setActiveTab('evidence')}>
-                  <ClipboardCheck size={17} aria-hidden="true" />
-                  退租证据包
-                </button>
-              </>
-            )}
+            <button className="runtime-status-button" type="button" onClick={openAiExpert}>
+              <span className="runtime-dot" aria-hidden="true" />
+              <span>系统 AI 助手</span>
+              <Settings size={15} aria-hidden="true" />
+            </button>
+            <div className="module-status-card" aria-label="当前模块状态">
+              <span>{topbarCopy.stage}</span>
+              <strong>{topbarCopy.state}</strong>
+              <p>{topbarCopy.action}</p>
+            </div>
           </div>
         </header>
 
@@ -2280,80 +5041,102 @@ function App() {
         </div>
 
         {showAiConfig && (
-          <section className="ai-config-panel" aria-label="AI 大模型接口配置">
-            <div className="ai-config-header">
+          <section className="ai-chat-panel runtime-api-panel" aria-label="租房专家 AI 对话">
+            <div className="ai-chat-header">
               <div className="ai-config-title">
                 <span className="ai-config-icon">
-                  <PlugZap size={20} aria-hidden="true" />
+                  <Bot size={20} aria-hidden="true" />
                 </span>
                 <div>
-                  <h2>AI 大模型接口</h2>
-                  <p>配置 OpenAI 兼容接口、模型名称和调用入口，后续可接入真实审查服务。</p>
+                  <p className="runtime-kicker">System Copilot</p>
+                  <h2>租小审系统 AI</h2>
+                  <p>已接入合同审查、退租证据包、入住验房、押金估算和补贴匹配，会自动读取当前系统上下文。</p>
                 </div>
               </div>
               <div className="ai-config-status">
                 <span className="model-status">
                   <PlugZap size={16} aria-hidden="true" />
-                  {connectionStatus}
+                  {modelConnectionLabel}
                 </span>
-                <button className="ghost-button compact-button" type="button" onClick={() => setShowAiConfig(false)}>
+                <button className="ghost-button compact-button" type="button" onClick={closeAiExpert}>
                   关闭
                 </button>
               </div>
             </div>
-            <div className="config-grid">
-              <label className="field">
-                <span>服务商</span>
-                <select value={aiConfig.provider} onChange={(event) => updateAiConfig('provider', event.target.value)}>
-                  {modelProviders.map((provider) => (
-                    <option key={provider}>{provider}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Base URL</span>
-                <input
-                  value={aiConfig.baseUrl}
-                  onChange={(event) => updateAiConfig('baseUrl', event.target.value)}
-                  placeholder="https://api.example.com/v1"
-                />
-              </label>
-              <label className="field">
-                <span>模型</span>
-                <input
-                  value={aiConfig.model}
-                  onChange={(event) => updateAiConfig('model', event.target.value)}
-                  placeholder="model-name"
-                />
-              </label>
-              <label className="field">
-                <span>API Key</span>
-                <input
-                  type="password"
-                  value={aiConfig.apiKey}
-                  onChange={(event) => updateAiConfig('apiKey', event.target.value)}
-                  placeholder="仅保存在本地浏览器"
-                />
-              </label>
+
+            <div className="ai-chat-meta">
+              <span>后端代理：{getPlatformApiEndpoint()}</span>
+              <span>当前模块：{workflowLabels[activeTab] || activeTab}</span>
+              <span>身份：租小审系统助手</span>
+              <span>回复技能：{aiResponseSkills.length} 个</span>
+              <span>知识库命中：{aiKnowledgeHits.length ? `${aiKnowledgeHits.length} 条` : '待检索'}</span>
+              <span>{aiFeedbackText}</span>
+              <span>默认模型：{aiConfig.model}</span>
             </div>
+
+            <div className="ai-chat-thread" aria-label="AI 对话记录">
+              {aiMessages.map((message) => (
+                <article key={message.id} className={`ai-chat-bubble ${message.role === 'user' ? 'user' : 'assistant'} ${message.pending ? 'pending' : ''}`}>
+                  <span>{message.role === 'user' ? '我' : '租房专家 AI'}</span>
+                  <AiMessageContent content={message.content} />
+                  {message.role === 'assistant' && !message.pending && message.id !== 'assistant-welcome' ? (
+                    <div className="ai-feedback" aria-label="AI 回复反馈">
+                      <button
+                        className={aiFeedback.byMessage[message.id] === 'helpful' ? 'active' : ''}
+                        type="button"
+                        onClick={() => rateAiMessage(message.id, 'helpful')}
+                      >
+                        有帮助
+                      </button>
+                      <button
+                        className={aiFeedback.byMessage[message.id] === 'needsWork' ? 'active' : ''}
+                        type="button"
+                        onClick={() => rateAiMessage(message.id, 'needsWork')}
+                      >
+                        需改进
+                      </button>
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+
+            <div className="ai-chat-composer">
+              <textarea
+                value={aiDraft}
+                onChange={(event) => setAiDraft(event.target.value)}
+                placeholder="直接问系统 AI，比如：结合当前页面，我下一步应该先处理什么？"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault()
+                    sendAiDraft()
+                  }
+                }}
+              />
+              <div className="config-actions ai-chat-actions">
+                <button className="ghost-button" type="button" onClick={resetAiChat} disabled={aiSending}>
+                  清空对话
+                </button>
+                <button className="primary-button" type="button" onClick={sendAiDraft} disabled={aiSending || !aiDraft.trim()}>
+                  <Send size={17} aria-hidden="true" />
+                  {aiSending ? '发送中...' : '发送'}
+                </button>
+              </div>
+            </div>
+
             <div className="security-callout">
               <EyeOff size={17} aria-hidden="true" />
-              <span>演示阶段可从前端直连接口。生产环境应通过后端代理保存密钥，前端只保留连接状态和模型选择。</span>
-            </div>
-            <div className="config-actions">
-              <button className="ghost-button" type="button" onClick={testAiConnection} disabled={connectionStatus === '连接中'}>
-                {connectionStatus === '连接中' ? '连接中...' : '测试连接'}
-              </button>
-              <button className="primary-button" type="button" onClick={saveAiConfig}>
-                <KeyRound size={17} aria-hidden="true" />
-                保存接入配置
-              </button>
+              <span>这里不再让用户选模型或填 Key。AI 会通过后端模型读取当前系统上下文并给出建议。</span>
             </div>
           </section>
         )}
 
         {activeTab === 'evidence' ? (
           <EvidencePack onStatus={setStatusMessage} />
+        ) : activeTab === 'checkin' ? (
+          <CheckinInspection onStatus={setStatusMessage} />
+        ) : activeTab === 'subsidy' ? (
+          <SubsidyMatcher onStatus={setStatusMessage} />
         ) : activeTab === 'review' ? (
           <div className="review-layout">
             <section className="work-panel input-panel">
@@ -2365,12 +5148,74 @@ function App() {
                 <span>{contractText.length} 字</span>
               </div>
 
-              <label className="upload-drop">
+              <label
+                className={`upload-drop ${isImportingContract ? 'importing' : ''}`}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleContractFileDrop}
+              >
                 <UploadCloud size={24} aria-hidden="true" />
-                <strong>拖入 PDF / Word / 图片租房合同</strong>
-                <span>当前 Demo 聚焦文本审查，拍照识别和 OCR 已作为后续入口预留</span>
-                <input aria-label="上传合同" type="file" />
+                <strong>{isImportingContract ? '正在解析合同...' : '拖入 PDF / Word / 图片租房合同'}</strong>
+                <span>支持 TXT、MD、DOCX、PDF 和图片 OCR，导入后会写入下方合同正文</span>
+                <input
+                  accept=".txt,.md,.docx,.pdf,image/*"
+                  aria-label="上传合同"
+                  disabled={isImportingContract}
+                  onChange={handleContractFileChange}
+                  type="file"
+                />
               </label>
+
+              {importedContractMeta && (
+                <div className={`contract-import-card ${importedNeedsManualCheck ? 'needs-check' : ''}`} aria-label="已导入合同状态">
+                  <div className="contract-import-head">
+                    <span className="contract-import-icon">
+                      <FileText size={18} aria-hidden="true" />
+                    </span>
+                    <div>
+                      <strong>已导入：{importedContractMeta.name}</strong>
+                      <p>
+                        {importedNeedsManualCheck
+                          ? 'OCR 识别结果需要人工核对，确认正文无误后再进入审查。'
+                          : '合同正文已写入编辑区，可以直接开始审查。'}
+                      </p>
+                    </div>
+                  </div>
+                  <dl className="contract-import-meta">
+                    <div>
+                      <dt>来源</dt>
+                      <dd>{importedContractMeta.source}</dd>
+                    </div>
+                    <div>
+                      <dt>字数</dt>
+                      <dd>{importedContractMeta.size} 字</dd>
+                    </div>
+                    {importedIsOcr && (
+                      <div>
+                        <dt>OCR 置信度</dt>
+                        <dd>{importedConfidence}%</dd>
+                      </div>
+                    )}
+                  </dl>
+                  {importedIsOcr && (
+                    <p className="contract-import-note">
+                      {importedNeedsManualCheck
+                        ? '图片合同可能存在漏字、错字或换行错位，请先对照原图检查金额、日期、押金和解除条款。'
+                        : '图片 OCR 结果可信度较高，仍建议快速核对金额、日期和押金条款。'}
+                    </p>
+                  )}
+                  <div className="contract-import-actions">
+                    <button className="primary-button compact-button" type="button" onClick={startReview} disabled={isReviewing || !reviewText.trim()}>
+                      {isReviewing ? <RefreshCw className="spin-icon" size={15} aria-hidden="true" /> : <Bot size={15} aria-hidden="true" />}
+                      {isReviewing ? '审查中...' : '开始审查这份合同'}
+                    </button>
+                    {importedIsOcr && (
+                      <button className="ghost-button compact-button" type="button" onClick={() => setImportedContractMeta(null)}>
+                        我已核对正文
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="review-profile" aria-label="租房合同审查画像">
                 <label>
@@ -2410,9 +5255,48 @@ function App() {
                 {reviewProfile.contractType === 'auto' && <em>自动识别</em>}
               </div>
 
+              <div className={`demo-contract-picker ${contractText.trim() ? '' : 'empty'}`} aria-label="演示合同模板">
+                <div className="demo-contract-copy">
+                  <FileText size={18} aria-hidden="true" />
+                  <div>
+                    <strong>{contractText.trim() ? '演示合同模板' : '合同已清空，可载入演示合同'}</strong>
+                    <span>{selectedDemoContract.description}</span>
+                  </div>
+                </div>
+                <div className="demo-contract-controls">
+                  <label>
+                    <span>模板</span>
+                    <select value={selectedDemoContractId} onChange={(event) => setSelectedDemoContractId(event.target.value)}>
+                      {demoContracts.map((contract) => (
+                        <option key={contract.id} value={contract.id}>
+                          {contract.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="primary-button compact-button" type="button" onClick={() => loadDemoContract()}>
+                    <Sparkles size={15} aria-hidden="true" />
+                    载入演示合同
+                  </button>
+                </div>
+                <div className="demo-contract-list">
+                  {demoContracts.map((contract) => (
+                    <button
+                      className={contract.id === selectedDemoContractId ? 'active' : ''}
+                      key={contract.id}
+                      type="button"
+                      onClick={() => loadDemoContract(contract)}
+                    >
+                      <strong>{contract.title}</strong>
+                      <span>{contract.tag}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <textarea
                 value={contractText}
-                onChange={(event) => resetContractText(event.target.value)}
+                onChange={(event) => handleContractTextChange(event.target.value)}
                 placeholder="在这里粘贴租房合同正文，系统会自动识别押金、涨租、维修、解除等风险条款..."
               />
 
@@ -2452,32 +5336,6 @@ function App() {
             </section>
 
             <section className="work-panel summary-panel">
-              <div className="analysis-float" aria-label="审查进度提示">
-                <span className="float-icon">
-                  <Bot size={16} aria-hidden="true" />
-                </span>
-                <div>
-                  <strong>{isReviewing ? 'AI 正在解读' : '租房审查管家'}</strong>
-                  <p>
-                    {isReviewing
-                      ? '正在提取押金、涨租、维修和违约责任风险。'
-                      : lastReviewSource === 'ai'
-                        ? '当前结果来自真实大模型接口。'
-                        : '当前结果来自本地规则兜底。'}
-                  </p>
-                </div>
-                <button className="source-action" type="button" onClick={handleSourceAction}>
-                  {lastReviewSource === 'ai' ? '查看证据' : '接入 AI'}
-                </button>
-              </div>
-
-              {reviewError && (
-                <div className="review-error" role="status">
-                  <AlertTriangle size={16} aria-hidden="true" />
-                  <span>{reviewError}</span>
-                </div>
-              )}
-
               {aiQualityReport && (
                 <div className={`quality-panel ${aiQualityReport.tone}`} role="status">
                   <div>
@@ -2494,13 +5352,17 @@ function App() {
 
               <div className={`summary-card ${summary.tone}`}>
                 <div>
-                  <p className="eyebrow">租房风险评分</p>
+                  <p className="eyebrow">租房风险值</p>
                   <div className="score-line">
                     <strong>{summary.score}</strong>
                     <span>/ 100</span>
                   </div>
                   <h2>{summary.label}</h2>
-                  <p>{summary.advice}</p>
+                  <p>{summary.advice} 分数越高，代表需要优先处理的风险越多。</p>
+                  <button className="ghost-button compact-button" type="button" onClick={exportReport} disabled={isExportingReportDocx}>
+                    <Download size={15} aria-hidden="true" />
+                    {isExportingReportDocx ? '正在生成 Word' : '导出 Word 报告'}
+                  </button>
                 </div>
                 <div className="score-ring" style={{ '--score': `${summary.score * 3.6}deg` }} aria-label={`风险分 ${summary.score}`}>
                   <ShieldCheck size={34} aria-hidden="true" />
@@ -2510,7 +5372,7 @@ function App() {
               <div className="metric-row">
                 <div>
                   <strong>{findings.length}</strong>
-                      <span>租房坑点</span>
+                  <span>租房坑点</span>
                 </div>
                 <div>
                   <strong>{summary.highCount}</strong>
@@ -2523,6 +5385,10 @@ function App() {
                 <div>
                   <strong>{acceptedIds.size}</strong>
                   <span>已采纳</span>
+                </div>
+                <div>
+                  <strong>{visibleFindings.length}</strong>
+                  <span>待处理</span>
                 </div>
               </div>
 
@@ -2544,18 +5410,49 @@ function App() {
                 <div className="panel-head compact">
                   <div>
                     <h2>租房安心知识库</h2>
-                    <p>本地规则与 AI Prompt 会共同引用这些租房审查依据。</p>
+                    <p>{knowledgePanelDescription}</p>
                   </div>
-                  <span className="knowledge-count">{knowledgeBaseItems.length} 组</span>
+                  <span className="knowledge-count">
+                    {aiKnowledgeHits.length ? `命中 ${visibleKnowledgeItems.length} 条` : `${knowledgeBaseItems.length} 组`}
+                  </span>
                 </div>
                 <div className="knowledge-grid">
-                  {knowledgeBaseItems.map((item) => (
-                    <article className="knowledge-item" key={item.title}>
-                      <span>{item.tag}</span>
-                      <strong>{item.title}</strong>
-                      <p>{item.text}</p>
-                    </article>
-                  ))}
+                  {visibleKnowledgeItems.map((item) => {
+                    const matchedKeywords = Array.isArray(item.matchedKeywords) ? item.matchedKeywords.slice(0, 6) : []
+                    const score = Number.isFinite(Number(item.score)) ? Number(item.score) : null
+
+                    return (
+                      <article className={`knowledge-item ${aiKnowledgeHits.length ? 'hit' : ''}`} key={item.id || item.title}>
+                        <span>{item.tag}</span>
+                        <strong>{item.title}</strong>
+                        <p>{item.text}</p>
+                        {(item.scope || item.updatedAt || item.riskLevel) && (
+                          <div className="knowledge-meta">
+                            {item.scope && <small>适用：{item.scope}</small>}
+                            {item.updatedAt && <small>更新：{item.updatedAt}</small>}
+                            {item.riskLevel && <small>风险：{item.riskLevel}</small>}
+                          </div>
+                        )}
+                        {matchedKeywords.length ? (
+                          <div className="knowledge-matches">
+                            {matchedKeywords.map((keyword) => (
+                              <small key={keyword}>{keyword}</small>
+                            ))}
+                          </div>
+                        ) : null}
+                        <div className="knowledge-source-row">
+                          {item.sourceUrl ? (
+                            <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                              {item.source || '查看来源'}
+                            </a>
+                          ) : (
+                            <em>{item.source || '租小审内置知识库'}</em>
+                          )}
+                          {score !== null && <small className="knowledge-score">匹配 {score.toFixed(1)}</small>}
+                        </div>
+                      </article>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -2576,8 +5473,8 @@ function App() {
                     <p>展示已采纳建议对应的原风险和替换条款。</p>
                   </div>
                   {revisionItems.length > 0 && (
-                    <button className="ghost-button compact-button" type="button" onClick={exportRevisedDraft}>
-                      导出草案
+                    <button className="ghost-button compact-button" type="button" onClick={exportRevisedDraft} disabled={isExportingDocx}>
+                      {isExportingDocx ? '正在生成 DOCX' : '下载优化合同 DOCX'}
                     </button>
                   )}
                 </div>
@@ -2614,9 +5511,19 @@ function App() {
                     <h2>审查历史</h2>
                     <p>本地保留最近 5 次审查，便于回溯和演示。</p>
                   </div>
-                  <button className="ghost-button compact-button" type="button" onClick={saveHistorySnapshot}>
-                    保存当前
-                  </button>
+                  <div className="panel-actions">
+                    <button
+                      className="ghost-button compact-button"
+                      type="button"
+                      onClick={clearReviewHistory}
+                      disabled={!reviewHistory.length}
+                    >
+                      清空历史
+                    </button>
+                    <button className="ghost-button compact-button" type="button" onClick={saveHistorySnapshot}>
+                      保存当前
+                    </button>
+                  </div>
                 </div>
                 {reviewHistory.length ? (
                   <div className="history-list">
@@ -2640,23 +5547,29 @@ function App() {
                   <p>每个坑点都附带原文证据、大白话解释、替代条款和谈判话术。</p>
                 </div>
                 <div className="panel-actions">
-                  <button className="apply-all-button" type="button" onClick={applyAllSuggestions} disabled={!findings.length || allFindingsAccepted}>
+                  <button className="apply-all-button" type="button" onClick={applyAllSuggestions} disabled={!visibleFindings.length || allFindingsAccepted}>
                     <BadgeCheck size={17} aria-hidden="true" />
                     {allFindingsAccepted ? '已全部采纳' : '全部采纳'}
                   </button>
                 </div>
               </div>
 
-              <div className="finding-list">
-                {findings.length ? (
-                  findings.map((finding) => (
+              <div
+                className={`finding-list ${findingListMinHeight ? 'height-locked' : ''}`}
+                ref={findingsListRef}
+                style={findingListMinHeight ? { minHeight: findingListMinHeight } : undefined}
+              >
+                {visibleFindings.length ? (
+                  visibleFindings.map((finding) => (
                     <FindingItem
-                      accepted={acceptedIds.has(finding.id)}
+                      accepted={false}
                       finding={finding}
                       key={finding.id}
                       onApply={applySuggestion}
                     />
                   ))
+                ) : findings.length ? (
+                  <p className="empty-note empty-findings">当前建议已全部采纳，已采纳内容可在左侧修订草案中查看和导出。</p>
                 ) : (
                   <p className="empty-note empty-findings">暂无风险点。建议仍由人工复核关键金额、期限、解除和争议解决条款。</p>
                 )}
@@ -2666,129 +5579,134 @@ function App() {
         ) : (
           <div className="proposal-layout">
             <section className="proposal-card proposal-hero">
-              <div>
-                <p className="section-kicker">Creative Proposal</p>
-                <h2>租房安心审：AI 租房合同解读器</h2>
+              <div className="proposal-hero-copy">
+                <p className="section-kicker">使用总览</p>
+                <h2>租小审：租房全流程风控助手</h2>
                 <p>
-                  面向社会服务赛道，帮助毕业生、老人和普通租客在签字前识别押金、涨租、维修和违约金陷阱。
+                  给普通租客的签约、入住、退租和补贴申请助手，把复杂风险翻成能直接行动的下一步。
                 </p>
-              </div>
-              <div className="hero-visual" aria-hidden="true">
-                <div className="doc-card">
-                  <AlertTriangle size={20} />
-                  <span>押金扣款过宽</span>
-                </div>
-                <div className="doc-card safe">
-                  <ShieldCheck size={20} />
-                  <span>已生成谈判话术</span>
+                <div className="proposal-tag-row" aria-label="项目关键词">
+                  <span>社会服务</span>
+                  <span>租客权益</span>
+                  <span>AI 风控</span>
                 </div>
               </div>
-            </section>
-
-            <section className="feature-grid">
-              {featureCards.map((card) => {
-                const Icon = card.icon
-                return (
-                  <article className="feature-card" key={card.title}>
-                    <Icon size={24} aria-hidden="true" />
-                    <h3>{card.title}</h3>
-                    <p>{card.text}</p>
-                  </article>
-                )
-              })}
-            </section>
-
-            <section className="timeline-card">
-              <div className="panel-head">
-                <div>
-                  <h2>技术方案</h2>
-                  <p>从租房合同解析到避坑报告生成，优先保证证据真实、解释可懂、建议可谈。</p>
-                </div>
-              </div>
-              <div className="timeline">
-                {['上传租房合同', '识别租赁类型', '命中租房坑点', '证据校验', '生成避坑报告'].map((item, index) => (
-                  <div className="timeline-step" key={item}>
-                    <span>{String(index + 1).padStart(2, '0')}</span>
-                    {item}
-                    {index < 4 && <ArrowRight size={15} aria-hidden="true" />}
+              <aside className="proposal-brief-panel" aria-label="项目定位">
+                <span>项目一句话</span>
+                <strong>先看懂合同，再决定怎么签。</strong>
+                <p>不是替用户打官司，而是在损失发生前提醒：哪条有问题、为什么有问题、下一步怎么谈。</p>
+                <dl>
+                  <div>
+                    <dt>服务对象</dt>
+                    <dd>毕业生、第一次租房人群、租房弱势群体</dd>
                   </div>
-                ))}
+                  <div>
+                    <dt>核心价值</dt>
+                    <dd>看懂条款、保留证据、少丢押金</dd>
+                  </div>
+                </dl>
+              </aside>
+            </section>
+
+            <section className="proposal-card proposal-focus">
+              <div className="proposal-section-head compact">
+                <div>
+                  <span>核心入口</span>
+                  <h2>从首页直接进入四个核心模块</h2>
+                </div>
+              </div>
+              <div className="proposal-focus-grid" aria-label="项目核心入口">
+                {proposalValueCards.map((card) => {
+                  const Icon = card.icon
+                  return (
+                    <button className="proposal-focus-item" key={card.title} type="button" onClick={() => enterModuleFromCard(card.tab)}>
+                      <span>{card.label}</span>
+                      <Icon size={21} aria-hidden="true" />
+                      <strong>{card.title}</strong>
+                      <p>{card.text}</p>
+                    </button>
+                  )
+                })}
               </div>
             </section>
 
-            <section className="timeline-card">
-              <div className="panel-head">
+            <section className="proposal-card proposal-buildout">
+              <div className="proposal-section-head compact">
                 <div>
-                  <h2>继续完善方向</h2>
-                  <p>如果要把这个 Demo 推成租房服务产品，优先补这些能力。</p>
+                  <span>后续方向</span>
+                  <h2>继续开发的想法，先围绕退租押金做深</h2>
                 </div>
               </div>
-              <div className="deposit-prototype" aria-label="押金计算器">
-                <div>
-                  <span>押金计算器</span>
-                  <strong>预计应退押金：{formatMoney(depositResult.estimatedReturn)}</strong>
-                  <p>{depositResult.warning}</p>
-                  <em>预计可扣：{formatMoney(depositResult.totalDeduction)}</em>
-                </div>
-                <div className="deposit-grid">
-                  <label>
-                    <span>押金金额</span>
-                    <input
-                      inputMode="decimal"
-                      value={depositInputs.depositAmount}
-                      onChange={(event) => updateDepositInput('depositAmount', event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>未结清费用</span>
-                    <input
-                      inputMode="decimal"
-                      value={depositInputs.unpaidFees}
-                      onChange={(event) => updateDepositInput('unpaidFees', event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>维修扣款</span>
-                    <input
-                      inputMode="decimal"
-                      value={depositInputs.repairCost}
-                      onChange={(event) => updateDepositInput('repairCost', event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>保洁扣款</span>
-                    <input
-                      inputMode="decimal"
-                      value={depositInputs.cleaningCost}
-                      onChange={(event) => updateDepositInput('cleaningCost', event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>是否有票据</span>
-                    <select value={depositInputs.hasVoucher} onChange={(event) => updateDepositInput('hasVoucher', event.target.value)}>
-                      <option value="no">无票据或清单</option>
-                      <option value="yes">有照片、清单和票据</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>是否正常损耗</span>
-                    <select value={depositInputs.normalWear} onChange={(event) => updateDepositInput('normalWear', event.target.value)}>
-                      <option value="yes">是，仅正常使用损耗</option>
-                      <option value="no">否，存在非正常损坏</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
-              <div className="backlog-list">
-                {productBacklog.map((item) => (
-                  <div className="backlog-item" key={item}>
-                    <Check size={16} aria-hidden="true" />
-                    {item}
+              <div className="proposal-buildout-grid">
+                <div className="proposal-deposit-panel">
+                  <div className="deposit-prototype" aria-label="押金计算器">
+                    <div>
+                      <span>退租押金计算器</span>
+                      <strong>预计应退押金：{formatMoney(depositResult.estimatedReturn)}</strong>
+                      <p>{depositResult.warning}</p>
+                      <em>预计可扣：{formatMoney(depositResult.totalDeduction)}</em>
+                    </div>
+                    <div className="deposit-grid">
+                      <label>
+                        <span>押金金额</span>
+                        <input
+                          inputMode="decimal"
+                          value={depositInputs.depositAmount}
+                          onChange={(event) => updateDepositInput('depositAmount', event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>未结清费用</span>
+                        <input
+                          inputMode="decimal"
+                          value={depositInputs.unpaidFees}
+                          onChange={(event) => updateDepositInput('unpaidFees', event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>维修扣款</span>
+                        <input
+                          inputMode="decimal"
+                          value={depositInputs.repairCost}
+                          onChange={(event) => updateDepositInput('repairCost', event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>保洁扣款</span>
+                        <input
+                          inputMode="decimal"
+                          value={depositInputs.cleaningCost}
+                          onChange={(event) => updateDepositInput('cleaningCost', event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>是否有票据</span>
+                        <select value={depositInputs.hasVoucher} onChange={(event) => updateDepositInput('hasVoucher', event.target.value)}>
+                          <option value="no">无票据或清单</option>
+                          <option value="yes">有照片、清单和票据</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>是否正常损耗</span>
+                        <select value={depositInputs.normalWear} onChange={(event) => updateDepositInput('normalWear', event.target.value)}>
+                          <option value="yes">是，仅正常使用损耗</option>
+                          <option value="no">否，存在非正常损坏</option>
+                        </select>
+                      </label>
+                    </div>
                   </div>
-                ))}
+                </div>
+                <div className="proposal-next-list" aria-label="继续开发想法">
+                  {proposalNextIdeas.map((item, index) => (
+                    <div className="proposal-next-item" key={item}>
+                      <span>{String(index + 1).padStart(2, '0')}</span>
+                      <p>{item}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <a className="trae-link-button" href="https://www.trae.cn/community" target="_blank" rel="noreferrer">
-                前往 TRAE 社区报名参赛
+              <a className="trae-link-button secondary" href="https://www.trae.cn/community" target="_blank" rel="noreferrer">
+                查看项目参赛入口
                 <ArrowRight size={16} aria-hidden="true" />
               </a>
             </section>
