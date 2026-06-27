@@ -4938,8 +4938,8 @@ function App() {
       </aside>
 
       <div className="announcement-strip">
-        <span>● 100% 本地演示</span>
-        <strong>押金扣款、单方涨租、维修转嫁、换锁收房等风险实时识别</strong>
+        <span>● 演示不断线</span>
+        <strong>模型暂不可用时，会自动切换本地租房规则和知识库兜底</strong>
         <button className="announcement-link" type="button" ref={guideTriggerRef} onClick={openRiskGuide}>
           查看避坑流程
           <ArrowRight size={14} aria-hidden="true" />
@@ -5585,6 +5585,20 @@ function App() {
                 <p>
                   给普通租客的签约、入住、退租和补贴申请助手，把复杂风险翻成能直接行动的下一步。
                 </p>
+                <div className="proposal-action-row">
+                  <button className="primary-button proposal-primary-action" type="button" onClick={() => enterModuleFromCard('review')}>
+                    立即体验租房审查
+                    <ArrowRight size={17} aria-hidden="true" />
+                  </button>
+                  <button className="ghost-button proposal-secondary-action" type="button" onClick={openAiExpert}>
+                    打开系统 AI 助手
+                    <Bot size={16} aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="proposal-reliability-note" aria-label="模型兜底说明">
+                  <ShieldCheck size={16} aria-hidden="true" />
+                  <span>即使线上模型接口暂不可用，合同风险识别仍会使用本地规则和知识库继续演示。</span>
+                </div>
                 <div className="proposal-tag-row" aria-label="项目关键词">
                   <span>社会服务</span>
                   <span>租客权益</span>
@@ -5633,8 +5647,8 @@ function App() {
             <section className="proposal-card proposal-buildout">
               <div className="proposal-section-head compact">
                 <div>
-                  <span>后续方向</span>
-                  <h2>继续开发的想法，先围绕退租押金做深</h2>
+                  <span>延展方向</span>
+                  <h2>核心链路已完成，后续继续围绕退租押金做深</h2>
                 </div>
               </div>
               <div className="proposal-buildout-grid">

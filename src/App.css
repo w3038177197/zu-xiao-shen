@@ -4652,6 +4652,39 @@ textarea:focus {
   line-height: 1.7;
 }
 
+.proposal-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.proposal-primary-action,
+.proposal-secondary-action {
+  min-height: 42px;
+}
+
+.proposal-reliability-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 590px;
+  padding: 10px 11px;
+  border: 1px solid rgba(0,169,85,0.28);
+  color: #214237;
+  background: rgba(8,211,108,0.08);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.55;
+}
+
+.proposal-reliability-note svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--green-dark);
+}
+
 .proposal-tag-row {
   display: flex;
   flex-wrap: wrap;
