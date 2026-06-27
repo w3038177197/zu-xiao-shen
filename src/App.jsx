@@ -29,6 +29,8 @@ import {
 } from 'lucide-react'
 import './App.css'
 
+const LEGAL_DISCLAIMER = '免责声明：本工具生成的合同风险提示、修改建议、沟通话术和证据清单仅供租房风险自查参考，不构成法律意见或维权结果承诺。请结合合同原文、实际证据、当地政策及专业人士意见后再做决定。'
+
 const sampleContract = `房屋租赁合同
 
 出租方（甲方）：恒业房产管理有限公司
@@ -2967,7 +2969,7 @@ function createEvidencePackageText({ formData, evidence, actions, communicationT
     '五、沟通说明',
     communicationText || '尚未生成沟通说明。',
     '',
-    '提示：本摘要用于整理材料和沟通留痕，不构成法律意见。',
+    LEGAL_DISCLAIMER,
   ].join('\n')
 }
 
@@ -3267,6 +3269,8 @@ function createReportText({ summary, findings, revisionItems, contractText, revi
     '',
     '四、当前合同文本',
     contractText || '暂无合同正文。',
+    '',
+    LEGAL_DISCLAIMER,
   ].join('\n')
 }
 
@@ -3309,6 +3313,15 @@ function HighlightedContract({ text, findings }) {
           <span key={`${segment.text}-${index}`}>{segment.text}</span>
         ),
       )}
+    </div>
+  )
+}
+
+function LegalDisclaimer({ compact = false }) {
+  return (
+    <div className={`legal-disclaimer ${compact ? 'compact' : ''}`} role="note">
+      <AlertTriangle size={16} aria-hidden="true" />
+      <span>{LEGAL_DISCLAIMER}</span>
     </div>
   )
 }
@@ -3465,6 +3478,7 @@ function EvidencePack({ onStatus }) {
             <span>自动保存</span>
             <strong>{evidenceAdvice.summary}</strong>
           </div>
+          <LegalDisclaimer compact />
         </div>
         <div className={`evidence-score ${progressTone}`}>
           <strong>{evidenceStats.percent}%</strong>
@@ -3803,6 +3817,8 @@ function CheckinInspection({ onStatus }) {
       defectRows.length
         ? `您好，我今天入住${selectedRoomType}时已按房间拍摄并整理验房记录。记录中标注了${defectRows.slice(0, 3).map((row) => row.defect).join('、')}等疑似入住前已存在情况。麻烦确认这些问题为入住时现状，后续退租时不作为我的责任扣除押金。`
         : `您好，我今天入住${selectedRoomType}时已按房间拍摄了入住验房照片。当前未发现明显瑕疵，我会保留全屋照片和水电燃气表读数，作为退租时双方核对的基准。麻烦确认收到，谢谢。`,
+      '',
+      LEGAL_DISCLAIMER,
     ].join('\n')
 
     setReport(nextReport)
@@ -5128,6 +5144,7 @@ function App() {
               <EyeOff size={17} aria-hidden="true" />
               <span>这里不再让用户选模型或填 Key。AI 会通过后端模型读取当前系统上下文并给出建议。</span>
             </div>
+            <LegalDisclaimer compact />
           </section>
         )}
 
@@ -5368,6 +5385,8 @@ function App() {
                   <ShieldCheck size={34} aria-hidden="true" />
                 </div>
               </div>
+
+              <LegalDisclaimer />
 
               <div className="metric-row">
                 <div>

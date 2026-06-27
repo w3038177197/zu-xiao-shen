@@ -94,7 +94,7 @@ test('system ai assistant reads app context and falls back cleanly', async ({ pa
   })
 
   await page.goto('/')
-  await page.getByRole('button', { name: '系统 AI 助手' }).click()
+  await page.getByRole('button', { name: '系统 AI 助手', exact: true }).click()
 
   await expect(page.getByRole('heading', { name: '租小审系统 AI' })).toBeVisible()
   await expect(page.getByText('后端代理：/api/ai/chat')).toBeVisible()
