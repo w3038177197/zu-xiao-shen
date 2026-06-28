@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, BadgeCheck, Check, ClipboardCheck, Download, FileDiff, MessageSquareText, Sparkles } from 'lucide-react'
 import { STORAGE_KEYS } from '../constants/appConfig.js'
-import { copyTextToClipboard, downloadTextDocx } from '../utils/docxExport.js'
+import { copyTextToClipboard } from '../utils/clipboard.js'
 import { LegalDisclaimer } from './ReviewAtoms.jsx'
 import {
   buildEvidenceCommunication,
@@ -72,6 +72,7 @@ export default function EvidencePack({ onStatus }) {
     onStatus('正在生成 Word 退租证据包')
 
     try {
+      const { downloadTextDocx } = await import('../utils/docxExport.js')
       await downloadTextDocx('租小审-退租证据包', evidencePackageText)
       onStatus('退租证据包已生成 DOCX，可下载 Word')
     } catch (error) {
@@ -325,4 +326,3 @@ export default function EvidencePack({ onStatus }) {
     </div>
   )
 }
-

@@ -10,13 +10,7 @@ import { STORAGE_KEYS, workflowLabels } from './constants/appConfig.js'
 import { OCR_REVIEW_WARNING_CONFIDENCE } from './constants/checkinConfig.js'
 import { defaultDepositInputs, providerPresets } from './constants/aiConfig.js'
 import { knowledgeBaseItems } from './data/knowledgeBase.js'
-import { extractContractTextFromFile } from './utils/fileImport.js'
 import { calculateDepositReturn } from './utils/money.js'
-import {
-  buildContractDocxBlob,
-  downloadBlob,
-  downloadTextDocx,
-} from './utils/docxExport.js'
 import AiAssistantPanel from './components/AiAssistantPanel.jsx'
 import AnnouncementStrip from './components/AnnouncementStrip.jsx'
 import AppSidebar from './components/AppSidebar.jsx'
@@ -585,6 +579,7 @@ function App() {
     setStatusMessage(`正在解析合同文件：${file.name}`)
 
     try {
+      const { extractContractTextFromFile } = await import('./utils/fileImport.js')
       const result = await extractContractTextFromFile(file)
       const importedText = String(result.text || '').trim()
 
@@ -678,6 +673,7 @@ function App() {
 
     try {
       const report = createReportText({ summary, findings, revisionItems, contractText: reviewText, reviewProfile: effectiveReviewProfile })
+      const { downloadTextDocx } = await import('./utils/docxExport.js')
       await downloadTextDocx('租小审-解读报告', report)
       saveHistorySnapshot()
       setStatusMessage('租房解读报告已生成 DOCX，可下载 Word')
@@ -695,6 +691,7 @@ function App() {
     setStatusMessage('正在生成 DOCX 优化合同')
 
     try {
+      const { buildContractDocxBlob, downloadBlob } = await import('./utils/docxExport.js')
       const blob = await buildContractDocxBlob(revisedContractDraft)
       downloadBlob(blob, `租小审-优化合同-${new Date().toISOString().slice(0, 10)}.docx`)
       setStatusMessage('优化版合同已生成 DOCX，可下载 Word')

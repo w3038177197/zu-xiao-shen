@@ -5,12 +5,12 @@ import { LEGAL_DISCLAIMER } from '../constants/legal.js'
 import {
   CHECKIN_MAX_PHOTO_BYTES,
   CHECKIN_MAX_PHOTOS_PER_ITEM,
+  CHECKIN_PHOTO_MAX_EDGE,
+  CHECKIN_PHOTO_QUALITY,
   checkinItems,
   checkinRoomTypes,
   checkinRooms,
 } from '../constants/checkinConfig.js'
-import { compressCheckinPhoto } from '../utils/fileImport.js'
-import { downloadTextDocx } from '../utils/docxExport.js'
 import {
   createDefaultCheckinState,
   getCheckinDefectRows,
@@ -73,11 +73,15 @@ export default function CheckinInspection({ onStatus }) {
     }
 
     try {
+      const { compressImageToDataUrl } = await import('../utils/imageTools.js')
       const photos = await Promise.all(
         filesToRead.map(async (file) => ({
           id: `${Date.now()}-${file.name}-${Math.random().toString(16).slice(2)}`,
           name: file.name,
-          url: await compressCheckinPhoto(file),
+          url: await compressImageToDataUrl(file, {
+            maxEdge: CHECKIN_PHOTO_MAX_EDGE,
+            quality: CHECKIN_PHOTO_QUALITY,
+          }),
           createdAt: new Date().toLocaleString(),
         })),
       )
@@ -157,6 +161,7 @@ export default function CheckinInspection({ onStatus }) {
     onStatus('正在生成 Word 入住验房报告')
 
     try {
+      const { downloadTextDocx } = await import('../utils/docxExport.js')
       await downloadTextDocx('租小审-入住验房报告', content)
       onStatus('入住验房报告已生成 DOCX，可下载 Word')
     } catch (error) {
@@ -350,4 +355,3 @@ export default function CheckinInspection({ onStatus }) {
     </div>
   )
 }
-
