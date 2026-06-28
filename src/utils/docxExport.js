@@ -109,6 +109,10 @@ export function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+function createDatedDocxFilename(title) {
+  return `${title}-${new Date().toISOString().slice(0, 10)}.docx`
+}
+
 export async function buildTextReportDocxBlob(reportText, title = '租小审报告') {
   const {
     AlignmentType,
@@ -207,4 +211,9 @@ export async function buildTextReportDocxBlob(reportText, title = '租小审报�
   })
 
   return Packer.toBlob(document)
+}
+
+export async function downloadTextDocx(title, reportText) {
+  const blob = await buildTextReportDocxBlob(reportText, title)
+  downloadBlob(blob, createDatedDocxFilename(title))
 }

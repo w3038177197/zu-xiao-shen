@@ -48,9 +48,9 @@ import { calculateDepositReturn, formatMoney } from './utils/money.js'
 import { compactText } from './utils/text.js'
 import {
   buildContractDocxBlob,
-  buildTextReportDocxBlob,
   copyTextToClipboard,
   downloadBlob,
+  downloadTextDocx,
 } from './utils/docxExport.js'
 import { FindingItem, HighlightedContract, LegalDisclaimer } from './components/ReviewAtoms.jsx'
 import {
@@ -1768,8 +1768,7 @@ function EvidencePack({ onStatus }) {
     onStatus('正在生成 Word 退租证据包')
 
     try {
-      const blob = await buildTextReportDocxBlob(evidencePackageText, '租小审-退租证据包')
-      downloadBlob(blob, `租小审-退租证据包-${new Date().toISOString().slice(0, 10)}.docx`)
+      await downloadTextDocx('租小审-退租证据包', evidencePackageText)
       onStatus('退租证据包已生成 DOCX，可下载 Word')
     } catch (error) {
       onStatus(`退租证据包 DOCX 生成失败：${error.message}`)
@@ -2170,8 +2169,7 @@ function CheckinInspection({ onStatus }) {
     onStatus('正在生成 Word 入住验房报告')
 
     try {
-      const blob = await buildTextReportDocxBlob(content, '租小审-入住验房报告')
-      downloadBlob(blob, `租小审-入住验房报告-${new Date().toISOString().slice(0, 10)}.docx`)
+      await downloadTextDocx('租小审-入住验房报告', content)
       onStatus('入住验房报告已生成 DOCX，可下载 Word')
     } catch (error) {
       onStatus(`入住验房报告 DOCX 生成失败：${error.message}`)
@@ -3101,8 +3099,7 @@ function App() {
 
     try {
       const report = createReportText({ summary, findings, revisionItems, contractText: reviewText, reviewProfile: effectiveReviewProfile })
-      const blob = await buildTextReportDocxBlob(report, '租小审-解读报告')
-      downloadBlob(blob, `租小审-解读报告-${new Date().toISOString().slice(0, 10)}.docx`)
+      await downloadTextDocx('租小审-解读报告', report)
       saveHistorySnapshot()
       setStatusMessage('租房解读报告已生成 DOCX，可下载 Word')
     } catch (error) {
