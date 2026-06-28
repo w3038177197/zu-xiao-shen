@@ -258,8 +258,10 @@ button {
 
 .guide-modal {
   width: min(900px, 100%);
-  max-height: min(720px, calc(100vh - 56px));
-  overflow: auto;
+  max-height: min(780px, calc(100dvh - 40px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
   border: 1px solid var(--line-strong);
   color: var(--ink);
   background:
@@ -274,14 +276,22 @@ button {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 20px;
   align-items: start;
-  padding: 28px 30px 22px;
+  padding: 24px 30px 18px;
   border-bottom: 1px solid var(--line);
+}
+
+.guide-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-bottom: 22px;
 }
 
 .guide-header h2 {
   margin: 6px 0 8px;
   font-family: "Georgia", "Times New Roman", serif;
-  font-size: clamp(30px, 4vw, 48px);
+  font-size: clamp(30px, 3.6vw, 46px);
   font-weight: 400;
   line-height: 0.96;
   letter-spacing: -0.02em;
@@ -315,10 +325,10 @@ button {
 
 .guide-note {
   display: grid;
-  grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.3fr);
-  gap: 26px;
+  grid-template-columns: minmax(180px, 0.58fr) minmax(0, 1.42fr);
+  gap: 22px;
   align-items: start;
-  padding: 22px 30px;
+  padding: 18px 30px;
   border-bottom: 1px solid var(--line);
   background: rgba(255, 253, 247, 0.56);
 }
@@ -338,27 +348,32 @@ button {
   letter-spacing: -0.01em;
 }
 
+.guide-note-main {
+  display: grid;
+  gap: 10px;
+}
+
 .guide-note p {
   max-width: 660px;
   margin: 0;
   color: var(--muted-ink);
-  font-size: 14px;
-  line-height: 1.85;
+  font-size: 13px;
+  line-height: 1.72;
 }
 
 .guide-step-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 24px 30px;
+  gap: 10px;
+  padding: 16px 30px 0;
 }
 
 .guide-step {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 14px;
-  padding: 16px;
-  min-height: 172px;
+  padding: 13px;
+  min-height: 148px;
   border: 1px solid var(--line);
   background: rgba(255, 253, 247, 0.72);
 }
@@ -400,13 +415,13 @@ button {
 .guide-step p {
   margin: 0;
   color: var(--muted-ink);
-  font-size: 13px;
-  line-height: 1.65;
+  font-size: 12px;
+  line-height: 1.58;
 }
 
 .guide-step strong {
   display: block;
-  margin-top: 10px;
+  margin-top: 8px;
   color: var(--ink);
   font-size: 12px;
   line-height: 1.5;
@@ -449,6 +464,68 @@ button {
 .guide-close:focus-visible {
   outline: 2px solid var(--line-strong);
   outline-offset: 2px;
+}
+
+.guide-legal-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  max-width: 660px;
+  padding: 10px;
+  border: 1px solid rgba(184, 118, 33, 0.28);
+  background: rgba(255, 250, 232, 0.72);
+}
+
+.guide-legal-copy {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.guide-legal-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(184, 118, 33, 0.36);
+  color: var(--warning);
+  background: rgba(255, 246, 214, 0.8);
+}
+
+.guide-legal-copy strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #5d4718;
+  font-size: 12px;
+}
+
+.guide-legal-copy p {
+  margin: 0;
+  color: #6b521d;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.guide-legal-points {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.guide-legal-points > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  color: var(--muted-ink);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.guide-legal-points svg {
+  margin-top: 1px;
+  color: var(--green-dark);
 }
 
 /* ============================================
@@ -1124,29 +1201,6 @@ button {
   flex: 0 0 auto;
   margin-top: 2px;
   color: var(--green-dark);
-}
-
-.legal-disclaimer {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  margin-top: 14px;
-  padding: 11px 12px;
-  border: 1px solid rgba(184, 118, 33, 0.36);
-  color: #6b521d;
-  background: rgba(255, 246, 214, 0.64);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.legal-disclaimer.compact {
-  margin-top: 10px;
-}
-
-.legal-disclaimer svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: var(--warning);
 }
 
 .config-actions {
@@ -5182,19 +5236,30 @@ textarea:focus {
   }
 
   .guide-modal {
-    max-height: calc(100vh - 28px);
+    max-height: calc(100dvh - 28px);
     box-shadow: 5px 5px 0 rgba(8, 211, 108, 0.92);
   }
 
   .guide-header,
   .guide-note,
-  .guide-step-grid {
+  .guide-step-grid,
+  .guide-legal-panel {
     padding-left: 16px;
     padding-right: 16px;
   }
 
   .guide-header {
     gap: 14px;
+    padding-top: 18px;
+    padding-bottom: 16px;
+  }
+
+  .guide-header h2 {
+    font-size: clamp(30px, 12vw, 44px);
+  }
+
+  .guide-body {
+    padding-bottom: 16px;
   }
 
   .guide-note {
@@ -5219,6 +5284,15 @@ textarea:focus {
   .guide-step-action {
     width: 100%;
     margin-top: 16px;
+  }
+
+  .guide-legal-panel {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .guide-legal-points {
+    display: none;
   }
 
   .workspace {

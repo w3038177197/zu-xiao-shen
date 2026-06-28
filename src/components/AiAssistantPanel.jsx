@@ -3,7 +3,6 @@ import { workflowLabels } from '../constants/appConfig.js'
 import { aiResponseSkills } from '../data/knowledgeBase.js'
 import { getPlatformApiEndpoint } from '../features/aiAssistant.js'
 import AiMessageContent from './AiMessageContent.jsx'
-import { LegalDisclaimer } from './ReviewAtoms.jsx'
 
 export default function AiAssistantPanel({
   activeTab,
@@ -109,7 +108,6 @@ export default function AiAssistantPanel({
         <EyeOff size={17} aria-hidden="true" />
         <span>这里不再让用户选模型或填 Key。AI 会通过后端模型读取当前系统上下文并给出建议。</span>
       </div>
-      <LegalDisclaimer compact />
     </section>
   )
 }

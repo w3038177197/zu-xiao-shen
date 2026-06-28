@@ -17,7 +17,7 @@ import AppSidebar from './components/AppSidebar.jsx'
 import AppTopbar from './components/AppTopbar.jsx'
 import CheckinInspection from './components/CheckinInspection.jsx'
 import EvidencePack from './components/EvidencePack.jsx'
-import { FindingItem, HighlightedContract, LegalDisclaimer } from './components/ReviewAtoms.jsx'
+import { FindingItem, HighlightedContract } from './components/ReviewAtoms.jsx'
 import ProposalHome from './components/ProposalHome.jsx'
 import ReviewInputPanel from './components/ReviewInputPanel.jsx'
 import RiskGuideModal from './components/RiskGuideModal.jsx'
@@ -885,8 +885,6 @@ function App() {
                   <ShieldCheck size={34} aria-hidden="true" />
                 </div>
               </div>
-
-              <LegalDisclaimer />
 
               <div className="metric-row">
                 <div>

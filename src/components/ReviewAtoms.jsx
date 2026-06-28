@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
-import { AlertTriangle, Check, Sparkles } from 'lucide-react'
-import { LEGAL_DISCLAIMER } from '../constants/legal.js'
+import { Check, Sparkles } from 'lucide-react'
 
 export function HighlightedContract({ text, findings }) {
   const highlighted = useMemo(() => {
@@ -41,15 +40,6 @@ export function HighlightedContract({ text, findings }) {
           <span key={`${segment.text}-${index}`}>{segment.text}</span>
         ),
       )}
-    </div>
-  )
-}
-
-export function LegalDisclaimer({ compact = false }) {
-  return (
-    <div className={`legal-disclaimer ${compact ? 'compact' : ''}`} role="note">
-      <AlertTriangle size={16} aria-hidden="true" />
-      <span>{LEGAL_DISCLAIMER}</span>
     </div>
   )
 }

@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, BadgeCheck, Check, ClipboardCheck, Download, FileDiff, MessageSquareText, Sparkles } from 'lucide-react'
 import { STORAGE_KEYS } from '../constants/appConfig.js'
 import { copyTextToClipboard } from '../utils/clipboard.js'
-import { LegalDisclaimer } from './ReviewAtoms.jsx'
 import {
   buildEvidenceCommunication,
   createDefaultEvidencePackState,
@@ -119,7 +118,6 @@ export default function EvidencePack({ onStatus }) {
             <span>自动保存</span>
             <strong>{evidenceAdvice.summary}</strong>
           </div>
-          <LegalDisclaimer compact />
         </div>
         <div className={`evidence-score ${progressTone}`}>
           <strong>{evidenceStats.percent}%</strong>
