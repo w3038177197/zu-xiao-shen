@@ -348,11 +348,6 @@ button {
   letter-spacing: -0.01em;
 }
 
-.guide-note-main {
-  display: grid;
-  gap: 10px;
-}
-
 .guide-note p {
   max-width: 660px;
   margin: 0;
@@ -466,66 +461,22 @@ button {
   outline-offset: 2px;
 }
 
-.guide-legal-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+.guide-legal-line {
+  display: flex;
+  align-items: flex-start;
   gap: 8px;
-  max-width: 660px;
-  padding: 10px;
-  border: 1px solid rgba(184, 118, 33, 0.28);
-  background: rgba(255, 250, 232, 0.72);
-}
-
-.guide-legal-copy {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-}
-
-.guide-legal-icon {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(184, 118, 33, 0.36);
-  color: var(--warning);
-  background: rgba(255, 246, 214, 0.8);
-}
-
-.guide-legal-copy strong {
-  display: block;
-  margin-bottom: 3px;
-  color: #5d4718;
-  font-size: 12px;
-}
-
-.guide-legal-copy p {
-  margin: 0;
-  color: #6b521d;
-  font-size: 11px;
-  line-height: 1.55;
-}
-
-.guide-legal-points {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.guide-legal-points > div {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
+  margin: 10px 30px 0;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
   color: var(--muted-ink);
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.6;
 }
 
-.guide-legal-points svg {
-  margin-top: 1px;
-  color: var(--green-dark);
+.guide-legal-line svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--warning);
 }
 
 /* ============================================
@@ -5242,8 +5193,7 @@ textarea:focus {
 
   .guide-header,
   .guide-note,
-  .guide-step-grid,
-  .guide-legal-panel {
+  .guide-step-grid {
     padding-left: 16px;
     padding-right: 16px;
   }
@@ -5286,13 +5236,9 @@ textarea:focus {
     margin-top: 16px;
   }
 
-  .guide-legal-panel {
-    grid-template-columns: 1fr;
-    padding: 10px;
-  }
-
-  .guide-legal-points {
-    display: none;
+  .guide-legal-line {
+    margin-right: 16px;
+    margin-left: 16px;
   }
 
   .workspace {

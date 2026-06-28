@@ -1,4 +1,4 @@
-import { AlertTriangle, ClipboardCheck, Scale, X } from 'lucide-react'
+import { AlertTriangle, X } from 'lucide-react'
 import { LEGAL_DISCLAIMER } from '../constants/legal.js'
 import { proposalValueCards, riskGuideSteps } from '../data/proposalContent.jsx'
 
@@ -35,32 +35,9 @@ export default function RiskGuideModal({ closeRef, onClose, onJump }) {
               <span>给正在使用租小审的你</span>
               <h3>先把眼前这一步看清楚</h3>
             </div>
-            <div className="guide-note-main">
-              <p>
-                不用一次弄懂所有租房规则。你只需要按当前阶段放入必要材料，系统会把合同风险、验房缺口、押金争议和补贴线索拆成能执行的下一步。重要决定仍以合同原文、书面沟通和当地政策为准，租小审帮你先看清、先留证、先沟通。
-              </p>
-              <div className="guide-legal-panel" role="note" aria-label="租小审免责声明">
-                <div className="guide-legal-copy">
-                  <span className="guide-legal-icon">
-                    <AlertTriangle size={16} aria-hidden="true" />
-                  </span>
-                  <div>
-                    <strong>使用边界</strong>
-                    <p>{LEGAL_DISCLAIMER}</p>
-                  </div>
-                </div>
-                <div className="guide-legal-points" aria-label="租小审使用说明">
-                  <div>
-                    <ClipboardCheck size={15} aria-hidden="true" />
-                    <span>适合快速发现材料遗漏和租房风险。</span>
-                  </div>
-                  <div>
-                    <Scale size={15} aria-hidden="true" />
-                    <span>不能替代律师意见、政策确认或争议结果判断。</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <p>
+              不用一次弄懂所有租房规则。你只需要按当前阶段放入必要材料，系统会把合同风险、验房缺口、押金争议和补贴线索拆成能执行的下一步。重要决定仍以合同原文、书面沟通和当地政策为准，租小审帮你先看清、先留证、先沟通。
+            </p>
           </div>
 
           <div className="guide-step-grid">
@@ -89,6 +66,11 @@ export default function RiskGuideModal({ closeRef, onClose, onJump }) {
               )
             })}
           </div>
+
+          <p className="guide-legal-line" role="note" aria-label="租小审免责声明">
+            <AlertTriangle size={14} aria-hidden="true" />
+            <span>{LEGAL_DISCLAIMER}</span>
+          </p>
         </div>
       </section>
     </div>
