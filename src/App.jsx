@@ -1,43 +1,32 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowRight,
   BadgeCheck,
-  Bot,
-  CircleDollarSign,
-  ClipboardCheck,
   Download,
-  EyeOff,
-  FileText,
-  House,
-  PlugZap,
-  RefreshCw,
-  Scale,
-  Search,
-  Settings,
   ShieldCheck,
-  Sparkles,
-  Send,
-  UploadCloud,
-  X,
 } from 'lucide-react'
 import './App.css'
 import { demoContracts, sampleContract } from './data/demoContracts.js'
 import { STORAGE_KEYS, workflowLabels } from './constants/appConfig.js'
 import { OCR_REVIEW_WARNING_CONFIDENCE } from './constants/checkinConfig.js'
 import { defaultDepositInputs, providerPresets } from './constants/aiConfig.js'
-import { contractTypeOptions, partyRoleOptions, reviewDepthOptions } from './constants/reviewOptions.js'
-import { aiResponseSkills, knowledgeBaseItems } from './data/knowledgeBase.js'
+import { knowledgeBaseItems } from './data/knowledgeBase.js'
 import { extractContractTextFromFile } from './utils/fileImport.js'
-import { calculateDepositReturn, formatMoney } from './utils/money.js'
+import { calculateDepositReturn } from './utils/money.js'
 import {
   buildContractDocxBlob,
   downloadBlob,
   downloadTextDocx,
 } from './utils/docxExport.js'
-import AiMessageContent from './components/AiMessageContent.jsx'
+import AiAssistantPanel from './components/AiAssistantPanel.jsx'
+import AnnouncementStrip from './components/AnnouncementStrip.jsx'
+import AppSidebar from './components/AppSidebar.jsx'
+import AppTopbar from './components/AppTopbar.jsx'
 import CheckinInspection from './components/CheckinInspection.jsx'
 import EvidencePack from './components/EvidencePack.jsx'
 import { FindingItem, HighlightedContract, LegalDisclaimer } from './components/ReviewAtoms.jsx'
+import ProposalHome from './components/ProposalHome.jsx'
+import ReviewInputPanel from './components/ReviewInputPanel.jsx'
+import RiskGuideModal from './components/RiskGuideModal.jsx'
 import SubsidyMatcher from './components/SubsidyMatcher.jsx'
 import {
   buildAiQualityReport,
@@ -65,84 +54,12 @@ import {
   cleanContractTextForReview,
   createReportText,
   createRevisedContractDraft,
-  getContractTypeLabel,
   getDimensionScores,
   getRiskSummary,
   mergeFindings,
   mergeRevisionItems,
   resolveReviewProfile,
 } from './features/contractReview.js'
-
-// Legacy service-contract rules are retained only as a fallback when users manually
-// switch the contract type away from the rental review workflow.
-const proposalValueCards = [
-  {
-    icon: CircleDollarSign,
-    title: '补贴匹配',
-    label: '01',
-    tab: 'subsidy',
-    text: '按城市和个人情况筛官方补贴线索，先判断有没有资格。',
-  },
-  {
-    icon: FileText,
-    title: '租房审查',
-    label: '02',
-    tab: 'review',
-    text: '标出押金、涨租、维修、违约金等关键风险。',
-  },
-  {
-    icon: BadgeCheck,
-    title: '入住验房',
-    label: '03',
-    tab: 'checkin',
-    text: '记录房屋初始状态，避免旧问题变成租客责任。',
-  },
-  {
-    icon: ClipboardCheck,
-    title: '退租证据包',
-    label: '04',
-    tab: 'evidence',
-    text: '整理证据包和话术，让押金争议有材料可讲。',
-  },
-]
-
-const riskGuideSteps = [
-  {
-    icon: Search,
-    step: '01',
-    title: '选择入口',
-    text: '从首页先判断问题类型：补贴、合同、交房、退租分别进入对应模块。',
-    output: '定位当前要处理的租房风险',
-  },
-  {
-    icon: FileText,
-    step: '02',
-    title: '填写材料',
-    text: '补充城市和个人情况，粘贴合同，记录房屋状态，整理退租费用与证据。',
-    output: '形成可计算、可审查的基础材料',
-  },
-  {
-    icon: BadgeCheck,
-    step: '03',
-    title: '查看结果',
-    text: '系统会给出政策线索、风险条款、验房缺口和押金争议提醒。',
-    output: '知道哪些内容需要补、改、留证',
-  },
-  {
-    icon: Download,
-    step: '04',
-    title: '导出沟通',
-    text: '把结论、证据清单和沟通话术整理出来，用于签约前确认或退租协商。',
-    output: '拿到可以直接使用的行动材料',
-  },
-]
-
-const proposalNextIdeas = [
-  '合同拍照识别：手机拍合同，自动提取条款并进入审查。',
-  '城市政策更新：补贴入口和申请条件定期维护，减少过期信息。',
-  '押金争议导出：把验房、票据、聊天记录整理成 PDF 或 Word。',
-  '租金行情参考：用周边租金帮助用户判断续租涨价是否合理。',
-]
 
 function App() {
   const [contractText, setContractText] = useState(sampleContract)
@@ -863,187 +780,22 @@ function App() {
     )
   }
 
-  const topbarCopy = {
-    review: {
-      kicker: 'Rental Contract Copilot',
-      title: '租房签字前，先让 AI 帮你看一遍',
-      subtitle: '聚焦押金、涨租、维修、入户、管辖和违约金，把租房合同里的坑讲成大白话。',
-      stage: '合同审查',
-      state: `${findings.length} 个风险点`,
-      action: revisionItems.length ? `${revisionItems.length} 条已采纳建议` : '可生成审查报告',
-    },
-    evidence: {
-      kicker: 'Move-out Evidence Kit',
-      title: '退租前，把证据包整理好',
-      subtitle: '把合同、照片、沟通记录和费用凭证整理成可导出的证据摘要，减少押金争议中的材料遗漏。',
-      stage: '退租证据包',
-      state: '证据材料整理',
-      action: '合同、照片和沟通记录统一汇总',
-    },
-    checkin: {
-      kicker: 'Check-in Inspection',
-      title: '入住当天先验房，退租时才有底稿',
-      subtitle: '按房间记录墙面、门窗、家具家电和水电燃气状态，生成可发给房东确认的验房报告。',
-      stage: '入住验房',
-      state: '入住状态基准',
-      action: '生成可确认的验房记录',
-    },
-    subsidy: {
-      kicker: 'Rental Subsidy',
-      title: '毕业生租房补贴，先把线索筛出来',
-      subtitle: '按城市和个人情况匹配补贴线索，只展示当前城市，避免不同地区政策混在一起。',
-      stage: '补贴匹配',
-      state: '城市政策线索',
-      action: '只展示当前城市官方入口',
-    },
-    proposal: {
-      kicker: '首页',
-      title: '租小审使用总览',
-      subtitle: '先选择当前租房阶段，再进入补贴、审查、验房或退租证据处理。',
-      stage: '使用总览',
-      state: '四个模块入口',
-      action: '串联审查、验房、证据和补贴',
-    },
-  }[activeTab]
-
   return (
     <main className="app-shell">
-      <aside className="sidebar" aria-label="租小审导航">
-        <div className="brand">
-          <div className="brand-mark">
-            <ShieldCheck size={26} aria-hidden="true" />
-          </div>
-          <div className="brand-copy">
-            <strong>租小审</strong>
-            <span>租房全流程风控助手</span>
-          </div>
-        </div>
-
-        <nav className="nav-list">
-          <button className={activeTab === 'proposal' ? 'active' : ''} type="button" onClick={() => switchModuleFromNav('proposal')}>
-            <House size={18} aria-hidden="true" />
-            首页
-          </button>
-          <button className={activeTab === 'subsidy' ? 'active' : ''} type="button" onClick={() => switchModuleFromNav('subsidy')}>
-            <CircleDollarSign size={18} aria-hidden="true" />
-            补贴匹配
-          </button>
-          <button className={activeTab === 'review' ? 'active' : ''} type="button" onClick={() => switchModuleFromNav('review')}>
-            <FileText size={18} aria-hidden="true" />
-            租房审查
-          </button>
-          <button className={activeTab === 'checkin' ? 'active' : ''} type="button" onClick={() => switchModuleFromNav('checkin')}>
-            <BadgeCheck size={18} aria-hidden="true" />
-            入住验房
-          </button>
-          <button className={activeTab === 'evidence' ? 'active' : ''} type="button" onClick={() => switchModuleFromNav('evidence')}>
-            <ClipboardCheck size={18} aria-hidden="true" />
-            退租证据包
-          </button>
-        </nav>
-
-        <div className="sidebar-panel">
-          <span className="panel-label">定位</span>
-          <h2>社会服务赛道</h2>
-          <p>帮租客在签字前看懂押金、涨租、维修和违约条款里的坑。</p>
-        </div>
-      </aside>
-
-      <div className="announcement-strip">
-        <span>● 演示不断线</span>
-        <strong>模型暂不可用时，会自动切换本地租房规则和知识库兜底</strong>
-        <button className="announcement-link" type="button" ref={guideTriggerRef} onClick={openRiskGuide}>
-          查看避坑流程
-          <ArrowRight size={14} aria-hidden="true" />
-        </button>
-      </div>
+      <AppSidebar activeTab={activeTab} onSwitchModule={switchModuleFromNav} />
+      <AnnouncementStrip guideTriggerRef={guideTriggerRef} onOpenGuide={openRiskGuide} />
 
       {showGuide && (
-        <div className="guide-backdrop" role="presentation" onMouseDown={() => setShowGuide(false)}>
-          <section
-            className="guide-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="risk-guide-title"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="guide-header">
-              <div>
-                <p className="runtime-kicker">Flow Tutorial</p>
-                <h2 id="risk-guide-title">租小审避坑流程</h2>
-                <p>按四步完成一次租房风险检查，从找补贴到退租留证都能顺着走。</p>
-              </div>
-              <button
-                className="guide-close"
-                type="button"
-                aria-label="关闭避坑流程教程"
-                ref={guideCloseRef}
-                onClick={() => setShowGuide(false)}
-              >
-                <X size={18} aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="guide-note" aria-label="给租小审用户的话">
-              <div>
-                <span>给正在使用租小审的你</span>
-                <h3>先把眼前这一步看清楚</h3>
-              </div>
-              <p>
-                不用一次弄懂所有租房规则。你只需要按当前阶段放入必要材料，系统会把合同风险、验房缺口、押金争议和补贴线索拆成能执行的下一步。重要决定仍以合同原文、书面沟通和当地政策为准，租小审帮你先看清、先留证、先沟通。
-              </p>
-            </div>
-
-            <div className="guide-step-grid">
-              {riskGuideSteps.map((item, index) => {
-                const StepIcon = item.icon
-                const entry = proposalValueCards[index]
-                const EntryIcon = entry.icon
-                return (
-                  <article className="guide-step" key={item.title}>
-                    <div className="guide-step-icon">
-                      <StepIcon size={19} aria-hidden="true" />
-                    </div>
-                    <div className="guide-step-body">
-                      <div>
-                        <span>{item.step}</span>
-                        <h3>{item.title}</h3>
-                        <p>{item.text}</p>
-                        <strong>{item.output}</strong>
-                      </div>
-                      <button className="guide-step-action" type="button" onClick={() => jumpFromGuide(entry.tab)}>
-                        <EntryIcon size={16} aria-hidden="true" />
-                        <span>{entry.title}</span>
-                      </button>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
-          </section>
-        </div>
+        <RiskGuideModal closeRef={guideCloseRef} onClose={() => setShowGuide(false)} onJump={jumpFromGuide} />
       )}
 
       <section className={`workspace ${moduleEntering ? 'module-entering' : ''}`} ref={workspaceRef}>
-        <header className="topbar">
-          <div className="hero-copy">
-            <p className="section-kicker">{topbarCopy.kicker}</p>
-            <h1>{topbarCopy.title}</h1>
-            <p className="hero-subtitle">{topbarCopy.subtitle}</p>
-          </div>
-          <div className="topbar-actions">
-            <button className="runtime-status-button" type="button" onClick={openAiExpert}>
-              <span className="runtime-dot" aria-hidden="true" />
-              <span>系统 AI 助手</span>
-              <Settings size={15} aria-hidden="true" />
-            </button>
-            <div className="module-status-card" aria-label="当前模块状态">
-              <span>{topbarCopy.stage}</span>
-              <strong>{topbarCopy.state}</strong>
-              <p>{topbarCopy.action}</p>
-            </div>
-          </div>
-        </header>
+        <AppTopbar
+          activeTab={activeTab}
+          findingsCount={findings.length}
+          revisionItemsCount={revisionItems.length}
+          onOpenAiExpert={openAiExpert}
+        />
 
         {statusMessage && <div className="status-toast">{statusMessage}</div>}
 
@@ -1053,95 +805,22 @@ function App() {
         </div>
 
         {showAiConfig && (
-          <section className="ai-chat-panel runtime-api-panel" aria-label="租房专家 AI 对话">
-            <div className="ai-chat-header">
-              <div className="ai-config-title">
-                <span className="ai-config-icon">
-                  <Bot size={20} aria-hidden="true" />
-                </span>
-                <div>
-                  <p className="runtime-kicker">System Copilot</p>
-                  <h2>租小审系统 AI</h2>
-                  <p>已接入合同审查、退租证据包、入住验房、押金估算和补贴匹配，会自动读取当前系统上下文。</p>
-                </div>
-              </div>
-              <div className="ai-config-status">
-                <span className="model-status">
-                  <PlugZap size={16} aria-hidden="true" />
-                  {modelConnectionLabel}
-                </span>
-                <button className="ghost-button compact-button" type="button" onClick={closeAiExpert}>
-                  关闭
-                </button>
-              </div>
-            </div>
-
-            <div className="ai-chat-meta">
-              <span>后端代理：{getPlatformApiEndpoint()}</span>
-              <span>当前模块：{workflowLabels[activeTab] || activeTab}</span>
-              <span>身份：租小审系统助手</span>
-              <span>回复技能：{aiResponseSkills.length} 个</span>
-              <span>知识库命中：{aiKnowledgeHits.length ? `${aiKnowledgeHits.length} 条` : '待检索'}</span>
-              <span>{aiFeedbackText}</span>
-              <span>默认模型：{aiConfig.model}</span>
-            </div>
-
-            <div className="ai-chat-thread" aria-label="AI 对话记录">
-              {aiMessages.map((message) => (
-                <article key={message.id} className={`ai-chat-bubble ${message.role === 'user' ? 'user' : 'assistant'} ${message.pending ? 'pending' : ''}`}>
-                  <span>{message.role === 'user' ? '我' : '租房专家 AI'}</span>
-                  <AiMessageContent content={message.content} />
-                  {message.role === 'assistant' && !message.pending && message.id !== 'assistant-welcome' ? (
-                    <div className="ai-feedback" aria-label="AI 回复反馈">
-                      <button
-                        className={aiFeedback.byMessage[message.id] === 'helpful' ? 'active' : ''}
-                        type="button"
-                        onClick={() => rateAiMessage(message.id, 'helpful')}
-                      >
-                        有帮助
-                      </button>
-                      <button
-                        className={aiFeedback.byMessage[message.id] === 'needsWork' ? 'active' : ''}
-                        type="button"
-                        onClick={() => rateAiMessage(message.id, 'needsWork')}
-                      >
-                        需改进
-                      </button>
-                    </div>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-
-            <div className="ai-chat-composer">
-              <textarea
-                value={aiDraft}
-                onChange={(event) => setAiDraft(event.target.value)}
-                placeholder="直接问系统 AI，比如：结合当前页面，我下一步应该先处理什么？"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    sendAiDraft()
-                  }
-                }}
-              />
-              <div className="config-actions ai-chat-actions">
-                <button className="ghost-button" type="button" onClick={resetAiChat} disabled={aiSending}>
-                  清空对话
-                </button>
-                <button className="primary-button" type="button" onClick={sendAiDraft} disabled={aiSending || !aiDraft.trim()}>
-                  <Send size={17} aria-hidden="true" />
-                  {aiSending ? '发送中...' : '发送'}
-                </button>
-              </div>
-            </div>
-
-            <div className="security-callout">
-              <EyeOff size={17} aria-hidden="true" />
-              <span>这里不再让用户选模型或填 Key。AI 会通过后端模型读取当前系统上下文并给出建议。</span>
-            </div>
-            <LegalDisclaimer compact />
-          </section>
+          <AiAssistantPanel
+            activeTab={activeTab}
+            aiConfig={aiConfig}
+            aiDraft={aiDraft}
+            aiFeedback={aiFeedback}
+            aiFeedbackText={aiFeedbackText}
+            aiKnowledgeHits={aiKnowledgeHits}
+            aiMessages={aiMessages}
+            aiSending={aiSending}
+            modelConnectionLabel={modelConnectionLabel}
+            onClose={closeAiExpert}
+            onDraftChange={setAiDraft}
+            onRateMessage={rateAiMessage}
+            onResetChat={resetAiChat}
+            onSendDraft={sendAiDraft}
+          />
         )}
 
         {activeTab === 'evidence' ? (
@@ -1152,201 +831,29 @@ function App() {
           <SubsidyMatcher onStatus={setStatusMessage} />
         ) : activeTab === 'review' ? (
           <div className="review-layout">
-            <section className="work-panel input-panel">
-              <div className="panel-head">
-                <div>
-                  <h2>租房合同输入</h2>
-                  <p>粘贴租房合同或载入示例合同，系统会优先按租客视角严格审查。</p>
-                </div>
-                <span>{contractText.length} 字</span>
-              </div>
-
-              <label
-                className={`upload-drop ${isImportingContract ? 'importing' : ''}`}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={handleContractFileDrop}
-              >
-                <UploadCloud size={24} aria-hidden="true" />
-                <strong>{isImportingContract ? '正在解析合同...' : '拖入 PDF / Word / 图片租房合同'}</strong>
-                <span>支持 TXT、MD、DOCX、PDF 和图片 OCR，导入后会写入下方合同正文</span>
-                <input
-                  accept=".txt,.md,.docx,.pdf,image/*"
-                  aria-label="上传合同"
-                  disabled={isImportingContract}
-                  onChange={handleContractFileChange}
-                  type="file"
-                />
-              </label>
-
-              {importedContractMeta && (
-                <div className={`contract-import-card ${importedNeedsManualCheck ? 'needs-check' : ''}`} aria-label="已导入合同状态">
-                  <div className="contract-import-head">
-                    <span className="contract-import-icon">
-                      <FileText size={18} aria-hidden="true" />
-                    </span>
-                    <div>
-                      <strong>已导入：{importedContractMeta.name}</strong>
-                      <p>
-                        {importedNeedsManualCheck
-                          ? 'OCR 识别结果需要人工核对，确认正文无误后再进入审查。'
-                          : '合同正文已写入编辑区，可以直接开始审查。'}
-                      </p>
-                    </div>
-                  </div>
-                  <dl className="contract-import-meta">
-                    <div>
-                      <dt>来源</dt>
-                      <dd>{importedContractMeta.source}</dd>
-                    </div>
-                    <div>
-                      <dt>字数</dt>
-                      <dd>{importedContractMeta.size} 字</dd>
-                    </div>
-                    {importedIsOcr && (
-                      <div>
-                        <dt>OCR 置信度</dt>
-                        <dd>{importedConfidence}%</dd>
-                      </div>
-                    )}
-                  </dl>
-                  {importedIsOcr && (
-                    <p className="contract-import-note">
-                      {importedNeedsManualCheck
-                        ? '图片合同可能存在漏字、错字或换行错位，请先对照原图检查金额、日期、押金和解除条款。'
-                        : '图片 OCR 结果可信度较高，仍建议快速核对金额、日期和押金条款。'}
-                    </p>
-                  )}
-                  <div className="contract-import-actions">
-                    <button className="primary-button compact-button" type="button" onClick={startReview} disabled={isReviewing || !reviewText.trim()}>
-                      {isReviewing ? <RefreshCw className="spin-icon" size={15} aria-hidden="true" /> : <Bot size={15} aria-hidden="true" />}
-                      {isReviewing ? '审查中...' : '开始审查这份合同'}
-                    </button>
-                    {importedIsOcr && (
-                      <button className="ghost-button compact-button" type="button" onClick={() => setImportedContractMeta(null)}>
-                        我已核对正文
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="review-profile" aria-label="租房合同审查画像">
-                <label>
-                  <span>合同类型</span>
-                  <select value={reviewProfile.contractType} onChange={(event) => updateReviewProfile('contractType', event.target.value)}>
-                    {contractTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>我方身份</span>
-                  <select value={reviewProfile.partyRole} onChange={(event) => updateReviewProfile('partyRole', event.target.value)}>
-                    {partyRoleOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>审查强度</span>
-                  <select value={reviewProfile.reviewDepth} onChange={(event) => updateReviewProfile('reviewDepth', event.target.value)}>
-                    {reviewDepthOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="detected-type">
-                <span>当前知识库</span>
-                <strong>{getContractTypeLabel(effectiveReviewProfile.contractType)}</strong>
-                {reviewProfile.contractType === 'auto' && <em>自动识别</em>}
-              </div>
-
-              <div className={`demo-contract-picker ${contractText.trim() ? '' : 'empty'}`} aria-label="演示合同模板">
-                <div className="demo-contract-copy">
-                  <FileText size={18} aria-hidden="true" />
-                  <div>
-                    <strong>{contractText.trim() ? '演示合同模板' : '合同已清空，可载入演示合同'}</strong>
-                    <span>{selectedDemoContract.description}</span>
-                  </div>
-                </div>
-                <div className="demo-contract-controls">
-                  <label>
-                    <span>模板</span>
-                    <select value={selectedDemoContractId} onChange={(event) => setSelectedDemoContractId(event.target.value)}>
-                      {demoContracts.map((contract) => (
-                        <option key={contract.id} value={contract.id}>
-                          {contract.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button className="primary-button compact-button" type="button" onClick={() => loadDemoContract()}>
-                    <Sparkles size={15} aria-hidden="true" />
-                    载入演示合同
-                  </button>
-                </div>
-                <div className="demo-contract-list">
-                  {demoContracts.map((contract) => (
-                    <button
-                      className={contract.id === selectedDemoContractId ? 'active' : ''}
-                      key={contract.id}
-                      type="button"
-                      onClick={() => loadDemoContract(contract)}
-                    >
-                      <strong>{contract.title}</strong>
-                      <span>{contract.tag}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <textarea
-                value={contractText}
-                onChange={(event) => handleContractTextChange(event.target.value)}
-                placeholder="在这里粘贴租房合同正文，系统会自动识别押金、涨租、维修、解除等风险条款..."
-              />
-
-              <div className="input-actions">
-                <button className="ghost-button" type="button" onClick={() => resetContractText('')}>
-                  清空
-                </button>
-                <button className="primary-button" type="button" onClick={startReview} disabled={isReviewing}>
-                  {isReviewing ? <RefreshCw className="spin-icon" size={17} aria-hidden="true" /> : <Bot size={17} aria-hidden="true" />}
-                  {isReviewing ? '审查中...' : '开始审查'}
-                </button>
-              </div>
-
-              <div className="review-scope" aria-label="审查范围">
-                <div className="scope-chip">
-                  <ClipboardCheck size={17} aria-hidden="true" />
-                  <div>
-                    <strong>租房条款筛选</strong>
-                    <span>押金、涨租、维修</span>
-                  </div>
-                </div>
-                <div className="scope-chip">
-                  <Scale size={17} aria-hidden="true" />
-                  <div>
-                    <strong>风险定级</strong>
-                    <span>高、中、低风险</span>
-                  </div>
-                </div>
-                <div className="scope-chip">
-                  <FileText size={17} aria-hidden="true" />
-                  <div>
-                    <strong>谈判输出</strong>
-                    <span>替代条款和话术</span>
-                  </div>
-                </div>
-              </div>
-            </section>
+            <ReviewInputPanel
+              contractText={contractText}
+              effectiveReviewProfile={effectiveReviewProfile}
+              handleContractFileChange={handleContractFileChange}
+              handleContractFileDrop={handleContractFileDrop}
+              handleContractTextChange={handleContractTextChange}
+              importedConfidence={importedConfidence}
+              importedContractMeta={importedContractMeta}
+              importedIsOcr={importedIsOcr}
+              importedNeedsManualCheck={importedNeedsManualCheck}
+              isImportingContract={isImportingContract}
+              isReviewing={isReviewing}
+              loadDemoContract={loadDemoContract}
+              onClearImportMeta={() => setImportedContractMeta(null)}
+              resetContractText={resetContractText}
+              reviewProfile={reviewProfile}
+              reviewText={reviewText}
+              selectedDemoContract={selectedDemoContract}
+              selectedDemoContractId={selectedDemoContractId}
+              setSelectedDemoContractId={setSelectedDemoContractId}
+              startReview={startReview}
+              updateReviewProfile={updateReviewProfile}
+            />
 
             <section className="work-panel summary-panel">
               {aiQualityReport && (
@@ -1592,154 +1099,13 @@ function App() {
             </section>
           </div>
         ) : (
-          <div className="proposal-layout">
-            <section className="proposal-card proposal-hero">
-              <div className="proposal-hero-copy">
-                <p className="section-kicker">使用总览</p>
-                <h2>租小审：租房全流程风控助手</h2>
-                <p>
-                  给普通租客的签约、入住、退租和补贴申请助手，把复杂风险翻成能直接行动的下一步。
-                </p>
-                <div className="proposal-action-row">
-                  <button className="primary-button proposal-primary-action" type="button" onClick={() => enterModuleFromCard('review')}>
-                    立即体验租房审查
-                    <ArrowRight size={17} aria-hidden="true" />
-                  </button>
-                  <button className="ghost-button proposal-secondary-action" type="button" onClick={openAiExpert}>
-                    打开系统 AI 助手
-                    <Bot size={16} aria-hidden="true" />
-                  </button>
-                </div>
-                <div className="proposal-reliability-note" aria-label="模型兜底说明">
-                  <ShieldCheck size={16} aria-hidden="true" />
-                  <span>即使线上模型接口暂不可用，合同风险识别仍会使用本地规则和知识库继续演示。</span>
-                </div>
-                <div className="proposal-tag-row" aria-label="项目关键词">
-                  <span>社会服务</span>
-                  <span>租客权益</span>
-                  <span>AI 风控</span>
-                </div>
-              </div>
-              <aside className="proposal-brief-panel" aria-label="项目定位">
-                <span>项目一句话</span>
-                <strong>先看懂合同，再决定怎么签。</strong>
-                <p>不是替用户打官司，而是在损失发生前提醒：哪条有问题、为什么有问题、下一步怎么谈。</p>
-                <dl>
-                  <div>
-                    <dt>服务对象</dt>
-                    <dd>毕业生、第一次租房人群、租房弱势群体</dd>
-                  </div>
-                  <div>
-                    <dt>核心价值</dt>
-                    <dd>看懂条款、保留证据、少丢押金</dd>
-                  </div>
-                </dl>
-              </aside>
-            </section>
-
-            <section className="proposal-card proposal-focus">
-              <div className="proposal-section-head compact">
-                <div>
-                  <span>核心入口</span>
-                  <h2>从首页直接进入四个核心模块</h2>
-                </div>
-              </div>
-              <div className="proposal-focus-grid" aria-label="项目核心入口">
-                {proposalValueCards.map((card) => {
-                  const Icon = card.icon
-                  return (
-                    <button className="proposal-focus-item" key={card.title} type="button" onClick={() => enterModuleFromCard(card.tab)}>
-                      <span>{card.label}</span>
-                      <Icon size={21} aria-hidden="true" />
-                      <strong>{card.title}</strong>
-                      <p>{card.text}</p>
-                    </button>
-                  )
-                })}
-              </div>
-            </section>
-
-            <section className="proposal-card proposal-buildout">
-              <div className="proposal-section-head compact">
-                <div>
-                  <span>延展方向</span>
-                  <h2>核心链路已完成，后续继续围绕退租押金做深</h2>
-                </div>
-              </div>
-              <div className="proposal-buildout-grid">
-                <div className="proposal-deposit-panel">
-                  <div className="deposit-prototype" aria-label="押金计算器">
-                    <div>
-                      <span>退租押金计算器</span>
-                      <strong>预计应退押金：{formatMoney(depositResult.estimatedReturn)}</strong>
-                      <p>{depositResult.warning}</p>
-                      <em>预计可扣：{formatMoney(depositResult.totalDeduction)}</em>
-                    </div>
-                    <div className="deposit-grid">
-                      <label>
-                        <span>押金金额</span>
-                        <input
-                          inputMode="decimal"
-                          value={depositInputs.depositAmount}
-                          onChange={(event) => updateDepositInput('depositAmount', event.target.value)}
-                        />
-                      </label>
-                      <label>
-                        <span>未结清费用</span>
-                        <input
-                          inputMode="decimal"
-                          value={depositInputs.unpaidFees}
-                          onChange={(event) => updateDepositInput('unpaidFees', event.target.value)}
-                        />
-                      </label>
-                      <label>
-                        <span>维修扣款</span>
-                        <input
-                          inputMode="decimal"
-                          value={depositInputs.repairCost}
-                          onChange={(event) => updateDepositInput('repairCost', event.target.value)}
-                        />
-                      </label>
-                      <label>
-                        <span>保洁扣款</span>
-                        <input
-                          inputMode="decimal"
-                          value={depositInputs.cleaningCost}
-                          onChange={(event) => updateDepositInput('cleaningCost', event.target.value)}
-                        />
-                      </label>
-                      <label>
-                        <span>是否有票据</span>
-                        <select value={depositInputs.hasVoucher} onChange={(event) => updateDepositInput('hasVoucher', event.target.value)}>
-                          <option value="no">无票据或清单</option>
-                          <option value="yes">有照片、清单和票据</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>是否正常损耗</span>
-                        <select value={depositInputs.normalWear} onChange={(event) => updateDepositInput('normalWear', event.target.value)}>
-                          <option value="yes">是，仅正常使用损耗</option>
-                          <option value="no">否，存在非正常损坏</option>
-                        </select>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                <div className="proposal-next-list" aria-label="继续开发想法">
-                  {proposalNextIdeas.map((item, index) => (
-                    <div className="proposal-next-item" key={item}>
-                      <span>{String(index + 1).padStart(2, '0')}</span>
-                      <p>{item}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <a className="trae-link-button secondary" href="https://www.trae.cn/community" target="_blank" rel="noreferrer">
-                查看项目参赛入口
-                <ArrowRight size={16} aria-hidden="true" />
-              </a>
-            </section>
-          </div>
+          <ProposalHome
+            depositInputs={depositInputs}
+            depositResult={depositResult}
+            onDepositInputChange={updateDepositInput}
+            onEnterModule={enterModuleFromCard}
+            onOpenAiExpert={openAiExpert}
+          />
         )}
       </section>
     </main>
