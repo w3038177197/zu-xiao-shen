@@ -21,23 +21,48 @@ export default function AppSidebar({ activeTab, onSwitchModule }) {
       </div>
 
       <nav className="nav-list">
-        <button className={activeTab === 'proposal' ? 'active' : ''} type="button" onClick={() => onSwitchModule('proposal')}>
+        <button
+          className={activeTab === 'proposal' ? 'active' : ''}
+          type="button"
+          aria-current={activeTab === 'proposal' ? 'page' : undefined}
+          onClick={() => onSwitchModule('proposal')}
+        >
           <House size={18} aria-hidden="true" />
           首页
         </button>
-        <button className={activeTab === 'subsidy' ? 'active' : ''} type="button" onClick={() => onSwitchModule('subsidy')}>
+        <button
+          className={activeTab === 'subsidy' ? 'active' : ''}
+          type="button"
+          aria-current={activeTab === 'subsidy' ? 'page' : undefined}
+          onClick={() => onSwitchModule('subsidy')}
+        >
           <CircleDollarSign size={18} aria-hidden="true" />
           补贴匹配
         </button>
-        <button className={activeTab === 'review' ? 'active' : ''} type="button" onClick={() => onSwitchModule('review')}>
+        <button
+          className={activeTab === 'review' ? 'active' : ''}
+          type="button"
+          aria-current={activeTab === 'review' ? 'page' : undefined}
+          onClick={() => onSwitchModule('review')}
+        >
           <FileText size={18} aria-hidden="true" />
           租房审查
         </button>
-        <button className={activeTab === 'checkin' ? 'active' : ''} type="button" onClick={() => onSwitchModule('checkin')}>
+        <button
+          className={activeTab === 'checkin' ? 'active' : ''}
+          type="button"
+          aria-current={activeTab === 'checkin' ? 'page' : undefined}
+          onClick={() => onSwitchModule('checkin')}
+        >
           <BadgeCheck size={18} aria-hidden="true" />
           入住验房
         </button>
-        <button className={activeTab === 'evidence' ? 'active' : ''} type="button" onClick={() => onSwitchModule('evidence')}>
+        <button
+          className={activeTab === 'evidence' ? 'active' : ''}
+          type="button"
+          aria-current={activeTab === 'evidence' ? 'page' : undefined}
+          onClick={() => onSwitchModule('evidence')}
+        >
           <ClipboardCheck size={18} aria-hidden="true" />
           退租证据包
         </button>

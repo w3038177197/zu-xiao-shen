@@ -234,6 +234,15 @@ function App() {
     if (!showGuide) return undefined
 
     const previouslyFocused = document.activeElement
+    const previousBodyOverflow = document.body.style.overflow
+    const previousBodyPaddingRight = document.body.style.paddingRight
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+
+    document.body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`
+    }
+
     guideCloseRef.current?.focus({ preventScroll: true })
 
     const closeOnEscape = (event) => {
@@ -245,6 +254,8 @@ function App() {
     window.addEventListener('keydown', closeOnEscape)
     return () => {
       window.removeEventListener('keydown', closeOnEscape)
+      document.body.style.overflow = previousBodyOverflow
+      document.body.style.paddingRight = previousBodyPaddingRight
       if (previouslyFocused instanceof HTMLElement) {
         previouslyFocused.focus({ preventScroll: true })
       }
@@ -779,6 +790,7 @@ function App() {
 
   return (
     <main className="app-shell">
+      <a className="skip-link" href="#main-workspace">跳到主内容</a>
       <AppSidebar activeTab={activeTab} onSwitchModule={switchModuleFromNav} />
       <AnnouncementStrip guideTriggerRef={guideTriggerRef} onOpenGuide={openRiskGuide} />
 
@@ -786,7 +798,12 @@ function App() {
         <RiskGuideModal closeRef={guideCloseRef} onClose={() => setShowGuide(false)} onJump={jumpFromGuide} />
       )}
 
-      <section className={`workspace ${moduleEntering ? 'module-entering' : ''}`} ref={workspaceRef}>
+      <section
+        className={`workspace ${moduleEntering ? 'module-entering' : ''}`}
+        id="main-workspace"
+        ref={workspaceRef}
+        tabIndex={-1}
+      >
         <AppTopbar
           activeTab={activeTab}
           findingsCount={findings.length}
@@ -794,9 +811,13 @@ function App() {
           onOpenAiExpert={openAiExpert}
         />
 
-        {statusMessage && <div className="status-toast">{statusMessage}</div>}
+        {statusMessage && (
+          <div className="status-toast" role="status" aria-live="polite">
+            {statusMessage}
+          </div>
+        )}
 
-        <div className="mobile-read-notice">
+        <div className="mobile-read-notice" role="note">
           <strong>移动端查看模式</strong>
           <span>租房合同解读属于重阅读场景，建议在电脑端完成修改与导出，手机端更适合查看结论。</span>
         </div>
