@@ -1,5 +1,6 @@
 import {
   BadgeCheck,
+  Bot,
   CircleDollarSign,
   ClipboardCheck,
   FileText,
@@ -65,6 +66,15 @@ export default function AppSidebar({ activeTab, onSwitchModule }) {
         >
           <ClipboardCheck size={18} aria-hidden="true" />
           退租证据包
+        </button>
+        <button
+          className={activeTab === 'ai' ? 'active' : ''}
+          type="button"
+          aria-current={activeTab === 'ai' ? 'page' : undefined}
+          onClick={() => onSwitchModule('ai')}
+        >
+          <Bot size={18} aria-hidden="true" />
+          AI 助手
         </button>
       </nav>
 

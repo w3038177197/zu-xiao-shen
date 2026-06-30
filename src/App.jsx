@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   BadgeCheck,
   Download,
@@ -55,11 +55,13 @@ import {
   resolveReviewProfile,
 } from './features/contractReview.js'
 
+const BUSINESS_CONTEXT_TABS = new Set(['review', 'evidence', 'checkin', 'subsidy'])
+
 function App() {
   const [contractText, setContractText] = useState(sampleContract)
   const [selectedDemoContractId, setSelectedDemoContractId] = useState(demoContracts[0].id)
   const [activeTab, setActiveTab] = useState('proposal')
-  const [showAiConfig, setShowAiConfig] = useState(false)
+  const [lastBusinessTab, setLastBusinessTab] = useState('proposal')
   const [showGuide, setShowGuide] = useState(false)
   const evidenceRef = useRef(null)
   const workspaceRef = useRef(null)
@@ -68,6 +70,8 @@ function App() {
   const guideCloseRef = useRef(null)
   const pendingScrollRestoreRef = useRef(null)
   const pendingModuleEntryRef = useRef(null)
+  const pendingModuleScrollRef = useRef(false)
+  const pendingModuleScrollTargetRef = useRef(null)
   const moduleActivationTimerRef = useRef(null)
   const moduleTransitionTimerRef = useRef(null)
   const [acceptedIds, setAcceptedIds] = useState(() => new Set())
@@ -150,10 +154,47 @@ function App() {
   const knowledgePanelDescription = aiKnowledgeHits.length
     ? '优先展示本次 RAG 命中的依据，AI 回复会先引用这些内容。'
     : '本地规则与 AI Prompt 会共同引用这些租房审查依据。'
+  const aiContextTab = activeTab === 'ai' ? lastBusinessTab : activeTab
   const aiFeedbackText = `反馈：${aiFeedback.helpful} 有帮助 / ${aiFeedback.needsWork} 需改进`
   const importedIsOcr = Boolean(importedContractMeta?.source === '图片 OCR' || importedContractMeta?.type?.includes('OCR'))
   const importedConfidence = Number(importedContractMeta?.confidence || 0)
   const importedNeedsManualCheck = importedIsOcr && importedConfidence < OCR_REVIEW_WARNING_CONFIDENCE
+  const getStickyOffset = useCallback(() => ['.sidebar', '.announcement-strip'].reduce((total, selector) => {
+    const element = document.querySelector(selector)
+    if (!element) return total
+
+    const style = window.getComputedStyle(element)
+    const isVisible = style.display !== 'none' && style.visibility !== 'hidden'
+    const isSticky = style.position === 'sticky' || style.position === 'fixed'
+
+    return isVisible && isSticky ? total + element.getBoundingClientRect().height : total
+  }, 0), [])
+
+  const scrollPageTo = useCallback((top, behavior = 'auto') => {
+    if (behavior === 'smooth') {
+      window.scrollTo({ top, left: 0, behavior: 'smooth' })
+      return
+    }
+
+    const previousScrollBehavior = document.documentElement.style.scrollBehavior
+    document.documentElement.style.scrollBehavior = 'auto'
+    window.scrollTo({ top, left: 0, behavior: 'auto' })
+    document.documentElement.style.scrollBehavior = previousScrollBehavior
+  }, [])
+
+  const alignWorkspaceTop = useCallback((behavior = 'auto') => {
+    const anchor = workspaceRef.current?.querySelector('.topbar h1') || workspaceRef.current
+    if (!anchor) return
+
+    scrollPageTo(Math.max(0, anchor.getBoundingClientRect().top + window.scrollY - getStickyOffset() - 12), behavior)
+  }, [getStickyOffset, scrollPageTo])
+
+  const alignElementBelowSticky = useCallback((selector, behavior = 'auto') => {
+    const element = document.querySelector(selector)
+    if (!element) return
+
+    scrollPageTo(Math.max(0, element.getBoundingClientRect().top + window.scrollY - getStickyOffset() - 14), behavior)
+  }, [getStickyOffset, scrollPageTo])
 
   useEffect(() => {
     try {
@@ -173,9 +214,36 @@ function App() {
 
   useLayoutEffect(() => {
     const shouldAnimateModuleEntry = pendingModuleEntryRef.current === activeTab
+    const shouldAlignModuleTop = pendingModuleScrollRef.current
+    if (!shouldAnimateModuleEntry && !shouldAlignModuleTop) return undefined
+
+    const moduleScrollTarget = pendingModuleScrollTargetRef.current
+    pendingModuleEntryRef.current = null
+    pendingModuleScrollRef.current = false
+    pendingModuleScrollTargetRef.current = null
+    let firstFrameId = 0
+    let secondFrameId = 0
+    let alignTimeoutId = 0
+    const alignModuleView = () => {
+      if (moduleScrollTarget) {
+        alignElementBelowSticky(moduleScrollTarget)
+        return
+      }
+
+      alignWorkspaceTop()
+    }
+
+    if (shouldAlignModuleTop) {
+      alignModuleView()
+      firstFrameId = window.requestAnimationFrame(() => {
+        alignModuleView()
+        secondFrameId = window.requestAnimationFrame(alignModuleView)
+      })
+      alignTimeoutId = window.setTimeout(alignModuleView, 260)
+    }
+
     if (!shouldAnimateModuleEntry) return undefined
 
-    pendingModuleEntryRef.current = null
     setModuleEntering(true)
 
     window.clearTimeout(moduleTransitionTimerRef.current)
@@ -184,9 +252,12 @@ function App() {
     }, 520)
 
     return () => {
+      window.cancelAnimationFrame(firstFrameId)
+      window.cancelAnimationFrame(secondFrameId)
+      window.clearTimeout(alignTimeoutId)
       window.clearTimeout(moduleTransitionTimerRef.current)
     }
-  }, [activeTab])
+  }, [activeTab, alignElementBelowSticky, alignWorkspaceTop])
 
   useLayoutEffect(() => {
     const restore = pendingScrollRestoreRef.current
@@ -271,18 +342,8 @@ function App() {
   const navigateToModule = (tab, options = {}) => {
     const anchor = workspaceRef.current
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const stickyOffset = ['.sidebar', '.announcement-strip'].reduce((total, selector) => {
-      const element = document.querySelector(selector)
-      if (!element) return total
-
-      const style = window.getComputedStyle(element)
-      const isVisible = style.display !== 'none' && style.visibility !== 'hidden'
-      const isSticky = style.position === 'sticky' || style.position === 'fixed'
-
-      return isVisible && isSticky ? total + element.getBoundingClientRect().height : total
-    }, 0)
     const visualGap = 0
-    const top = anchor ? Math.max(0, anchor.getBoundingClientRect().top + window.scrollY - stickyOffset - visualGap) : 0
+    const top = anchor ? Math.max(0, anchor.getBoundingClientRect().top + window.scrollY - getStickyOffset() - visualGap) : 0
     const shouldPrepareAtTop = anchor && window.scrollY > top + 24
 
     window.clearTimeout(moduleTransitionTimerRef.current)
@@ -290,25 +351,25 @@ function App() {
 
     const activateModule = () => {
       pendingModuleEntryRef.current = tab
+      pendingModuleScrollRef.current = true
+      pendingModuleScrollTargetRef.current = options.scrollTarget || null
+
+      if (BUSINESS_CONTEXT_TABS.has(tab)) {
+        setLastBusinessTab(tab)
+      } else if (tab === 'ai' && BUSINESS_CONTEXT_TABS.has(activeTab)) {
+        setLastBusinessTab(activeTab)
+      }
+
       setActiveTab(tab)
     }
 
     if (shouldPrepareAtTop) {
-      window.scrollTo({
-        top,
-        left: 0,
-        behavior: prefersReducedMotion ? 'auto' : 'smooth',
-      })
-      moduleActivationTimerRef.current = window.setTimeout(activateModule, prefersReducedMotion ? 0 : 220)
-    } else {
-      activateModule()
-      if (anchor) {
-        window.scrollTo({
-          top,
-          left: 0,
-          behavior: prefersReducedMotion ? 'auto' : 'smooth',
-        })
-      }
+      scrollPageTo(top)
+    }
+
+    activateModule()
+    if (!shouldPrepareAtTop && anchor) {
+      alignWorkspaceTop(prefersReducedMotion ? 'auto' : 'smooth')
     }
 
     if (options.closeGuide) {
@@ -326,6 +387,13 @@ function App() {
     })
   }
 
+  const returnToDemoRoute = () => {
+    navigateToModule('proposal', {
+      message: '已返回首页演示路线，可继续选择下一步',
+      scrollTarget: '.proposal-demo-route',
+    })
+  }
+
   const enterModuleFromCard = (tab) => {
     navigateToModule(tab, {
       message: `正在进入${workflowLabels[tab] || tab}首页`,
@@ -337,12 +405,11 @@ function App() {
   }
 
   const openAiExpert = () => {
-    setShowAiConfig(true)
-    setStatusMessage(`已打开系统 AI，当前接入：${workflowLabels[activeTab] || activeTab}`)
-  }
+    const sourceTab = BUSINESS_CONTEXT_TABS.has(activeTab) ? activeTab : lastBusinessTab
 
-  const closeAiExpert = () => {
-    setShowAiConfig(false)
+    navigateToModule('ai', {
+      message: `已进入系统 AI 助手，当前接入：${workflowLabels[sourceTab] || sourceTab}`,
+    })
   }
 
   const resetAiChat = () => {
@@ -384,7 +451,7 @@ function App() {
       ragItems = await searchAiKnowledge(
         buildRagSearchQuery({
           prompt,
-          activeTab,
+          activeTab: aiContextTab,
           reviewText,
           findings,
         }),
@@ -393,7 +460,7 @@ function App() {
       setAiKnowledgeHits(ragItems)
 
       const systemContext = buildSystemAiContext({
-        activeTab,
+        activeTab: aiContextTab,
         reviewText,
         effectiveReviewProfile,
         findings,
@@ -637,6 +704,18 @@ function App() {
     setStatusMessage(`已载入演示合同：${contract.title}`)
   }
 
+  const prepareReviewDemo = () => {
+    const contract = selectedDemoContract || demoContracts[0]
+    setSelectedDemoContractId(contract.id)
+    replaceContractText(contract.text, {
+      statusMessage: `已载入演示合同并准备本地规则审查：${contract.title}`,
+    })
+    setReviewProfile((current) => ({ ...current, contractType: 'lease' }))
+    navigateToModule('review', {
+      message: '已进入租房审查演示，页面会先展示本地规则风险；如需 AI 结果，可点击“开始审查”',
+    })
+  }
+
   const saveHistorySnapshot = () => {
     const snapshot = {
       id: Date.now(),
@@ -808,7 +887,7 @@ function App() {
           activeTab={activeTab}
           findingsCount={findings.length}
           revisionItemsCount={revisionItems.length}
-          onOpenAiExpert={openAiExpert}
+          onBackToDemoRoute={returnToDemoRoute}
         />
 
         {statusMessage && (
@@ -822,7 +901,13 @@ function App() {
           <span>租房合同解读属于重阅读场景，建议在电脑端完成修改与导出，手机端更适合查看结论。</span>
         </div>
 
-        {showAiConfig && (
+        {activeTab === 'evidence' ? (
+          <EvidencePack onStatus={setStatusMessage} />
+        ) : activeTab === 'checkin' ? (
+          <CheckinInspection onStatus={setStatusMessage} />
+        ) : activeTab === 'subsidy' ? (
+          <SubsidyMatcher onStatus={setStatusMessage} />
+        ) : activeTab === 'ai' ? (
           <AiAssistantPanel
             activeTab={activeTab}
             aiConfig={aiConfig}
@@ -833,20 +918,11 @@ function App() {
             aiMessages={aiMessages}
             aiSending={aiSending}
             modelConnectionLabel={modelConnectionLabel}
-            onClose={closeAiExpert}
             onDraftChange={setAiDraft}
             onRateMessage={rateAiMessage}
             onResetChat={resetAiChat}
             onSendDraft={sendAiDraft}
           />
-        )}
-
-        {activeTab === 'evidence' ? (
-          <EvidencePack onStatus={setStatusMessage} />
-        ) : activeTab === 'checkin' ? (
-          <CheckinInspection onStatus={setStatusMessage} />
-        ) : activeTab === 'subsidy' ? (
-          <SubsidyMatcher onStatus={setStatusMessage} />
         ) : activeTab === 'review' ? (
           <div className="review-layout">
             <ReviewInputPanel
@@ -1120,7 +1196,9 @@ function App() {
             depositResult={depositResult}
             onDepositInputChange={updateDepositInput}
             onEnterModule={enterModuleFromCard}
+            onOpenGuide={openRiskGuide}
             onOpenAiExpert={openAiExpert}
+            onPrepareReviewDemo={prepareReviewDemo}
           />
         )}
       </section>

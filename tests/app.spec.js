@@ -63,15 +63,20 @@ test('home shows the current product overview and guide modal', async ({ page })
   await expect(page.getByRole('heading', { name: '租小审使用总览' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '租小审：租房全流程风控助手' })).toBeVisible()
 
-  const moduleEntries = page.locator('.proposal-focus-item')
-  await expect(moduleEntries).toHaveCount(4)
-  await expect(moduleEntries).toContainText(['补贴匹配', '租房审查', '入住验房', '退租证据包'])
+  const demoRouteSteps = page.locator('.proposal-route-step')
+  await expect(demoRouteSteps).toHaveCount(12)
+  await expect(demoRouteSteps).toContainText(['查看避坑流程', '补贴匹配', '载入高风险合同', '退租证据包'])
+
+  const quickRouteEntries = page.locator('.proposal-route-fast li')
+  await expect(quickRouteEntries).toHaveCount(5)
+  await expect(quickRouteEntries).toContainText(['租房审查', '采纳建议', '入住验房', '退租证据'])
 
   await expect(page.locator('.nav-list').getByRole('button', { name: '首页', exact: true })).toHaveClass(/active/)
   await expect(page.locator('.nav-list').getByRole('button', { name: '补贴匹配', exact: true })).toBeVisible()
   await expect(page.locator('.nav-list').getByRole('button', { name: '租房审查', exact: true })).toBeVisible()
   await expect(page.locator('.nav-list').getByRole('button', { name: '入住验房', exact: true })).toBeVisible()
   await expect(page.locator('.nav-list').getByRole('button', { name: '退租证据包', exact: true })).toBeVisible()
+  await expect(page.locator('.nav-list').getByRole('button', { name: 'AI 助手', exact: true })).toBeVisible()
 
   await page.getByRole('button', { name: /查看避坑流程/ }).click()
   const guide = page.getByRole('dialog', { name: '租小审避坑流程' })
@@ -94,8 +99,10 @@ test('system ai assistant reads app context and falls back cleanly', async ({ pa
   })
 
   await page.goto('/')
-  await page.getByRole('button', { name: '系统 AI 助手', exact: true }).click()
+  await page.locator('.nav-list').getByRole('button', { name: 'AI 助手', exact: true }).click()
 
+  await expect(page.locator('.nav-list').getByRole('button', { name: 'AI 助手', exact: true })).toHaveClass(/active/)
+  await expect(page.getByRole('heading', { name: '系统 AI 助手' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '租小审系统 AI' })).toBeVisible()
   await expect(page.getByText('后端代理：/api/ai/chat')).toBeVisible()
   await expect(page.getByText(/回复技能：\d+ 个/)).toBeVisible()

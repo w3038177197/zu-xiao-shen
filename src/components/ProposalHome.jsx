@@ -1,5 +1,9 @@
-import { ArrowRight, Bot, ShieldCheck } from 'lucide-react'
-import { proposalNextIdeas, proposalValueCards } from '../data/proposalContent.jsx'
+import { ArrowRight, Bot, Play, Route, ShieldCheck } from 'lucide-react'
+import {
+  proposalDemoRoute,
+  proposalNextIdeas,
+  proposalQuickRoute,
+} from '../data/proposalContent.jsx'
 import { formatMoney } from '../utils/money.js'
 
 export default function ProposalHome({
@@ -7,8 +11,29 @@ export default function ProposalHome({
   depositResult,
   onDepositInputChange,
   onEnterModule,
+  onOpenGuide,
   onOpenAiExpert,
+  onPrepareReviewDemo,
 }) {
+  const handleRouteAction = (item) => {
+    if (item.actionType === 'guide') {
+      onOpenGuide()
+      return
+    }
+
+    if (item.actionType === 'ai') {
+      onOpenAiExpert()
+      return
+    }
+
+    if (item.actionType === 'demoReview') {
+      onPrepareReviewDemo()
+      return
+    }
+
+    onEnterModule(item.tab)
+  }
+
   return (
     <div className="proposal-layout">
       <section className="proposal-card proposal-hero">
@@ -55,25 +80,54 @@ export default function ProposalHome({
         </aside>
       </section>
 
-      <section className="proposal-card proposal-focus">
-        <div className="proposal-section-head compact">
+      <section className="proposal-card proposal-demo-route" aria-labelledby="proposal-demo-route-title">
+        <div className="proposal-section-head demo-route-head">
           <div>
-            <span>核心入口</span>
-            <h2>从首页直接进入四个核心模块</h2>
+            <span>推荐演示</span>
+            <h2 id="proposal-demo-route-title">给评委看的 5分钟完整路线</h2>
           </div>
+          <p>这条路线覆盖补贴、审查、验房、退租证据和 AI 追问。时间不够时，可以只走右侧快速路线。</p>
         </div>
-        <div className="proposal-focus-grid" aria-label="项目核心入口">
-          {proposalValueCards.map((card) => {
-            const Icon = card.icon
-            return (
-              <button className="proposal-focus-item" key={card.title} type="button" onClick={() => onEnterModule(card.tab)}>
-                <span>{card.label}</span>
-                <Icon size={21} aria-hidden="true" />
-                <strong>{card.title}</strong>
-                <p>{card.text}</p>
-              </button>
-            )
-          })}
+
+        <div className="proposal-route-grid">
+          <div className="proposal-route-main" aria-label="5 分钟完整演示路线">
+            {proposalDemoRoute.map((item) => (
+              <article className="proposal-route-step" key={`${item.step}-${item.title}`}>
+                <span>{item.step}</span>
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+                <button type="button" onClick={() => handleRouteAction(item)}>
+                  {item.action}
+                  <ArrowRight size={14} aria-hidden="true" />
+                </button>
+              </article>
+            ))}
+          </div>
+
+          <aside className="proposal-route-fast" aria-label="90 秒快速演示路线">
+            <div className="proposal-route-fast-head">
+              <Play size={18} aria-hidden="true" />
+              <div>
+                <span>90 秒快速路线</span>
+                <strong>先证明核心能力可用</strong>
+              </div>
+            </div>
+            <ol>
+              {proposalQuickRoute.map((item) => (
+                <li key={item.title}>
+                  <button type="button" onClick={() => handleRouteAction(item)}>
+                    <Route size={15} aria-hidden="true" />
+                    <span>
+                      <strong>{item.title}</strong>
+                      <small>{item.text}</small>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </aside>
         </div>
       </section>
 

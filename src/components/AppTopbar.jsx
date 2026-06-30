@@ -1,4 +1,4 @@
-import { Settings } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 
 function getTopbarCopy(activeTab, { findingsCount, revisionItemsCount }) {
   return {
@@ -37,15 +37,28 @@ function getTopbarCopy(activeTab, { findingsCount, revisionItemsCount }) {
     proposal: {
       kicker: '首页',
       title: '租小审使用总览',
-      subtitle: '先选择当前租房阶段，再进入补贴、审查、验房或退租证据处理。',
+      subtitle: '先选择当前租房阶段，再进入补贴、审查、验房、退租证据或 AI 助手。',
       stage: '使用总览',
-      state: '四个模块入口',
-      action: '串联审查、验房、证据和补贴',
+      state: '五个模块入口',
+      action: '串联审查、验房、证据、补贴和 AI',
+    },
+    ai: {
+      kicker: 'System Copilot',
+      title: '系统 AI 助手',
+      subtitle: '已接入合同审查、退租证据包、入住验房、押金估算和补贴匹配，会读取当前系统上下文。',
+      stage: 'AI 助手',
+      state: '上下文问答',
+      action: '支持条款解释、谈判话术和下一步建议',
     },
   }[activeTab]
 }
 
-export default function AppTopbar({ activeTab, findingsCount, revisionItemsCount, onOpenAiExpert }) {
+export default function AppTopbar({
+  activeTab,
+  findingsCount,
+  revisionItemsCount,
+  onBackToDemoRoute,
+}) {
   const topbarCopy = getTopbarCopy(activeTab, { findingsCount, revisionItemsCount })
 
   return (
@@ -56,11 +69,12 @@ export default function AppTopbar({ activeTab, findingsCount, revisionItemsCount
         <p className="hero-subtitle">{topbarCopy.subtitle}</p>
       </div>
       <div className="topbar-actions">
-        <button className="runtime-status-button" type="button" onClick={onOpenAiExpert}>
-          <span className="runtime-dot" aria-hidden="true" />
-          <span>系统 AI 助手</span>
-          <Settings size={15} aria-hidden="true" />
-        </button>
+        {activeTab !== 'proposal' && (
+          <button className="demo-route-return-button" type="button" onClick={onBackToDemoRoute}>
+            <RotateCcw size={15} aria-hidden="true" />
+            <span>返回演示路线</span>
+          </button>
+        )}
         <div className="module-status-card" aria-label="当前模块状态">
           <span>{topbarCopy.stage}</span>
           <strong>{topbarCopy.state}</strong>

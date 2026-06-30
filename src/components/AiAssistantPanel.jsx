@@ -14,7 +14,6 @@ export default function AiAssistantPanel({
   aiMessages,
   aiSending,
   modelConnectionLabel,
-  onClose,
   onDraftChange,
   onRateMessage,
   onResetChat,
@@ -38,9 +37,6 @@ export default function AiAssistantPanel({
             <PlugZap size={16} aria-hidden="true" />
             {modelConnectionLabel}
           </span>
-          <button className="ghost-button compact-button" type="button" onClick={onClose}>
-            关闭
-          </button>
         </div>
       </div>
 
