@@ -9,12 +9,13 @@ export function normalizeCheckinRecord(record) {
   const safeRecord = record && typeof record === 'object' ? record : {}
   const photos = Array.isArray(safeRecord.photos)
     ? safeRecord.photos
-        .filter((photo) => photo && typeof photo.url === 'string')
+        .filter((photo) => photo && (typeof photo.url === 'string' || typeof photo.storageId === 'string'))
         .slice(0, CHECKIN_MAX_PHOTOS_PER_ITEM)
         .map((photo) => ({
           id: photo.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
           name: photo.name || '验房照片',
-          url: photo.url,
+          url: typeof photo.url === 'string' ? photo.url : '',
+          storageId: typeof photo.storageId === 'string' ? photo.storageId : '',
           createdAt: photo.createdAt || '',
         }))
     : []
@@ -96,6 +97,32 @@ export function loadCheckinInspectionState() {
   } catch {
     return createDefaultCheckinState()
   }
+}
+
+export function serializeCheckinInspectionState(state) {
+  const normalized = normalizeCheckinState(state)
+
+  return Object.fromEntries(
+    checkinRooms.map((room) => [
+      room.key,
+      Object.fromEntries(
+        checkinItems.map((item) => {
+          const record = normalized[room.key][item.key]
+          return [
+            item.key,
+            {
+              ...record,
+              photos: record.photos.map((photo) => (
+                photo.storageId
+                  ? { id: photo.id, name: photo.name, storageId: photo.storageId, createdAt: photo.createdAt }
+                  : photo
+              )),
+            },
+          ]
+        }),
+      ),
+    ]),
+  )
 }
 
 export function getCheckinContextSummary(checkinData) {

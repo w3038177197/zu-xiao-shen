@@ -101,6 +101,7 @@ export default function EvidencePack({ onStatus }) {
   }
 
   const resetEvidencePack = () => {
+    if (!window.confirm('确定重置退租证据包吗？已填写的信息将被清空。')) return
     const nextState = createDefaultEvidencePackState()
     setFormData(nextState.formData)
     setEvidence(nextState.evidence)
@@ -140,6 +141,8 @@ export default function EvidencePack({ onStatus }) {
           const Icon = item.Icon
           return (
             <button
+              aria-selected={tab === item.key}
+              role="tab"
               className={`evidence-tab ${tab === item.key ? 'active' : ''}`}
               key={item.key}
               type="button"
@@ -185,28 +188,28 @@ export default function EvidencePack({ onStatus }) {
             ].map((field) => (
               <label className="field" key={field.key}>
                 <span>{field.label}</span>
-                <input value={formData[field.key]} onChange={(event) => updateField(field.key, event.target.value)} placeholder={field.placeholder} />
+                <input name={field.key} value={formData[field.key]} onChange={(event) => updateField(field.key, event.target.value)} placeholder={field.placeholder} />
               </label>
             ))}
             <label className="field">
               <span>入住日期</span>
-              <input type="date" value={formData.checkinDate} onChange={(event) => updateField('checkinDate', event.target.value)} />
+              <input name="checkinDate" type="date" value={formData.checkinDate} onChange={(event) => updateField('checkinDate', event.target.value)} />
             </label>
             <label className="field">
               <span>退租日期</span>
-              <input type="date" value={formData.checkoutDate} onChange={(event) => updateField('checkoutDate', event.target.value)} />
+              <input name="checkoutDate" type="date" value={formData.checkoutDate} onChange={(event) => updateField('checkoutDate', event.target.value)} />
             </label>
             <label className="field">
               <span>交接日期</span>
-              <input type="date" value={formData.handoverDate} onChange={(event) => updateField('handoverDate', event.target.value)} />
+              <input name="handoverDate" type="date" value={formData.handoverDate} onChange={(event) => updateField('handoverDate', event.target.value)} />
             </label>
             <label className="field">
               <span>交接时间</span>
-              <input type="time" value={formData.handoverTime} onChange={(event) => updateField('handoverTime', event.target.value)} />
+              <input name="handoverTime" type="time" value={formData.handoverTime} onChange={(event) => updateField('handoverTime', event.target.value)} />
             </label>
             <label className="field evidence-note-field">
               <span>备注事项</span>
-              <textarea value={formData.notes} onChange={(event) => updateField('notes', event.target.value)} placeholder="如：房屋已完成基础清洁，钥匙和门禁卡齐全。" />
+              <textarea name="notes" value={formData.notes} onChange={(event) => updateField('notes', event.target.value)} placeholder="如：房屋已完成基础清洁，钥匙和门禁卡齐全。" />
             </label>
           </div>
         </section>

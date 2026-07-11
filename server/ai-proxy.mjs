@@ -15,6 +15,9 @@ dotenv.config()
 const app = express()
 const port = Number(process.env.PORT || process.env.AI_PROXY_PORT || 8787)
 const allowedOrigin = process.env.AI_PROXY_ALLOWED_ORIGIN || 'http://localhost:5173'
+const allowedOrigins = new Set(allowedOrigin.split(',').map((origin) => origin.trim()).filter(Boolean))
+const requireTrustedOrigin = process.env.AI_PROXY_REQUIRE_ORIGIN === 'true' || process.env.NODE_ENV === 'production'
+const accessToken = String(process.env.AI_PROXY_ACCESS_TOKEN || '').trim()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.join(__dirname, '..')
 const distDir = path.join(rootDir, 'dist')
@@ -22,6 +25,8 @@ const indexHtmlPath = path.join(distDir, 'index.html')
 const upstreamTimeoutMs = Math.max(5_000, Math.min(Number(process.env.AI_PROXY_TIMEOUT_MS) || 45_000, 120_000))
 const ocrTimeoutMs = Math.max(15_000, Math.min(Number(process.env.OCR_TIMEOUT_MS) || 90_000, 180_000))
 let ocrInFlight = false
+const rateWindowMs = 60_000
+const rateBuckets = new Map()
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
@@ -29,6 +34,55 @@ const upload = multer({
 
 app.use(cors({ origin: allowedOrigin }))
 app.use(express.json({ limit: '8mb' }))
+
+function rateLimit(scope, maxRequests) {
+  return (request, response, next) => {
+    const key = `${scope}:${request.ip || request.socket.remoteAddress || 'unknown'}`
+    const now = Date.now()
+    const current = rateBuckets.get(key)
+    const bucket = current && now - current.startedAt < rateWindowMs
+      ? current
+      : { startedAt: now, count: 0 }
+
+    bucket.count += 1
+    rateBuckets.set(key, bucket)
+
+    if (bucket.count > maxRequests) {
+      response.set('Retry-After', '60')
+      response.status(429).json({ message: '请求过于频繁，请稍后再试' })
+      return
+    }
+
+    if (rateBuckets.size > 2_000) {
+      for (const [bucketKey, entry] of rateBuckets) {
+        if (now - entry.startedAt >= rateWindowMs) rateBuckets.delete(bucketKey)
+      }
+    }
+
+    next()
+  }
+}
+
+function trustedApiRequest(request, response, next) {
+  if (!requireTrustedOrigin && !accessToken) {
+    next()
+    return
+  }
+
+  const token = String(request.get('x-ai-proxy-token') || '').trim()
+  if (accessToken && token === accessToken) {
+    next()
+    return
+  }
+
+  const origin = String(request.get('origin') || '').trim()
+  if (origin && allowedOrigins.has(origin)) {
+    next()
+    return
+  }
+
+  response.status(403).json({ message: '请求来源未被允许' })
+}
 
 const providerPresets = {
   'OpenAI-compatible': {
@@ -87,62 +141,8 @@ function buildChatCompletionsUrl(baseUrl) {
   return `${trimmed}/v1/chat/completions`
 }
 
-function buildModelsUrl(baseUrl) {
-  const trimmed = String(baseUrl || '').trim().replace(/\/$/, '')
-  if (!trimmed) return ''
-  if (trimmed.endsWith('/models')) return trimmed
-  if (trimmed.endsWith('/chat/completions')) return trimmed.replace(/\/chat\/completions$/, '/models')
-  if (/^https:\/\/api\.deepseek\.com\/?$/i.test(trimmed)) return `${trimmed}/models`
-  if (trimmed.endsWith('/v1')) return `${trimmed}/models`
-  return `${trimmed}/v1/models`
-}
-
-function buildModelsUrlCandidates(baseUrl) {
-  const trimmed = String(baseUrl || '').trim().replace(/\/$/, '')
-  if (!trimmed) return []
-
-  const candidates = new Set()
-
-  if (trimmed.endsWith('/models')) {
-    candidates.add(trimmed)
-  }
-
-  if (trimmed.endsWith('/chat/completions')) {
-    candidates.add(trimmed.replace(/\/chat\/completions$/, '/models'))
-    candidates.add(trimmed.replace(/\/chat\/completions$/, '/v1/models'))
-  }
-
-  if (trimmed.endsWith('/v1')) {
-    candidates.add(`${trimmed}/models`)
-  } else {
-    candidates.add(`${trimmed}/models`)
-    candidates.add(`${trimmed}/v1/models`)
-  }
-
-  if (/^https:\/\/api\.deepseek\.com\/?$/i.test(trimmed)) {
-    candidates.add(`${trimmed}/models`)
-    candidates.add(`${trimmed}/v1/models`)
-  }
-
-  return [...candidates]
-}
-
 function readFirstEnv(keys) {
   return keys.map((key) => process.env[key]).find(Boolean) || ''
-}
-
-function normalizeModelList(data) {
-  const rawModels = Array.isArray(data?.data) ? data.data : Array.isArray(data?.models) ? data.models : []
-
-  return Array.from(
-    new Set(
-      rawModels
-        .map((item) => (typeof item === 'string' ? item : item?.id || item?.name || item?.model))
-        .filter(Boolean)
-        .map((model) => String(model).trim())
-        .filter(Boolean),
-    ),
-  ).sort((a, b) => a.localeCompare(b))
 }
 
 async function prepareTesseractLangPath() {
@@ -193,11 +193,10 @@ function resolveProviderConfig({ provider, baseUrl, model } = {}) {
   const selectedProvider = provider || process.env.AI_PROXY_PROVIDER || (process.env.DEEPSEEK_API_KEY ? 'DeepSeek' : 'OpenAI-compatible')
   const preset = providerPresets[selectedProvider] || null
   const allowCustom = process.env.AI_PROXY_ALLOW_CUSTOM_UPSTREAM === 'true'
-  const allowClientBaseUrl = process.env.AI_PROXY_ALLOW_CLIENT_BASE_URL === 'true'
 
   if (preset) {
     return {
-      endpoint: buildChatCompletionsUrl((allowClientBaseUrl ? baseUrl : '') || process.env.AI_PROXY_BASE_URL || preset.baseUrl),
+      endpoint: buildChatCompletionsUrl(process.env.AI_PROXY_BASE_URL || preset.baseUrl),
       apiKey: readFirstEnv(preset.keyEnv),
       model: model || process.env.AI_PROXY_MODEL || preset.defaultModel,
       provider: selectedProvider,
@@ -244,21 +243,21 @@ function sendRagSearchResponse(response, { query, limit }) {
   })
 }
 
-app.get('/api/rag/search', (request, response) => {
+app.get('/api/rag/search', trustedApiRequest, rateLimit('rag', 60), (request, response) => {
   sendRagSearchResponse(response, {
     query: String(request.query.q || ''),
     limit: Number(request.query.limit || 5),
   })
 })
 
-app.post('/api/rag/search', (request, response) => {
+app.post('/api/rag/search', trustedApiRequest, rateLimit('rag', 60), (request, response) => {
   sendRagSearchResponse(response, {
     query: String(request.body?.query || request.body?.q || ''),
     limit: Number(request.body?.limit || 5),
   })
 })
 
-app.get('/api/rag/evaluate', (request, response) => {
+app.get('/api/rag/evaluate', trustedApiRequest, rateLimit('rag-evaluate', 10), (request, response) => {
   const limit = Number(request.query.limit || 5)
   const results = evaluateKnowledgeRetrieval(aiEvalCases, limit)
   const passed = results.filter((item) => item.passed).length
@@ -273,81 +272,7 @@ app.get('/api/rag/evaluate', (request, response) => {
   })
 })
 
-app.post('/api/ai/models', async (request, response) => {
-  const { provider, baseUrl, apiKey } = request.body || {}
-  const preset = providerPresets[provider] || null
-  const allowClientBaseUrl = process.env.AI_PROXY_ALLOW_CLIENT_BASE_URL === 'true'
-  const allowBrowserKeyForLocal = process.env.AI_PROXY_ALLOW_BROWSER_KEY_MODEL_LIST !== 'false'
-  const effectiveBaseUrl = (allowClientBaseUrl ? baseUrl : '') || process.env.AI_PROXY_BASE_URL || preset?.baseUrl || baseUrl || ''
-  const endpoints = buildModelsUrlCandidates(effectiveBaseUrl)
-  const keyFromServer = preset ? readFirstEnv(preset.keyEnv) : process.env.AI_PROXY_API_KEY || ''
-  const effectiveApiKey = keyFromServer || (allowBrowserKeyForLocal ? String(apiKey || '').trim() : '')
-
-  if (!endpoints.length) {
-    response.status(400).json({ message: 'Base URL is required before fetching models' })
-    return
-  }
-
-  if (!effectiveApiKey) {
-    response.status(401).json({ message: 'API Key is required to fetch model list' })
-    return
-  }
-
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 12_000)
-
-  try {
-    let lastError = null
-
-    for (const endpoint of endpoints) {
-      const upstreamResponse = await fetch(endpoint, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${effectiveApiKey}`,
-          Accept: 'application/json',
-        },
-      })
-      const data = await upstreamResponse.json().catch(() => ({}))
-
-      if (upstreamResponse.ok) {
-        const models = normalizeModelList(data)
-
-        response.json({
-          ok: true,
-          provider: provider || 'custom',
-          endpoint,
-          models,
-          source: keyFromServer ? 'server-key' : 'browser-key',
-        })
-        return
-      }
-
-      lastError = {
-        status: upstreamResponse.status,
-        message: data?.error?.message || data?.message || `Fetch models failed: HTTP ${upstreamResponse.status}`,
-      }
-
-      if (upstreamResponse.status !== 404) {
-        response.status(upstreamResponse.status).json({ message: lastError.message })
-        return
-      }
-    }
-
-    response.status(lastError?.status || 404).json({
-      message: lastError?.message || 'Fetch models failed: HTTP 404',
-      tried: endpoints,
-    })
-  } catch (error) {
-    response.status(error.name === 'AbortError' ? 504 : 502).json({
-      message: error.name === 'AbortError' ? 'Fetch models timed out' : error.message || 'Fetch models failed',
-    })
-  } finally {
-    clearTimeout(timeout)
-  }
-})
-
-app.post('/api/ocr/image', upload.single('image'), async (request, response) => {
+app.post('/api/ocr/image', trustedApiRequest, rateLimit('ocr', 6), upload.single('image'), async (request, response) => {
   if (!request.file) {
     response.status(400).json({ message: 'image file is required' })
     return
@@ -383,7 +308,7 @@ app.post('/api/ocr/image', upload.single('image'), async (request, response) => 
   }
 })
 
-app.post('/api/ai/chat', async (request, response) => {
+app.post('/api/ai/chat', trustedApiRequest, rateLimit('chat', 20), async (request, response) => {
   const { provider, baseUrl, model, messages, temperature = 0.2, maxTokens = 2200 } = request.body || {}
   const config = resolveProviderConfig({ provider, baseUrl, model })
 
@@ -402,6 +327,26 @@ app.post('/api/ai/chat', async (request, response) => {
     return
   }
 
+  const rawMessageChars = messages.reduce((total, message) => total + String(message?.content || '').length, 0)
+  if (rawMessageChars > 80_000) {
+    response.status(413).json({ message: 'AI 请求内容过长，请缩短合同或对话内容后重试' })
+    return
+  }
+
+  const normalizedMessages = messages.slice(-16).map((message) => ({
+    role: ['system', 'user', 'assistant'].includes(message?.role) ? message.role : 'user',
+    content: String(message?.content || '').slice(0, 12_000),
+  }))
+  const totalMessageChars = normalizedMessages.reduce((total, message) => total + message.content.length, 0)
+
+  if (!normalizedMessages.every((message) => message.content.trim()) || totalMessageChars > 80_000) {
+    response.status(413).json({ message: 'AI 请求内容过长，请缩短合同或对话内容后重试' })
+    return
+  }
+
+  const safeTemperature = Math.max(0, Math.min(Number(temperature) || 0.2, 1))
+  const safeMaxTokens = Math.max(256, Math.min(Number(maxTokens) || 2200, 4000))
+
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), upstreamTimeoutMs)
 
@@ -415,9 +360,9 @@ app.post('/api/ai/chat', async (request, response) => {
       },
       body: JSON.stringify({
         model: config.model,
-        temperature,
-        max_tokens: Math.min(Number(maxTokens) || 2200, 4000),
-        messages,
+        temperature: safeTemperature,
+        max_tokens: safeMaxTokens,
+        messages: normalizedMessages,
       }),
     })
 

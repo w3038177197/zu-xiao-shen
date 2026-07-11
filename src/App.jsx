@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   BadgeCheck,
   Download,
@@ -11,6 +11,7 @@ import { OCR_REVIEW_WARNING_CONFIDENCE } from './constants/checkinConfig.js'
 import { defaultDepositInputs, providerPresets } from './constants/aiConfig.js'
 import { knowledgeBaseItems } from './data/knowledgeBase.js'
 import { calculateDepositReturn } from './utils/money.js'
+import { redactSensitiveText } from './utils/privacy.js'
 import AiAssistantPanel from './components/AiAssistantPanel.jsx'
 import AnnouncementStrip from './components/AnnouncementStrip.jsx'
 import AppSidebar from './components/AppSidebar.jsx'
@@ -56,6 +57,7 @@ import {
 } from './features/contractReview.js'
 
 const BUSINESS_CONTEXT_TABS = new Set(['review', 'evidence', 'checkin', 'subsidy'])
+const MAX_REVIEW_CHARS = 200_000
 
 function loadReviewHistory() {
   try {
@@ -144,7 +146,8 @@ function App() {
     reviewDepth: 'strict',
   })
   const [depositInputs, setDepositInputs] = useState(defaultDepositInputs)
-  const reviewText = useMemo(() => cleanContractTextForReview(contractText), [contractText])
+  const deferredContractText = useDeferredValue(contractText)
+  const reviewText = useMemo(() => cleanContractTextForReview(deferredContractText), [deferredContractText])
   const effectiveReviewProfile = useMemo(
     () => resolveReviewProfile(reviewProfile, reviewText),
     [reviewProfile, reviewText],
@@ -341,6 +344,25 @@ function App() {
     const closeOnEscape = (event) => {
       if (event.key === 'Escape') {
         setShowGuide(false)
+        return
+      }
+
+      if (event.key === 'Tab') {
+        const modal = document.querySelector('.guide-modal')
+        const focusable = modal
+          ? [...modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+          : []
+        if (!focusable.length) return
+
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last.focus()
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first.focus()
+        }
       }
     }
 
@@ -492,9 +514,9 @@ function App() {
       )
       setAiKnowledgeHits(ragItems)
 
-      const systemContext = buildSystemAiContext({
+      const systemContext = redactSensitiveText(buildSystemAiContext({
         activeTab: aiContextTab,
-        reviewText,
+        reviewText: redactSensitiveText(reviewText),
         effectiveReviewProfile,
         findings,
         summary,
@@ -503,7 +525,7 @@ function App() {
         depositInputs,
         depositResult,
         reviewHistory,
-      })
+      }))
       const response = await callAiModel(
         [
           {
@@ -521,11 +543,11 @@ function App() {
           },
           {
             role: 'system',
-            content: buildRagContextPrompt(ragItems),
+            content: redactSensitiveText(buildRagContextPrompt(ragItems)),
           },
           ...nextMessages.slice(-12).map((message) => ({
             role: message.role,
-            content: message.content,
+            content: redactSensitiveText(message.content),
           })),
         ],
         { temperature: 0.2, maxTokens: 1200 },
@@ -620,11 +642,12 @@ function App() {
     setStatusMessage('正在检索知识库并调用平台 AI 模型审查合同')
 
     try {
+      const aiReviewText = redactSensitiveText(trimmedText)
       const ragItems = await searchAiKnowledge(
         buildRagSearchQuery({
           prompt: '租房合同审查 押金 维修 涨租 解除 违约 入户 管辖',
           activeTab: 'review',
-          reviewText: trimmedText,
+          reviewText: aiReviewText,
           findings: localFindings,
         }),
         6,
@@ -640,15 +663,15 @@ function App() {
             content:
               '你是严谨的租房合同解读助手，擅长识别押金、涨租、维修、入户、解除、违约金和管辖风险。必须只返回合法 JSON，且证据必须来自原文。',
           },
-          { role: 'user', content: createAiReviewPrompt(trimmedText, effectiveReviewProfile, ragItems) },
+          { role: 'user', content: createAiReviewPrompt(aiReviewText, effectiveReviewProfile, ragItems) },
         ],
         { signal: controller.signal },
       )
       if (reviewRequestIdRef.current !== requestId) return
 
       const parsed = parseAiContent(extractAssistantContent(data))
-      const nextFindings = normalizeAiFindings(parsed, trimmedText)
-      const qualityReport = buildAiQualityReport(parsed, trimmedText, nextFindings)
+      const nextFindings = normalizeAiFindings(parsed, aiReviewText)
+      const qualityReport = buildAiQualityReport(parsed, aiReviewText, nextFindings)
 
       setAiFindings(nextFindings)
       setAiQualityReport(qualityReport)
@@ -675,8 +698,10 @@ function App() {
 
   const replaceContractText = (nextText, options = {}) => {
     const canceledReview = cancelPendingReview()
+    const rawText = String(nextText || '')
+    const boundedText = rawText.slice(0, MAX_REVIEW_CHARS)
     setFindingListMinHeight(0)
-    setContractText(nextText)
+    setContractText(boundedText)
     setAcceptedIds(new Set())
     setAcceptedRevisionItems([])
     setAiFindings(null)
@@ -688,7 +713,9 @@ function App() {
       setImportedContractMeta(null)
     }
 
-    if (options.statusMessage) {
+    if (boundedText.length < rawText.length) {
+      setStatusMessage(`合同正文过长，已保留前 ${MAX_REVIEW_CHARS.toLocaleString('zh-CN')} 字`)
+    } else if (options.statusMessage) {
       setStatusMessage(options.statusMessage)
     } else if (canceledReview) {
       setStatusMessage('合同内容已变化，已取消上一轮 AI 审查')
@@ -793,6 +820,8 @@ function App() {
       setStatusMessage('当前没有可清空的审查历史')
       return
     }
+
+    if (!window.confirm('确定清空最近 5 次审查记录吗？清空后无法恢复。')) return
 
     setReviewHistory([])
 

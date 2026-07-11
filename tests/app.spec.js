@@ -89,6 +89,16 @@ test('home shows the current product overview and guide modal', async ({ page })
   await expect(guide).toHaveCount(0)
 })
 
+test('mobile modules stay within the viewport width', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+
+  for (const label of ['首页', '补贴匹配', '租房审查', '入住验房', '退租证据包', 'AI 助手']) {
+    await page.locator('.nav-list').getByRole('button', { name: label, exact: true }).click()
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  }
+})
+
 test('app remains usable when browser storage is unavailable', async ({ page }) => {
   await page.addInitScript(() => {
     for (const method of ['getItem', 'setItem', 'removeItem']) {
@@ -261,6 +271,32 @@ test('editing a contract cancels stale ai review results', async ({ page }) => {
   await expect(page.getByText('旧合同 AI 风险')).toHaveCount(0)
 })
 
+test('external ai payload redacts common personal identifiers', async ({ page }) => {
+  let capturedBody = ''
+  await page.route('**/api/rag/search', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, items: [] }) })
+  })
+  await page.route('**/api/ai/chat', async (route) => {
+    capturedBody = route.request().postData() || ''
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ risks: [] }) } }] }),
+    })
+  })
+
+  await page.goto('/')
+  await page.locator('.nav-list').getByRole('button', { name: '租房审查', exact: true }).click()
+  await page.getByRole('textbox', { name: /在这里粘贴租房合同正文/ }).fill('联系人：13812345678，身份证号：110101199001011234，邮箱 test@example.com。')
+  await page.getByRole('button', { name: '开始审查' }).click()
+  await expect(page.getByRole('button', { name: '开始审查' })).toBeEnabled({ timeout: 20_000 })
+
+  expect(capturedBody).not.toContain('13812345678')
+  expect(capturedBody).not.toContain('110101199001011234')
+  expect(capturedBody).not.toContain('test@example.com')
+  expect(capturedBody).toContain('手机号已脱敏')
+})
+
 test('dirty shared-rental clauses surface pet sublet decoration and deposit risks', async ({ page }) => {
   await page.route('**/api/ai/chat', async (route) => {
     await route.fulfill({
@@ -375,7 +411,7 @@ test('checkin inspection generates a targeted move-in report with photos', async
   await page.locator('.nav-list').getByRole('button', { name: '入住验房', exact: true }).click()
   await expect(page.locator('.checkin-inspection').getByRole('heading', { name: /入住当天先验房/ })).toBeVisible()
 
-  await page.locator('.checkin-room-tabs').getByRole('button', { name: /水电燃气/ }).click()
+  await page.locator('.checkin-room-tabs').getByRole('tab', { name: /水电燃气/ }).click()
   const meterItem = page.locator('.checkin-item').filter({ hasText: '水电燃气' })
   await meterItem.getByRole('button', { name: '有瑕疵' }).click()
   await expect(meterItem.getByPlaceholder(/水表读数、电表读数/)).toBeVisible()
@@ -390,6 +426,11 @@ test('checkin inspection generates a targeted move-in report with photos', async
   })
   await expect(page.getByText(/已上传 1 张水电燃气-水电燃气照片/)).toBeVisible()
   await expect(meterItem.locator('.checkin-inline-photos figure')).toHaveCount(1)
+
+  await page.reload()
+  await page.locator('.nav-list').getByRole('button', { name: '入住验房', exact: true }).click()
+  await page.locator('.checkin-room-tabs').getByRole('tab', { name: /水电燃气/ }).click()
+  await expect(page.locator('.checkin-item').filter({ hasText: '水电燃气' }).locator('.checkin-inline-photos figure')).toHaveCount(1)
 
   await page.getByRole('button', { name: /生成验房报告/ }).first().click()
 

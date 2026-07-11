@@ -62,7 +62,7 @@ export default function SubsidyMatcher({ onStatus }) {
         <div className="config-grid">
           <label className="field">
             <span>城市</span>
-            <select value={city} onChange={(event) => setCity(event.target.value)}>
+            <select name="subsidyCity" value={city} onChange={(event) => setCity(event.target.value)}>
               {subsidyCities.map((item) => (
                 <option key={item} value={item}>
                   {item}
@@ -72,7 +72,7 @@ export default function SubsidyMatcher({ onStatus }) {
           </label>
           <label className="field subsidy-profile-field">
             <span>个人情况</span>
-            <textarea value={profile} onChange={(event) => setProfile(event.target.value)} />
+            <textarea name="subsidyProfile" value={profile} onChange={(event) => setProfile(event.target.value)} />
           </label>
         </div>
       </section>

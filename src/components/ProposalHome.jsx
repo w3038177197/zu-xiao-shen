@@ -151,6 +151,8 @@ export default function ProposalHome({
                 <label>
                   <span>押金金额</span>
                   <input
+                    name="depositAmount"
+                    type="number"
                     inputMode="decimal"
                     value={depositInputs.depositAmount}
                     onChange={(event) => onDepositInputChange('depositAmount', event.target.value)}
@@ -159,6 +161,8 @@ export default function ProposalHome({
                 <label>
                   <span>未结清费用</span>
                   <input
+                    name="unpaidFees"
+                    type="number"
                     inputMode="decimal"
                     value={depositInputs.unpaidFees}
                     onChange={(event) => onDepositInputChange('unpaidFees', event.target.value)}
@@ -167,6 +171,8 @@ export default function ProposalHome({
                 <label>
                   <span>维修扣款</span>
                   <input
+                    name="repairCost"
+                    type="number"
                     inputMode="decimal"
                     value={depositInputs.repairCost}
                     onChange={(event) => onDepositInputChange('repairCost', event.target.value)}
@@ -175,6 +181,8 @@ export default function ProposalHome({
                 <label>
                   <span>保洁扣款</span>
                   <input
+                    name="cleaningCost"
+                    type="number"
                     inputMode="decimal"
                     value={depositInputs.cleaningCost}
                     onChange={(event) => onDepositInputChange('cleaningCost', event.target.value)}
@@ -182,14 +190,14 @@ export default function ProposalHome({
                 </label>
                 <label>
                   <span>是否有票据</span>
-                  <select value={depositInputs.hasVoucher} onChange={(event) => onDepositInputChange('hasVoucher', event.target.value)}>
+                  <select name="hasVoucher" value={depositInputs.hasVoucher} onChange={(event) => onDepositInputChange('hasVoucher', event.target.value)}>
                     <option value="no">无票据或清单</option>
                     <option value="yes">有照片、清单和票据</option>
                   </select>
                 </label>
                 <label>
                   <span>是否正常损耗</span>
-                  <select value={depositInputs.normalWear} onChange={(event) => onDepositInputChange('normalWear', event.target.value)}>
+                  <select name="normalWear" value={depositInputs.normalWear} onChange={(event) => onDepositInputChange('normalWear', event.target.value)}>
                     <option value="yes">是，仅正常使用损耗</option>
                     <option value="no">否，存在非正常损坏</option>
                   </select>

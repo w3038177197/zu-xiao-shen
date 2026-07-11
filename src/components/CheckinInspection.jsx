@@ -17,7 +17,9 @@ import {
   getCheckinStats,
   loadCheckinInspectionState,
   normalizeCheckinRecord,
+  serializeCheckinInspectionState,
 } from '../features/checkinInspection.js'
+import { clearCheckinPhotos, deleteCheckinPhoto, loadCheckinPhoto, saveCheckinPhoto } from '../utils/checkinPhotoStore.js'
 
 export default function CheckinInspection({ onStatus }) {
   const [roomType, setRoomType] = useState('studio')
@@ -33,11 +35,41 @@ export default function CheckinInspection({ onStatus }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEYS.checkinInspection, JSON.stringify(checkinData))
+      localStorage.setItem(STORAGE_KEYS.checkinInspection, JSON.stringify(serializeCheckinInspectionState(checkinData)))
     } catch {
       onStatus('验房照片较多，本地保存空间不足，请删除部分照片后再继续')
     }
   }, [checkinData, onStatus])
+
+  useEffect(() => {
+    let cancelled = false
+    const hydratePhotos = async () => {
+      const pending = []
+      checkinRooms.forEach((room) => {
+        checkinItems.forEach((item) => {
+          checkinData[room.key]?.[item.key]?.photos?.forEach((photo) => {
+            if (photo.storageId && !photo.url) pending.push({ roomKey: room.key, itemKey: item.key, photo })
+          })
+        })
+      })
+      if (!pending.length) return
+      const loaded = await Promise.all(pending.map(async (entry) => ({
+        ...entry,
+        url: await loadCheckinPhoto(entry.photo.storageId).catch(() => ''),
+      })))
+      if (cancelled) return
+      setCheckinData((current) => {
+        const next = structuredClone(current)
+        loaded.forEach(({ roomKey, itemKey, photo, url }) => {
+          const target = next[roomKey]?.[itemKey]?.photos?.find((item) => item.id === photo.id)
+          if (target && url) target.url = url
+        })
+        return next
+      })
+    }
+    hydratePhotos()
+    return () => { cancelled = true }
+  }, [checkinData])
 
   const updateRecord = (roomKey, itemKey, patch) => {
     setCheckinData((current) => ({
@@ -75,15 +107,15 @@ export default function CheckinInspection({ onStatus }) {
     try {
       const { compressImageToDataUrl } = await import('../utils/imageTools.js')
       const photos = await Promise.all(
-        filesToRead.map(async (file) => ({
-          id: `${Date.now()}-${file.name}-${Math.random().toString(16).slice(2)}`,
-          name: file.name,
-          url: await compressImageToDataUrl(file, {
+        filesToRead.map(async (file) => {
+          const id = `${Date.now()}-${file.name}-${Math.random().toString(16).slice(2)}`
+          const url = await compressImageToDataUrl(file, {
             maxEdge: CHECKIN_PHOTO_MAX_EDGE,
             quality: CHECKIN_PHOTO_QUALITY,
-          }),
-          createdAt: new Date().toLocaleString(),
-        })),
+          })
+          await saveCheckinPhoto(id, url)
+          return { id, storageId: id, name: file.name, url, createdAt: new Date().toLocaleString() }
+        }),
       )
 
       setCheckinData((current) => {
@@ -114,6 +146,8 @@ export default function CheckinInspection({ onStatus }) {
 
   const removeCheckinPhoto = (roomKey, itemKey, photoId) => {
     const currentPhotos = checkinData[roomKey]?.[itemKey]?.photos || []
+    const target = currentPhotos.find((photo) => photo.id === photoId)
+    if (target?.storageId) deleteCheckinPhoto(target.storageId).catch(() => {})
     updateRecord(roomKey, itemKey, {
       photos: currentPhotos.filter((photo) => photo.id !== photoId),
     })
@@ -121,7 +155,9 @@ export default function CheckinInspection({ onStatus }) {
   }
 
   const resetCheckin = () => {
+    if (!window.confirm('确定重置全部入住验房记录和照片吗？此操作无法撤销。')) return
     setCheckinData(createDefaultCheckinState())
+    clearCheckinPhotos().catch(() => {})
     setReport('')
     onStatus('入住验房记录已重置')
   }
@@ -227,7 +263,7 @@ export default function CheckinInspection({ onStatus }) {
           {checkinRooms.map((room) => {
             const defectCount = checkinItems.filter((item) => checkinData[room.key][item.key].status === 'defect').length
             return (
-              <button className={activeRoom === room.key ? 'active' : ''} key={room.key} type="button" onClick={() => setActiveRoom(room.key)}>
+              <button aria-selected={activeRoom === room.key} role="tab" className={activeRoom === room.key ? 'active' : ''} key={room.key} type="button" onClick={() => setActiveRoom(room.key)}>
                 {room.label}
                 {defectCount > 0 && <em>{defectCount}</em>}
               </button>
@@ -262,6 +298,7 @@ export default function CheckinInspection({ onStatus }) {
                 </div>
                 <div className="checkin-detail-cell">
                   <input
+                    name={`${activeRoom}-${item.key}-note`}
                     value={inputValue}
                     onChange={(event) =>
                       updateRecord(activeRoom, item.key, record.status === 'defect' ? { defect: event.target.value } : { note: event.target.value })
@@ -283,6 +320,7 @@ export default function CheckinInspection({ onStatus }) {
                       <input
                         accept="image/*"
                         multiple
+                        name={`${activeRoom}-${item.key}-photos`}
                         type="file"
                         onChange={(event) => {
                           uploadCheckinPhotos(activeRoom, item, event.target.files)
@@ -296,7 +334,7 @@ export default function CheckinInspection({ onStatus }) {
                     <div className="checkin-inline-photos" aria-label={`${activeRoomLabel}-${item.label}照片`}>
                       {record.photos.map((photo, index) => (
                         <figure key={photo.id}>
-                          <img alt={`${activeRoomLabel}${item.label}验房照片${index + 1}`} src={photo.url} />
+                          <img alt={`${activeRoomLabel}${item.label}验房照片${index + 1}`} height="120" loading="lazy" src={photo.url} width="160" />
                           <figcaption>
                             <strong>照片 {index + 1}</strong>
                             <span>{photo.createdAt || photo.name}</span>

@@ -48,6 +48,7 @@ export default function ReviewInputPanel({
           accept=".txt,.md,.docx,.pdf,image/*"
           aria-label="上传合同"
           disabled={isImportingContract}
+          name="contractFile"
           onChange={handleContractFileChange}
           type="file"
         />
@@ -105,10 +106,14 @@ export default function ReviewInputPanel({
         </div>
       )}
 
+      <p className="privacy-note" role="note">
+        开始 AI 审查时，合同中的手机号、身份证号、银行卡号和邮箱会先脱敏；仍建议删除与审查无关的个人信息。
+      </p>
+
       <div className="review-profile" aria-label="租房合同审查画像">
         <label>
           <span>合同类型</span>
-          <select value={reviewProfile.contractType} onChange={(event) => updateReviewProfile('contractType', event.target.value)}>
+          <select name="contractType" value={reviewProfile.contractType} onChange={(event) => updateReviewProfile('contractType', event.target.value)}>
             {contractTypeOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -118,7 +123,7 @@ export default function ReviewInputPanel({
         </label>
         <label>
           <span>我方身份</span>
-          <select value={reviewProfile.partyRole} onChange={(event) => updateReviewProfile('partyRole', event.target.value)}>
+          <select name="partyRole" value={reviewProfile.partyRole} onChange={(event) => updateReviewProfile('partyRole', event.target.value)}>
             {partyRoleOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -128,7 +133,7 @@ export default function ReviewInputPanel({
         </label>
         <label>
           <span>审查强度</span>
-          <select value={reviewProfile.reviewDepth} onChange={(event) => updateReviewProfile('reviewDepth', event.target.value)}>
+          <select name="reviewDepth" value={reviewProfile.reviewDepth} onChange={(event) => updateReviewProfile('reviewDepth', event.target.value)}>
             {reviewDepthOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -154,7 +159,7 @@ export default function ReviewInputPanel({
         <div className="demo-contract-controls">
           <label>
             <span>模板</span>
-            <select value={selectedDemoContractId} onChange={(event) => setSelectedDemoContractId(event.target.value)}>
+            <select name="demoContract" value={selectedDemoContractId} onChange={(event) => setSelectedDemoContractId(event.target.value)}>
               {demoContracts.map((contract) => (
                 <option key={contract.id} value={contract.id}>
                   {contract.title}
@@ -183,13 +188,21 @@ export default function ReviewInputPanel({
       </div>
 
       <textarea
+        name="contractText"
+        spellCheck="false"
         value={contractText}
         onChange={(event) => handleContractTextChange(event.target.value)}
         placeholder="在这里粘贴租房合同正文，系统会自动识别押金、涨租、维修、解除等风险条款..."
       />
 
       <div className="input-actions">
-        <button className="ghost-button" type="button" onClick={() => resetContractText('')}>
+        <button
+          className="ghost-button"
+          type="button"
+          onClick={() => {
+            if (window.confirm('确定清空当前合同正文吗？未导出的修改将丢失。')) resetContractText('')
+          }}
+        >
           清空
         </button>
         <button className="primary-button" type="button" onClick={startReview} disabled={isReviewing}>

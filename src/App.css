@@ -1258,6 +1258,16 @@ a {
   gap: 14px;
 }
 
+.privacy-note {
+  margin: 10px 0 14px;
+  padding: 9px 12px;
+  border-left: 3px solid var(--green);
+  color: var(--muted-ink);
+  background: rgba(8, 211, 108, 0.08);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .ai-chat-header .ai-config-title h2 {
   margin-top: 0;
   font-size: 18px;
@@ -1453,6 +1463,8 @@ a {
   display: grid;
   grid-template-columns: minmax(380px, 0.92fr) minmax(440px, 1.08fr);
   gap: 0;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line-strong);
   background: rgba(255,253,247,0.58);
 }
@@ -1461,6 +1473,7 @@ a {
   border: 0;
   border-radius: 0;
   background: transparent;
+  min-width: 0;
 }
 
 .review-layout > .work-panel + .work-panel {
@@ -5216,7 +5229,7 @@ textarea:focus-visible {
   .checkin-report-grid,
   .policy-layout,
   .evidence-hero {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .input-panel {
@@ -5429,6 +5442,22 @@ textarea:focus-visible {
   .ai-config-status {
     width: 100%;
     flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .ai-chat-header {
+    flex-direction: column;
+  }
+
+  .ai-config-title,
+  .ai-config-status,
+  .model-status {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .model-status {
+    white-space: normal;
   }
 
   .runtime-mode-switch {
@@ -5480,6 +5509,12 @@ textarea:focus-visible {
   .business-grid,
   .evidence-action-list {
     grid-template-columns: 1fr;
+  }
+
+  .review-profile,
+  .review-scope,
+  .dimension-panel {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .competitor-row {
