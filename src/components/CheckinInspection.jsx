@@ -27,11 +27,18 @@ export default function CheckinInspection({ onStatus }) {
   const [checkinData, setCheckinData] = useState(() => loadCheckinInspectionState())
   const [report, setReport] = useState('')
   const [isExportingCheckinDocx, setIsExportingCheckinDocx] = useState(false)
+  const [storageUsage, setStorageUsage] = useState(null)
 
   const stats = useMemo(() => getCheckinStats(checkinData), [checkinData])
   const defectRows = useMemo(() => getCheckinDefectRows(checkinData), [checkinData])
   const selectedRoomType = checkinRoomTypes.find((item) => item.value === roomType)?.label || '租住房屋'
   const activeRoomLabel = checkinRooms.find((room) => room.key === activeRoom)?.label || '当前房间'
+
+  useEffect(() => {
+    navigator.storage?.estimate?.().then(({ usage = 0, quota = 0 }) => {
+      setStorageUsage({ usage, quota })
+    }).catch(() => {})
+  }, [checkinData])
 
   useEffect(() => {
     try {
@@ -224,6 +231,7 @@ export default function CheckinInspection({ onStatus }) {
               {isExportingCheckinDocx ? '正在生成 Word' : '导出 Word 报告'}
             </button>
           </div>
+          {storageUsage && <p className="storage-usage" role="status">本地图片空间：{(storageUsage.usage / 1024 / 1024).toFixed(1)} MB / {(storageUsage.quota / 1024 / 1024).toFixed(0)} MB</p>}
         </div>
         <div className={`evidence-score ${stats.percent >= 80 ? 'safe' : stats.percent >= 50 ? 'warning' : 'danger'}`}>
           <strong>{stats.percent}%</strong>

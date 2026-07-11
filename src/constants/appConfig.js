@@ -7,6 +7,8 @@ export const STORAGE_KEYS = {
   evidencePack: 'rental-safe-evidence-pack',
   checkinInspection: 'rental-safe-checkin-inspection',
   subsidyMatcher: 'rental-safe-subsidy-matcher',
+  localOnlyMode: 'rental-safe-local-only-mode',
+  accountId: 'rental-safe-account-id',
 }
 
 export const workflowLabels = {

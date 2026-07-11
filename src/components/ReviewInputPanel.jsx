@@ -13,8 +13,15 @@ export default function ReviewInputPanel({
   importedContractMeta,
   importedIsOcr,
   importedNeedsManualCheck,
+  importError,
   isImportingContract,
+  importStage,
+  localOnlyMode,
+  onCancelImport,
+  onCancelReview,
+  onRetryImport,
   isReviewing,
+  reviewStage,
   loadDemoContract,
   onClearImportMeta,
   resetContractText,
@@ -105,6 +112,18 @@ export default function ReviewInputPanel({
           </div>
         </div>
       )}
+
+      <div className="privacy-mode-row">
+        <span className={localOnlyMode ? 'privacy-badge active' : 'privacy-badge'}>{localOnlyMode ? '仅本地分析已开启' : '远端 AI 可用'}</span>
+        <small>{localOnlyMode ? '规则审查和图片 OCR 均在当前设备完成。' : '发送前会自动脱敏敏感信息。'}</small>
+        {(isImportingContract || isReviewing) && (
+          <button className="ghost-button compact-button" type="button" onClick={isImportingContract ? onCancelImport : onCancelReview}>
+            取消{isImportingContract ? '导入' : '审查'}
+          </button>
+        )}
+        {importError && !isImportingContract && <button className="ghost-button compact-button" type="button" onClick={onRetryImport}>重试导入</button>}
+      </div>
+      {(isImportingContract || isReviewing) && <div className="request-progress" role="status"><span>阶段：{isImportingContract ? importStage : reviewStage === 'rag' ? '检索知识库' : reviewStage === 'model' ? 'AI 模型分析' : '本地规则分析'}</span><progress max="3" value={isImportingContract ? 1 : reviewStage === 'rag' ? 1 : reviewStage === 'model' ? 2 : 3} /></div>}
 
       <p className="privacy-note" role="note">
         开始 AI 审查时，合同中的手机号、身份证号、银行卡号和邮箱会先脱敏；仍建议删除与审查无关的个人信息。

@@ -3467,6 +3467,11 @@ textarea:focus-visible {
   gap: 14px;
 }
 
+.checkin-inspection > *,
+.checkin-inspection .work-panel {
+  min-width: 0;
+}
+
 .checkin-hero {
   display: grid;
   grid-template-columns: minmax(0,1fr) minmax(190px,0.28fr);
@@ -3486,6 +3491,62 @@ textarea:focus-visible {
   font-weight: 600;
   line-height: 1.08;
 }
+
+.privacy-mode-row,
+.request-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.privacy-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted-ink);
+  font-size: 12px;
+}
+
+.privacy-badge.active {
+  border-color: rgba(8, 211, 108, 0.5);
+  background: rgba(8, 211, 108, 0.1);
+  color: var(--green-dark);
+}
+
+.request-progress {
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--muted-ink);
+  font-size: 12px;
+}
+
+.request-progress progress { width: 140px; accent-color: var(--green-dark); }
+
+.sidebar-data-tools {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 253, 247, 0.7);
+}
+
+.privacy-toggle { display: flex; gap: 8px; align-items: center; color: var(--ink); font-size: 13px; font-weight: 600; }
+.sidebar-data-tools small { color: var(--muted-ink); font-size: 11px; line-height: 1.5; }
+.sidebar-data-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.sidebar-data-actions button { border: 0; background: transparent; color: var(--green-dark); cursor: pointer; font-size: 11px; padding: 0; }
+.sidebar-data-actions button:last-child { color: #a54848; }
+.policy-freshness { margin-top: 10px; color: var(--muted-ink); font-size: 11px; line-height: 1.5; }
+.policy-freshness.stale { color: #9a4b2f; font-weight: 600; }
+.storage-usage { margin-top: 10px !important; font-size: 12px; }
 
 .checkin-hero p:not(.section-kicker) {
   max-width: 720px;
@@ -5282,6 +5343,11 @@ textarea:focus-visible {
     grid-template-columns: repeat(2, minmax(0,1fr));
   }
 
+}
+
+@media (max-width: 380px) {
+  .checkin-hero { grid-template-columns: 1fr; padding: 18px; }
+  .checkin-hero h2 { font-size: 26px; }
 }
 
 @media (max-width: 820px) {

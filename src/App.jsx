@@ -12,6 +12,7 @@ import { defaultDepositInputs, providerPresets } from './constants/aiConfig.js'
 import { knowledgeBaseItems } from './data/knowledgeBase.js'
 import { calculateDepositReturn } from './utils/money.js'
 import { redactSensitiveText } from './utils/privacy.js'
+import { clearCheckinPhotos, listCheckinPhotos } from './utils/checkinPhotoStore.js'
 import AiAssistantPanel from './components/AiAssistantPanel.jsx'
 import AnnouncementStrip from './components/AnnouncementStrip.jsx'
 import AppSidebar from './components/AppSidebar.jsx'
@@ -58,6 +59,32 @@ import {
 
 const BUSINESS_CONTEXT_TABS = new Set(['review', 'evidence', 'checkin', 'subsidy'])
 const MAX_REVIEW_CHARS = 200_000
+const VALID_TABS = new Set(['proposal', 'review', 'evidence', 'checkin', 'subsidy', 'ai'])
+
+function getInitialTab() {
+  try {
+    const value = new URLSearchParams(window.location.search).get('module') || window.location.hash.slice(1)
+    return VALID_TABS.has(value) ? value : 'proposal'
+  } catch {
+    return 'proposal'
+  }
+}
+
+function loadBoolean(key) {
+  try { return localStorage.getItem(key) === 'true' } catch { return false }
+}
+
+function getOrCreateAccountId() {
+  try {
+    const existing = localStorage.getItem(STORAGE_KEYS.accountId)
+    if (existing) return existing
+    const id = `guest-${crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`
+    localStorage.setItem(STORAGE_KEYS.accountId, id)
+    return id
+  } catch {
+    return 'guest-anonymous'
+  }
+}
 
 function loadReviewHistory() {
   try {
@@ -96,7 +123,7 @@ function loadAiFeedback() {
 function App() {
   const [contractText, setContractText] = useState(sampleContract)
   const [selectedDemoContractId, setSelectedDemoContractId] = useState(demoContracts[0].id)
-  const [activeTab, setActiveTab] = useState('proposal')
+  const [activeTab, setActiveTab] = useState(getInitialTab)
   const [lastBusinessTab, setLastBusinessTab] = useState('proposal')
   const [showGuide, setShowGuide] = useState(false)
   const evidenceRef = useRef(null)
@@ -112,6 +139,16 @@ function App() {
   const moduleTransitionTimerRef = useRef(null)
   const reviewRequestIdRef = useRef(0)
   const reviewAbortControllerRef = useRef(null)
+  const importAbortControllerRef = useRef(null)
+  const aiAbortControllerRef = useRef(null)
+  const lastAiPromptRef = useRef('')
+  const lastImportFileRef = useRef(null)
+  const [localOnlyMode, setLocalOnlyMode] = useState(() => loadBoolean(STORAGE_KEYS.localOnlyMode))
+  const [reviewStage, setReviewStage] = useState('idle')
+  const [importStage, setImportStage] = useState('idle')
+  const [aiStage, setAiStage] = useState('idle')
+  const [quota, setQuota] = useState(null)
+  const [importError, setImportError] = useState(false)
   const [acceptedIds, setAcceptedIds] = useState(() => new Set())
   const [acceptedRevisionItems, setAcceptedRevisionItems] = useState([])
   const [reviewHistory, setReviewHistory] = useState(loadReviewHistory)
@@ -180,6 +217,32 @@ function App() {
   const importedIsOcr = Boolean(importedContractMeta?.source === '图片 OCR' || importedContractMeta?.type?.includes('OCR'))
   const importedConfidence = Number(importedContractMeta?.confidence || 0)
   const importedNeedsManualCheck = importedIsOcr && importedConfidence < OCR_REVIEW_WARNING_CONFIDENCE
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEYS.localOnlyMode, String(localOnlyMode)) } catch { /* optional */ }
+  }, [localOnlyMode])
+
+  useEffect(() => {
+    const syncUrl = () => {
+      const params = new URLSearchParams(window.location.search)
+      params.set('module', activeTab)
+      window.history.replaceState({ module: activeTab }, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`)
+    }
+    syncUrl()
+    const onPopState = () => setActiveTab(getInitialTab())
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [activeTab])
+
+  useEffect(() => {
+    const loadQuota = async () => {
+      try {
+        const response = await fetch('/api/ai/quota', { headers: { 'x-rental-safe-account': getOrCreateAccountId() } })
+        if (response.ok) setQuota(await response.json())
+      } catch { /* offline is handled by local fallback */ }
+    }
+    loadQuota()
+  }, [])
   const getStickyOffset = useCallback(() => ['.sidebar', '.announcement-strip'].reduce((total, selector) => {
     const element = document.querySelector(selector)
     if (!element) return total
@@ -480,8 +543,18 @@ function App() {
     reviewRequestIdRef.current += 1
     reviewAbortControllerRef.current?.abort()
     reviewAbortControllerRef.current = null
+    setReviewStage('idle')
     setIsReviewing(false)
     return true
+  }
+
+  const cancelAiChat = () => {
+    if (!aiSending) return
+    aiAbortControllerRef.current?.abort()
+    aiAbortControllerRef.current = null
+    setAiSending(false)
+    setAiStage('idle')
+    setStatusMessage('AI 对话已取消，可点击重试继续上一条问题')
   }
 
   const submitAiChat = async (rawPrompt) => {
@@ -498,12 +571,15 @@ function App() {
     ])
     setAiDraft('')
     setAiSending(true)
+    setAiStage(localOnlyMode ? 'local' : 'rag')
+    lastAiPromptRef.current = prompt
+    aiAbortControllerRef.current = new AbortController()
     setStatusMessage('系统 AI 正在检索知识库并读取当前业务上下文')
 
     let ragItems = []
 
     try {
-      ragItems = await searchAiKnowledge(
+      ragItems = localOnlyMode ? knowledgeBaseItems.slice(0, 5) : await searchAiKnowledge(
         buildRagSearchQuery({
           prompt,
           activeTab: aiContextTab,
@@ -511,8 +587,17 @@ function App() {
           findings,
         }),
         5,
+        { signal: aiAbortControllerRef.current.signal },
       )
       setAiKnowledgeHits(ragItems)
+
+      if (localOnlyMode) {
+        const fallbackReply = createLocalAiFallbackReply({ prompt, activeTab: aiContextTab, findings, depositResult, ragItems })
+        setAiMessages([...nextMessages, { id: nextAssistantId, role: 'assistant', content: fallbackReply }])
+        setStatusMessage('仅本地分析模式已生成规则库回复，未发送任何远端请求')
+        return
+      }
+      setAiStage('model')
 
       const systemContext = redactSensitiveText(buildSystemAiContext({
         activeTab: aiContextTab,
@@ -550,13 +635,17 @@ function App() {
             content: redactSensitiveText(message.content),
           })),
         ],
-        { temperature: 0.2, maxTokens: 1200 },
+        { temperature: 0.2, maxTokens: 1200, signal: aiAbortControllerRef.current.signal },
       )
 
       const reply = normalizeAiReplyText(extractAssistantChatContent(response)) || '我暂时没有拿到明确回复，请再把问题说具体一点。'
       setAiMessages([...nextMessages, { id: nextAssistantId, role: 'assistant', content: reply }])
       setStatusMessage(`系统 AI 已结合当前业务上下文和 ${ragItems.length} 条知识库内容回复`)
     } catch (error) {
+      if (error?.name === 'AbortError') {
+        setAiMessages(nextMessages)
+        return
+      }
       const fallbackReply = createLocalAiFallbackReply({
         prompt,
         activeTab: aiContextTab,
@@ -574,12 +663,18 @@ function App() {
       ])
       setStatusMessage(`模型暂时不可用，已切换本地知识库兜底：${error.message}`)
     } finally {
+      aiAbortControllerRef.current = null
+      setAiStage('idle')
       setAiSending(false)
     }
   }
 
   const sendAiDraft = () => {
     submitAiChat(aiDraft)
+  }
+
+  const retryAiChat = () => {
+    if (lastAiPromptRef.current && !aiSending) submitAiChat(lastAiPromptRef.current)
   }
 
   const updateReviewProfile = (field, value) => {
@@ -599,6 +694,7 @@ function App() {
       signal: options.signal,
       headers: {
         'Content-Type': 'application/json',
+        'x-rental-safe-account': getOrCreateAccountId(),
       },
       body: JSON.stringify({
         provider: aiConfig.provider,
@@ -610,6 +706,14 @@ function App() {
     })
 
     const data = await response.json().catch(() => ({}))
+
+    if (response.headers.get('x-ai-quota-limit')) {
+      setQuota({
+        used: Number(response.headers.get('x-ai-quota-limit')) - Number(response.headers.get('x-ai-quota-remaining') || 0),
+        limit: Number(response.headers.get('x-ai-quota-limit')),
+        remaining: Number(response.headers.get('x-ai-quota-remaining') || 0),
+      })
+    }
 
     if (!response.ok) {
       const message = data?.error?.message || data?.message || `接口请求失败：HTTP ${response.status}`
@@ -639,11 +743,12 @@ function App() {
     reviewAbortControllerRef.current?.abort()
     reviewAbortControllerRef.current = controller
     setIsReviewing(true)
+    setReviewStage(localOnlyMode ? 'local' : 'rag')
     setStatusMessage('正在检索知识库并调用平台 AI 模型审查合同')
 
     try {
       const aiReviewText = redactSensitiveText(trimmedText)
-      const ragItems = await searchAiKnowledge(
+      const ragItems = localOnlyMode ? [] : await searchAiKnowledge(
         buildRagSearchQuery({
           prompt: '租房合同审查 押金 维修 涨租 解除 违约 入户 管辖',
           activeTab: 'review',
@@ -651,10 +756,20 @@ function App() {
           findings: localFindings,
         }),
         6,
+        { signal: controller.signal },
       )
       if (reviewRequestIdRef.current !== requestId) return
 
       setAiKnowledgeHits(ragItems)
+
+      if (localOnlyMode) {
+        setAiFindings(null)
+        setAiQualityReport(null)
+        setStatusMessage(`本地规则审查完成，发现 ${localFindings.length} 个风险点；未发送合同内容`)
+        return
+      }
+
+      setReviewStage('model')
 
       const data = await callAiModel(
         [
@@ -691,6 +806,7 @@ function App() {
     } finally {
       if (reviewRequestIdRef.current === requestId) {
         reviewAbortControllerRef.current = null
+        setReviewStage('idle')
         setIsReviewing(false)
       }
     }
@@ -738,11 +854,17 @@ function App() {
     if (!file || isImportingContract) return
 
     setIsImportingContract(true)
+    lastImportFileRef.current = file
+    setImportError(false)
+    const controller = new AbortController()
+    importAbortControllerRef.current = controller
+    setImportStage('解析文件')
     setStatusMessage(`正在解析合同文件：${file.name}`)
 
     try {
       const { extractContractTextFromFile } = await import('./utils/fileImport.js')
-      const result = await extractContractTextFromFile(file)
+      setImportStage(file.type.startsWith('image/') ? (localOnlyMode ? '本地 OCR' : '上传 OCR') : '提取文本')
+      const result = await extractContractTextFromFile(file, { signal: controller.signal, localOnly: localOnlyMode })
       const importedText = String(result.text || '').trim()
 
       if (!importedText) {
@@ -763,10 +885,21 @@ function App() {
       })
       setReviewProfile((current) => ({ ...current, contractType: 'lease' }))
     } catch (error) {
+      setImportError(true)
       setStatusMessage(`合同导入失败：${error.message}`)
     } finally {
+      importAbortControllerRef.current = null
+      setImportStage('idle')
       setIsImportingContract(false)
     }
+  }
+
+  const cancelContractImport = () => {
+    importAbortControllerRef.current?.abort()
+  }
+
+  const retryContractImport = () => {
+    if (lastImportFileRef.current && !isImportingContract) importContractFile(lastImportFileRef.current)
   }
 
   const handleContractFileChange = (event) => {
@@ -833,6 +966,30 @@ function App() {
     }
 
     setStatusMessage('已清空本地审查历史')
+  }
+
+  const exportAllLocalData = async () => {
+    const localStorageData = {}
+    try {
+      Object.keys(localStorage).forEach((key) => { localStorageData[key] = localStorage.getItem(key) })
+    } catch { /* restricted storage */ }
+    const photos = await listCheckinPhotos().catch(() => [])
+    const payload = { exportedAt: new Date().toISOString(), localStorage: localStorageData, checkinPhotos: photos }
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `租小审-本地数据-${new Date().toISOString().slice(0, 10)}.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    setStatusMessage('全部本地数据已导出为 JSON 文件')
+  }
+
+  const clearAllLocalData = async () => {
+    if (!window.confirm('确定清除全部本地合同、证据、验房照片和 AI 反馈吗？此操作无法撤销。')) return
+    try { localStorage.clear() } catch { /* restricted storage */ }
+    await clearCheckinPhotos().catch(() => {})
+    window.location.reload()
   }
 
   const restoreHistorySnapshot = (snapshot) => {
@@ -956,7 +1113,14 @@ function App() {
   return (
     <main className="app-shell">
       <a className="skip-link" href="#main-workspace">跳到主内容</a>
-      <AppSidebar activeTab={activeTab} onSwitchModule={switchModuleFromNav} />
+      <AppSidebar
+        activeTab={activeTab}
+        localOnlyMode={localOnlyMode}
+        onClearAllData={clearAllLocalData}
+        onExportAllData={exportAllLocalData}
+        onSwitchModule={switchModuleFromNav}
+        onToggleLocalOnly={setLocalOnlyMode}
+      />
       <AnnouncementStrip guideTriggerRef={guideTriggerRef} onOpenGuide={openRiskGuide} />
 
       {showGuide && (
@@ -1003,10 +1167,15 @@ function App() {
             aiKnowledgeHits={aiKnowledgeHits}
             aiMessages={aiMessages}
             aiSending={aiSending}
+            aiStage={aiStage}
+            localOnlyMode={localOnlyMode}
+            quota={quota}
             modelConnectionLabel={modelConnectionLabel}
             onDraftChange={setAiDraft}
             onRateMessage={rateAiMessage}
             onResetChat={resetAiChat}
+            onCancel={cancelAiChat}
+            onRetry={retryAiChat}
             onSendDraft={sendAiDraft}
           />
         ) : activeTab === 'review' ? (
@@ -1021,8 +1190,15 @@ function App() {
               importedContractMeta={importedContractMeta}
               importedIsOcr={importedIsOcr}
               importedNeedsManualCheck={importedNeedsManualCheck}
+              importError={importError}
               isImportingContract={isImportingContract}
+              importStage={importStage}
+              localOnlyMode={localOnlyMode}
+              onCancelImport={cancelContractImport}
+              onCancelReview={cancelPendingReview}
+              onRetryImport={retryContractImport}
               isReviewing={isReviewing}
+              reviewStage={reviewStage}
               loadDemoContract={loadDemoContract}
               onClearImportMeta={() => setImportedContractMeta(null)}
               resetContractText={resetContractText}

@@ -13,10 +13,15 @@ export default function AiAssistantPanel({
   aiKnowledgeHits,
   aiMessages,
   aiSending,
+  aiStage,
+  localOnlyMode,
+  quota,
   modelConnectionLabel,
   onDraftChange,
   onRateMessage,
   onResetChat,
+  onCancel,
+  onRetry,
   onSendDraft,
 }) {
   return (
@@ -41,12 +46,15 @@ export default function AiAssistantPanel({
       </div>
 
       <div className="ai-chat-meta">
+        <span className={localOnlyMode ? 'privacy-badge active' : 'privacy-badge'}>{localOnlyMode ? '仅本地分析' : '远端 AI 可用'}</span>
+        {aiSending && <span>阶段：{aiStage === 'rag' ? '检索知识库' : aiStage === 'model' ? '模型分析' : '生成本地回复'}</span>}
         <span>后端代理：{getPlatformApiEndpoint()}</span>
         <span>当前模块：{workflowLabels[activeTab] || activeTab}</span>
         <span>身份：租小审系统助手</span>
         <span>回复技能：{aiResponseSkills.length} 个</span>
         <span>知识库命中：{aiKnowledgeHits.length ? `${aiKnowledgeHits.length} 条` : '待检索'}</span>
         <span>{aiFeedbackText}</span>
+        {quota && <span>今日额度：{quota.remaining}/{quota.limit}</span>}
         <span>默认模型：{aiConfig.model}</span>
       </div>
 
@@ -97,6 +105,8 @@ export default function AiAssistantPanel({
             <Send size={17} aria-hidden="true" />
             {aiSending ? '发送中...' : '发送'}
           </button>
+          {aiSending && <button className="ghost-button" type="button" onClick={onCancel}>取消请求</button>}
+          {!aiSending && <button className="ghost-button" type="button" onClick={onRetry}>重试上一条</button>}
         </div>
       </div>
 

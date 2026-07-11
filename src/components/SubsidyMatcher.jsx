@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Search } from 'lucide-react'
 import { STORAGE_KEYS } from '../constants/appConfig.js'
-import { getSubsidyMatchScore, subsidyCities, subsidyPolicies } from '../data/subsidyPolicies.js'
+import { getSubsidyFreshness, getSubsidyMatchScore, subsidyCities, subsidyPolicies } from '../data/subsidyPolicies.js'
 import { loadSubsidyMatcherState } from '../features/subsidyMatcher.js'
 
 export default function SubsidyMatcher({ onStatus }) {
@@ -15,6 +15,7 @@ export default function SubsidyMatcher({ onStatus }) {
         .map((policy) => ({
           ...policy,
           matchScore: getSubsidyMatchScore(policy, profile),
+          freshness: getSubsidyFreshness(policy.checkedAt),
         }))
         .sort((a, b) => b.matchScore - a.matchScore),
     [profile, selectedPolicies],
@@ -111,6 +112,9 @@ export default function SubsidyMatcher({ onStatus }) {
                     {item}
                   </span>
                 ))}
+              </div>
+              <div className={`policy-freshness ${policy.freshness.stale ? 'stale' : ''}`} role="note">
+                {policy.freshness.stale ? '政策可能已过期，请以官网最新页面为准' : `数据更新时间：${policy.checkedAt}（${policy.freshness.label}）`}
               </div>
               <div className="subsidy-card-foot">
                 <span>{policy.status}</span>

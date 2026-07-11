@@ -389,10 +389,11 @@ export function buildRagContextPrompt(items) {
   ].join('\n')
 }
 
-export async function searchAiKnowledge(query, limit = 5) {
+export async function searchAiKnowledge(query, limit = 5, options = {}) {
   try {
     const response = await fetch('/api/rag/search', {
       method: 'POST',
+      signal: options.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, limit }),
     })
@@ -403,7 +404,8 @@ export async function searchAiKnowledge(query, limit = 5) {
     }
 
     return data.items
-  } catch {
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error
     return knowledgeBaseItems.slice(0, limit).map((item, index) => ({
       ...item,
       id: `local-knowledge-${index + 1}`,

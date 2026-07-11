@@ -43,3 +43,7 @@ export function deleteCheckinPhoto(id) {
 export function clearCheckinPhotos() {
   return runTransaction('readwrite', (store) => store.clear())
 }
+
+export function listCheckinPhotos() {
+  return runTransaction('readonly', (store) => store.getAll())
+}

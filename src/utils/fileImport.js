@@ -30,7 +30,12 @@ function isUsableOcrText(text, confidence) {
   return normalized.length >= 12 && readableChars.length >= 6 && !digitOnly && Number(confidence || 0) >= 35
 }
 
-async function extractPdfText(file) {
+function throwIfAborted(signal) {
+  if (signal?.aborted) throw new DOMException('Operation aborted', 'AbortError')
+}
+
+async function extractPdfText(file, signal) {
+  throwIfAborted(signal)
   const [{ default: pdfWorkerUrl }, pdfjsLib] = await Promise.all([
     import('pdfjs-dist/build/pdf.worker.mjs?url'),
     import('pdfjs-dist'),
@@ -39,9 +44,11 @@ async function extractPdfText(file) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
   const buffer = await file.arrayBuffer()
+  throwIfAborted(signal)
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
   const pages = await Promise.all(
     Array.from({ length: pdf.numPages }, async (_, index) => {
+      throwIfAborted(signal)
       const page = await pdf.getPage(index + 1)
       const content = await page.getTextContent()
       return content.items.map((item) => item.str).join(' ')
@@ -51,20 +58,45 @@ async function extractPdfText(file) {
   return pages.join('\n\n').trim()
 }
 
-async function extractDocxText(file) {
+async function extractDocxText(file, signal) {
+  throwIfAborted(signal)
   const mammoth = await import('mammoth/mammoth.browser')
   const buffer = await file.arrayBuffer()
+  throwIfAborted(signal)
   const result = await mammoth.extractRawText({ arrayBuffer: buffer })
 
   return String(result.value || '').trim()
 }
 
-async function extractImageTextWithOcr(file) {
+async function extractImageTextWithOcr(file, { signal, localOnly = false } = {}) {
+  throwIfAborted(signal)
+  if (localOnly) {
+    const { createWorker } = await import('tesseract.js')
+    const worker = await createWorker(['chi_sim', 'eng'], 1, {
+      logger: () => {},
+    })
+    const abort = () => worker.terminate()
+    signal?.addEventListener('abort', abort, { once: true })
+    try {
+      const result = await worker.recognize(file)
+      throwIfAborted(signal)
+      const text = String(result?.data?.text || '').trim()
+      const confidence = Number(result?.data?.confidence || 0)
+      if (!isUsableOcrText(text, confidence)) {
+        throw new Error(`本地 OCR 结果过弱，置信度 ${confidence || 0}%，请换更清晰的照片或改用文本粘贴`)
+      }
+      return { text, confidence, mode: 'browser-local-tesseract' }
+    } finally {
+      signal?.removeEventListener('abort', abort)
+      await worker.terminate()
+    }
+  }
   const formData = new FormData()
   formData.append('image', file)
 
   const response = await fetch('/api/ocr/image', {
     method: 'POST',
+    signal,
     body: formData,
   })
   const data = await response.json().catch(() => ({}))
@@ -87,7 +119,7 @@ async function extractImageTextWithOcr(file) {
   }
 }
 
-export async function extractContractTextFromFile(file) {
+export async function extractContractTextFromFile(file, options = {}) {
   if (!file) {
     throw new Error('请选择要导入的合同文件')
   }
@@ -110,7 +142,7 @@ export async function extractContractTextFromFile(file) {
 
   if (CONTRACT_WORD_EXTENSIONS.includes(extension)) {
     return {
-      text: await extractDocxText(file),
+      text: await extractDocxText(file, options.signal),
       type: 'Word 合同',
       source: 'Word',
     }
@@ -118,14 +150,14 @@ export async function extractContractTextFromFile(file) {
 
   if (CONTRACT_PDF_EXTENSIONS.includes(extension)) {
     return {
-      text: await extractPdfText(file),
+      text: await extractPdfText(file, options.signal),
       type: 'PDF 合同',
       source: 'PDF',
     }
   }
 
   if (CONTRACT_IMAGE_MIME_PATTERN.test(file.type)) {
-    const result = await extractImageTextWithOcr(file)
+    const result = await extractImageTextWithOcr(file, options)
 
     return {
       text: result.text,

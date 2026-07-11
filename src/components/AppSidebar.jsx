@@ -8,7 +8,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 
-export default function AppSidebar({ activeTab, onSwitchModule }) {
+export default function AppSidebar({ activeTab, localOnlyMode, onClearAllData, onExportAllData, onSwitchModule, onToggleLocalOnly }) {
   return (
     <aside className="sidebar" aria-label="租小审导航">
       <div className="brand">
@@ -82,6 +82,17 @@ export default function AppSidebar({ activeTab, onSwitchModule }) {
         <span className="panel-label">定位</span>
         <h2>社会服务赛道</h2>
         <p>帮租客在签字前看懂押金、涨租、维修和违约条款里的坑。</p>
+      </div>
+      <div className="sidebar-data-tools" aria-label="本地数据与隐私设置">
+        <label className="privacy-toggle">
+          <input type="checkbox" checked={localOnlyMode} onChange={(event) => onToggleLocalOnly(event.target.checked)} />
+          <span>仅本地分析</span>
+        </label>
+        <small>{localOnlyMode ? '合同与对话不会发送到远端 AI；图片 OCR 使用本地浏览器处理。' : '开启后可避免合同正文和对话离开当前设备。'}</small>
+        <div className="sidebar-data-actions">
+          <button type="button" onClick={onExportAllData}>导出全部本地数据</button>
+          <button type="button" onClick={onClearAllData}>清除全部数据</button>
+        </div>
       </div>
     </aside>
   )

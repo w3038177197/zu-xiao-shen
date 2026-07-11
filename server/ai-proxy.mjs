@@ -27,6 +27,8 @@ const ocrTimeoutMs = Math.max(15_000, Math.min(Number(process.env.OCR_TIMEOUT_MS
 let ocrInFlight = false
 const rateWindowMs = 60_000
 const rateBuckets = new Map()
+const quotaBuckets = new Map()
+const dailyQuota = Math.max(1, Number(process.env.AI_DAILY_QUOTA || 40))
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
@@ -61,6 +63,30 @@ function rateLimit(scope, maxRequests) {
 
     next()
   }
+}
+
+function getAccountId(request) {
+  return String(request.get('x-rental-safe-account') || `ip:${request.ip || request.socket.remoteAddress || 'unknown'}`).slice(0, 120)
+}
+
+function quotaLimit(request, response, next) {
+  const accountId = getAccountId(request)
+  const day = new Date().toISOString().slice(0, 10)
+  const key = `${day}:${accountId}`
+  for (const quotaKey of quotaBuckets.keys()) {
+    if (!quotaKey.startsWith(`${day}:`)) quotaBuckets.delete(quotaKey)
+  }
+  const current = quotaBuckets.get(key) || { used: 0 }
+  if (current.used >= dailyQuota) {
+    response.set('Retry-After', '3600')
+    response.status(429).json({ message: '当前账号今日 AI 额度已用完，请明日再试', quota: { used: current.used, limit: dailyQuota, remaining: 0 } })
+    return
+  }
+  current.used += 1
+  quotaBuckets.set(key, current)
+  response.set('X-AI-Quota-Limit', String(dailyQuota))
+  response.set('X-AI-Quota-Remaining', String(Math.max(0, dailyQuota - current.used)))
+  next()
 }
 
 function trustedApiRequest(request, response, next) {
@@ -308,7 +334,14 @@ app.post('/api/ocr/image', trustedApiRequest, rateLimit('ocr', 6), upload.single
   }
 })
 
-app.post('/api/ai/chat', trustedApiRequest, rateLimit('chat', 20), async (request, response) => {
+app.get('/api/ai/quota', trustedApiRequest, (request, response) => {
+  const accountId = getAccountId(request)
+  const day = new Date().toISOString().slice(0, 10)
+  const used = quotaBuckets.get(`${day}:${accountId}`)?.used || 0
+  response.json({ used, limit: dailyQuota, remaining: Math.max(0, dailyQuota - used), resetAt: `${day}T23:59:59.999Z` })
+})
+
+app.post('/api/ai/chat', trustedApiRequest, rateLimit('chat', 20), quotaLimit, async (request, response) => {
   const { provider, baseUrl, model, messages, temperature = 0.2, maxTokens = 2200 } = request.body || {}
   const config = resolveProviderConfig({ provider, baseUrl, model })
 

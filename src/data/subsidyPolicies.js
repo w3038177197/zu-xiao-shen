@@ -311,6 +311,13 @@ export const subsidyPolicies = [
 
 export const subsidyCities = [...new Set(subsidyPolicies.map((item) => item.city))]
 
+export function getSubsidyFreshness(checkedAt, now = new Date()) {
+  const checked = new Date(`${checkedAt}T00:00:00`)
+  if (Number.isNaN(checked.getTime())) return { stale: true, days: null, label: '核对日期缺失' }
+  const days = Math.max(0, Math.floor((now.getTime() - checked.getTime()) / 86_400_000))
+  return { stale: days > 180, days, label: days > 180 ? '超过 180 天未核对' : `已核对 ${days} 天` }
+}
+
 export function getSubsidyMatchScore(policy, profile) {
   const text = `${policy.city}${profile}`
   const hits = policy.keywords.filter((keyword) => text.includes(keyword)).length
