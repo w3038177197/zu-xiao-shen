@@ -91,13 +91,13 @@ export default function EvidencePack({ onStatus }) {
       return
     }
 
-    await copyTextToClipboard(communicationText)
-    onStatus('沟通说明已复制')
+    const copied = await copyTextToClipboard(communicationText)
+    onStatus(copied ? '沟通说明已复制' : '复制失败，请手动选择沟通说明文本')
   }
 
   const copyEvidencePackage = async () => {
-    await copyTextToClipboard(evidencePackageText)
-    onStatus('退租证据包摘要已复制')
+    const copied = await copyTextToClipboard(evidencePackageText)
+    onStatus(copied ? '退租证据包摘要已复制' : '复制失败，请手动选择证据包摘要')
   }
 
   const resetEvidencePack = () => {

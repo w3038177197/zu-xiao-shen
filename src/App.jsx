@@ -57,6 +57,40 @@ import {
 
 const BUSINESS_CONTEXT_TABS = new Set(['review', 'evidence', 'checkin', 'subsidy'])
 
+function loadReviewHistory() {
+  try {
+    const savedHistory = localStorage.getItem(STORAGE_KEYS.history) || localStorage.getItem(STORAGE_KEYS.historyLegacy)
+    if (!savedHistory) return []
+
+    const parsed = JSON.parse(savedHistory)
+    if (!Array.isArray(parsed)) return []
+
+    return parsed
+      .filter((item) => item && typeof item === 'object' && typeof item.contractText === 'string')
+      .slice(0, 5)
+      .map((item, index) => ({
+        ...item,
+        id: item.id || `restored-${index}`,
+        title: typeof item.title === 'string' ? item.title : `审查记录 ${index + 1}`,
+        score: Number.isFinite(Number(item.score)) ? Number(item.score) : 0,
+        highCount: Number.isFinite(Number(item.highCount)) ? Number(item.highCount) : 0,
+        mediumCount: Number.isFinite(Number(item.mediumCount)) ? Number(item.mediumCount) : 0,
+        acceptedCount: Number.isFinite(Number(item.acceptedCount)) ? Number(item.acceptedCount) : 0,
+      }))
+  } catch {
+    return []
+  }
+}
+
+function loadAiFeedback() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.aiFeedback)
+    return saved ? normalizeAiFeedback(JSON.parse(saved)) : createEmptyAiFeedback()
+  } catch {
+    return createEmptyAiFeedback()
+  }
+}
+
 function App() {
   const [contractText, setContractText] = useState(sampleContract)
   const [selectedDemoContractId, setSelectedDemoContractId] = useState(demoContracts[0].id)
@@ -74,18 +108,11 @@ function App() {
   const pendingModuleScrollTargetRef = useRef(null)
   const moduleActivationTimerRef = useRef(null)
   const moduleTransitionTimerRef = useRef(null)
+  const reviewRequestIdRef = useRef(0)
+  const reviewAbortControllerRef = useRef(null)
   const [acceptedIds, setAcceptedIds] = useState(() => new Set())
   const [acceptedRevisionItems, setAcceptedRevisionItems] = useState([])
-  const [reviewHistory, setReviewHistory] = useState(() => {
-    const savedHistory = localStorage.getItem(STORAGE_KEYS.history) || localStorage.getItem(STORAGE_KEYS.historyLegacy)
-    if (!savedHistory) return []
-
-    try {
-      return JSON.parse(savedHistory)
-    } catch {
-      return []
-    }
-  })
+  const [reviewHistory, setReviewHistory] = useState(loadReviewHistory)
   const [statusMessage, setStatusMessage] = useState('')
   const [isExportingDocx, setIsExportingDocx] = useState(false)
   const [isExportingReportDocx, setIsExportingReportDocx] = useState(false)
@@ -93,16 +120,7 @@ function App() {
   const [aiDraft, setAiDraft] = useState('')
   const [aiSending, setAiSending] = useState(false)
   const [aiKnowledgeHits, setAiKnowledgeHits] = useState([])
-  const [aiFeedback, setAiFeedback] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.aiFeedback)
-    if (!saved) return createEmptyAiFeedback()
-
-    try {
-      return normalizeAiFeedback(JSON.parse(saved))
-    } catch {
-      return createEmptyAiFeedback()
-    }
-  })
+  const [aiFeedback, setAiFeedback] = useState(loadAiFeedback)
   const [aiConfig] = useState(() => {
     const defaultPreset = providerPresets.DeepSeek
     return {
@@ -209,7 +227,11 @@ function App() {
   }, [reviewHistory])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.aiFeedback, JSON.stringify(aiFeedback))
+    try {
+      localStorage.setItem(STORAGE_KEYS.aiFeedback, JSON.stringify(aiFeedback))
+    } catch {
+      // Feedback persistence is optional in restricted storage environments.
+    }
   }, [aiFeedback])
 
   useLayoutEffect(() => {
@@ -429,6 +451,17 @@ function App() {
     setDepositInputs((current) => ({ ...current, [field]: value }))
   }
 
+  const cancelPendingReview = () => {
+    const hadPendingReview = Boolean(reviewAbortControllerRef.current) || isReviewing
+    if (!hadPendingReview) return false
+
+    reviewRequestIdRef.current += 1
+    reviewAbortControllerRef.current?.abort()
+    reviewAbortControllerRef.current = null
+    setIsReviewing(false)
+    return true
+  }
+
   const submitAiChat = async (rawPrompt) => {
     const prompt = String(rawPrompt || '').trim()
     if (!prompt || aiSending) return
@@ -490,7 +523,7 @@ function App() {
             role: 'system',
             content: buildRagContextPrompt(ragItems),
           },
-          ...nextMessages.map((message) => ({
+          ...nextMessages.slice(-12).map((message) => ({
             role: message.role,
             content: message.content,
           })),
@@ -528,6 +561,7 @@ function App() {
   }
 
   const updateReviewProfile = (field, value) => {
+    cancelPendingReview()
     setFindingListMinHeight(0)
     setReviewProfile((current) => ({ ...current, [field]: value }))
     setAiFindings(null)
@@ -540,6 +574,7 @@ function App() {
   const callAiModel = async (messages, options = {}) => {
     const response = await fetch(getPlatformApiEndpoint(), {
       method: 'POST',
+      signal: options.signal,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -563,6 +598,8 @@ function App() {
   }
 
   const startReview = async () => {
+    if (isReviewing) return
+
     const trimmedText = reviewText.trim()
     setAcceptedIds(new Set())
     setAcceptedRevisionItems([])
@@ -574,6 +611,11 @@ function App() {
       return
     }
 
+    const requestId = reviewRequestIdRef.current + 1
+    const controller = new AbortController()
+    reviewRequestIdRef.current = requestId
+    reviewAbortControllerRef.current?.abort()
+    reviewAbortControllerRef.current = controller
     setIsReviewing(true)
     setStatusMessage('正在检索知识库并调用平台 AI 模型审查合同')
 
@@ -587,16 +629,23 @@ function App() {
         }),
         6,
       )
+      if (reviewRequestIdRef.current !== requestId) return
+
       setAiKnowledgeHits(ragItems)
 
-      const data = await callAiModel([
-        {
-          role: 'system',
-          content:
-            '你是严谨的租房合同解读助手，擅长识别押金、涨租、维修、入户、解除、违约金和管辖风险。必须只返回合法 JSON，且证据必须来自原文。',
-        },
-        { role: 'user', content: createAiReviewPrompt(trimmedText, effectiveReviewProfile, ragItems) },
-      ])
+      const data = await callAiModel(
+        [
+          {
+            role: 'system',
+            content:
+              '你是严谨的租房合同解读助手，擅长识别押金、涨租、维修、入户、解除、违约金和管辖风险。必须只返回合法 JSON，且证据必须来自原文。',
+          },
+          { role: 'user', content: createAiReviewPrompt(trimmedText, effectiveReviewProfile, ragItems) },
+        ],
+        { signal: controller.signal },
+      )
+      if (reviewRequestIdRef.current !== requestId) return
+
       const parsed = parseAiContent(extractAssistantContent(data))
       const nextFindings = normalizeAiFindings(parsed, trimmedText)
       const qualityReport = buildAiQualityReport(parsed, trimmedText, nextFindings)
@@ -610,16 +659,22 @@ function App() {
             ? `AI 审查完成，发现 ${nextFindings.length} 个风险点`
             : 'AI 审查完成，未发现明显风险',
       )
-    } catch {
+    } catch (error) {
+      if (error?.name === 'AbortError' || reviewRequestIdRef.current !== requestId) return
+
       setAiFindings(null)
       setAiQualityReport(null)
       setStatusMessage('AI 审查失败，已自动切换为本地规则结果')
     } finally {
-      setIsReviewing(false)
+      if (reviewRequestIdRef.current === requestId) {
+        reviewAbortControllerRef.current = null
+        setIsReviewing(false)
+      }
     }
   }
 
   const replaceContractText = (nextText, options = {}) => {
+    const canceledReview = cancelPendingReview()
     setFindingListMinHeight(0)
     setContractText(nextText)
     setAcceptedIds(new Set())
@@ -635,6 +690,8 @@ function App() {
 
     if (options.statusMessage) {
       setStatusMessage(options.statusMessage)
+    } else if (canceledReview) {
+      setStatusMessage('合同内容已变化，已取消上一轮 AI 审查')
     }
   }
 

@@ -3,14 +3,14 @@ import dotenv from 'dotenv'
 import express from 'express'
 import multer from 'multer'
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createWorker } from 'tesseract.js'
 import { aiEvalCases } from './data/ai-eval-cases.mjs'
 import { evaluateKnowledgeRetrieval, searchKnowledge } from './rag-engine.mjs'
 
-dotenv.config({ override: true })
+dotenv.config()
 
 const app = express()
 const port = Number(process.env.PORT || process.env.AI_PROXY_PORT || 8787)
@@ -19,7 +19,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.join(__dirname, '..')
 const distDir = path.join(rootDir, 'dist')
 const indexHtmlPath = path.join(distDir, 'index.html')
-const reportDir = path.join(__dirname, '..', 'generated-reports')
+const upstreamTimeoutMs = Math.max(5_000, Math.min(Number(process.env.AI_PROXY_TIMEOUT_MS) || 45_000, 120_000))
+const ocrTimeoutMs = Math.max(15_000, Math.min(Number(process.env.OCR_TIMEOUT_MS) || 90_000, 180_000))
+let ocrInFlight = false
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
@@ -27,7 +29,6 @@ const upload = multer({
 
 app.use(cors({ origin: allowedOrigin }))
 app.use(express.json({ limit: '8mb' }))
-app.use('/api/reports', express.static(reportDir))
 
 const providerPresets = {
   'OpenAI-compatible': {
@@ -144,25 +145,6 @@ function normalizeModelList(data) {
   ).sort((a, b) => a.localeCompare(b))
 }
 
-function createSafeReportName(type) {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const suffix = type === 'pdf' ? 'pdf' : 'html'
-  return `zu-xiao-shen-report-${stamp}.${suffix}`
-}
-
-async function renderPdfWithPlaywright(html) {
-  const playwright = await import('playwright')
-  const browser = await playwright.chromium.launch({ headless: true })
-
-  try {
-    const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: 'networkidle' })
-    return await page.pdf({ format: 'A4', printBackground: true, margin: { top: '14mm', right: '12mm', bottom: '14mm', left: '12mm' } })
-  } finally {
-    await browser.close()
-  }
-}
-
 async function prepareTesseractLangPath() {
   const langPath = path.join(rootDir, '.cache', 'tesseract-lang')
   const languageFiles = [
@@ -188,14 +170,21 @@ async function recognizeImageOffline(buffer) {
     cachePath: path.join(rootDir, '.cache', 'tesseract'),
     gzip: true,
   })
+  let timeoutId = 0
 
   try {
-    const result = await worker.recognize(buffer)
+    const result = await Promise.race([
+      worker.recognize(buffer),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('offline OCR timed out')), ocrTimeoutMs)
+      }),
+    ])
     return {
       text: result.data.text.trim(),
       confidence: Math.round(result.data.confidence || 0),
     }
   } finally {
+    clearTimeout(timeoutId)
     await worker.terminate()
   }
 }
@@ -243,12 +232,13 @@ app.get('/api/health', (_request, response) => {
 })
 
 function sendRagSearchResponse(response, { query, limit }) {
-  const items = searchKnowledge(query, limit)
+  const normalizedQuery = String(query || '').slice(0, 4_000)
+  const items = searchKnowledge(normalizedQuery, limit)
 
   response.json({
     ok: true,
     mode: 'local-hybrid-rag',
-    query,
+    query: normalizedQuery,
     total: items.length,
     items,
   })
@@ -357,48 +347,23 @@ app.post('/api/ai/models', async (request, response) => {
   }
 })
 
-app.post('/api/report/export', async (request, response) => {
-  const { html, format = 'html' } = request.body || {}
-
-  if (!html || typeof html !== 'string') {
-    response.status(400).json({ message: 'html must be a non-empty string' })
-    return
-  }
-
-  await mkdir(reportDir, { recursive: true })
-
-  if (format === 'pdf') {
-    try {
-      const pdf = await renderPdfWithPlaywright(html)
-      const filename = createSafeReportName('pdf')
-      await writeFile(path.join(reportDir, filename), pdf)
-      response.json({ ok: true, format: 'pdf', url: `/api/reports/${filename}` })
-      return
-    } catch (error) {
-      const filename = createSafeReportName('html')
-      await writeFile(path.join(reportDir, filename), html, 'utf8')
-      response.json({
-        ok: true,
-        format: 'html',
-        url: `/api/reports/${filename}`,
-        fallback: true,
-        message: error.message || 'PDF generation failed, HTML report was generated instead',
-      })
-      return
-    }
-  }
-
-  const filename = createSafeReportName('html')
-  await writeFile(path.join(reportDir, filename), html, 'utf8')
-  response.json({ ok: true, format: 'html', url: `/api/reports/${filename}` })
-})
-
 app.post('/api/ocr/image', upload.single('image'), async (request, response) => {
   if (!request.file) {
     response.status(400).json({ message: 'image file is required' })
     return
   }
 
+  if (!/^image\//i.test(request.file.mimetype || '')) {
+    response.status(415).json({ message: 'only image uploads are supported for OCR' })
+    return
+  }
+
+  if (ocrInFlight) {
+    response.status(429).json({ message: 'OCR is busy, please retry after the current image finishes' })
+    return
+  }
+
+  ocrInFlight = true
   try {
     const result = await recognizeImageOffline(request.file.buffer)
     response.json({
@@ -413,6 +378,8 @@ app.post('/api/ocr/image', upload.single('image'), async (request, response) => 
       message: error.message || 'offline OCR failed',
       fallback: 'vision-model',
     })
+  } finally {
+    ocrInFlight = false
   }
 })
 
@@ -435,9 +402,13 @@ app.post('/api/ai/chat', async (request, response) => {
     return
   }
 
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), upstreamTimeoutMs)
+
   try {
     const upstreamResponse = await fetch(config.endpoint, {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         Authorization: `Bearer ${config.apiKey}`,
         'Content-Type': 'application/json',
@@ -461,8 +432,23 @@ app.post('/api/ai/chat', async (request, response) => {
 
     response.json(data)
   } catch (error) {
-    response.status(502).json({ message: error.message || 'AI proxy request failed' })
+    response.status(error?.name === 'AbortError' ? 504 : 502).json({
+      message: error?.name === 'AbortError' ? 'Upstream AI request timed out' : error?.message || 'AI proxy request failed',
+    })
+  } finally {
+    clearTimeout(timeout)
   }
+})
+
+app.use((error, _request, response, next) => {
+  if (error instanceof multer.MulterError) {
+    response.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({
+      message: error.code === 'LIMIT_FILE_SIZE' ? 'image exceeds the 8MB upload limit' : error.message,
+    })
+    return
+  }
+
+  next(error)
 })
 
 if (existsSync(indexHtmlPath)) {

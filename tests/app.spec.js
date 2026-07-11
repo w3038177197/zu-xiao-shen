@@ -89,6 +89,73 @@ test('home shows the current product overview and guide modal', async ({ page })
   await expect(guide).toHaveCount(0)
 })
 
+test('app remains usable when browser storage is unavailable', async ({ page }) => {
+  await page.addInitScript(() => {
+    for (const method of ['getItem', 'setItem', 'removeItem']) {
+      Object.defineProperty(Storage.prototype, method, {
+        configurable: true,
+        value() {
+          throw new DOMException('Storage access denied', 'SecurityError')
+        },
+      })
+    }
+  })
+
+  await page.goto('/')
+
+  await expect(page.getByRole('heading', { name: '租小审使用总览' })).toBeVisible()
+  await page.locator('.nav-list').getByRole('button', { name: '租房审查', exact: true }).click()
+  await expect(page.getByRole('heading', { name: /租房签字前/ })).toBeVisible()
+})
+
+test('copy actions report failure when clipboard permission is denied', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'clipboard', {
+      configurable: true,
+      get() {
+        return {
+          writeText: () => Promise.reject(new DOMException('Clipboard denied', 'NotAllowedError')),
+        }
+      },
+    })
+    Document.prototype.execCommand = () => false
+  })
+
+  await page.goto('/')
+  await page.locator('.nav-list').getByRole('button', { name: '退租证据包', exact: true }).click()
+  await page.getByRole('button', { name: '复制摘要' }).click()
+
+  await expect(page.locator('.status-toast')).toContainText('复制失败，请手动选择证据包摘要')
+})
+
+test('malformed saved history does not break a successful ai reply', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('rental-safe-history', JSON.stringify({ invalid: true }))
+  })
+  await page.route('**/api/rag/search', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, items: [] }),
+    })
+  })
+  await page.route('**/api/ai/chat', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ choices: [{ message: { content: '远端模型正常回复' } }] }),
+    })
+  })
+
+  await page.goto('/')
+  await page.locator('.nav-list').getByRole('button', { name: 'AI 助手', exact: true }).click()
+  await page.getByPlaceholder(/直接问系统 AI/).fill('检查持久化历史')
+  await page.getByRole('button', { name: '发送', exact: true }).click()
+
+  await expect(page.locator('.ai-chat-bubble.assistant').last()).toContainText('远端模型正常回复')
+  await expect(page.locator('.status-toast')).toContainText('系统 AI 已结合当前业务上下文')
+})
+
 test('system ai assistant reads app context and falls back cleanly', async ({ page }) => {
   await page.route('**/api/ai/chat', async (route) => {
     await route.fulfill({
@@ -140,6 +207,58 @@ test('rental review can run with local fallback and accept suggestions', async (
   await expect(page.locator('.status-toast')).toContainText(/已采纳 \d+ 条/)
   await expect(page.getByText('修订版合同草案')).toBeVisible()
   await expect(page.locator('.finding')).toHaveCount(0)
+})
+
+test('editing a contract cancels stale ai review results', async ({ page }) => {
+  let markAiRequestStarted
+  const aiRequestStarted = new Promise((resolve) => {
+    markAiRequestStarted = resolve
+  })
+
+  await page.route('**/api/rag/search', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, items: [] }),
+    })
+  })
+  await page.route('**/api/ai/chat', async (route) => {
+    markAiRequestStarted()
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              contractType: '租房合同',
+              risks: [{
+                id: 'stale-ai-risk',
+                title: '旧合同 AI 风险',
+                level: 'high',
+                evidence: '自动续期12个月',
+                reason: '这是旧合同返回的结果',
+                suggestion: '不应写入新合同页面',
+              }],
+            }),
+          },
+        }],
+      }),
+    })
+  })
+
+  await page.goto('/')
+  await page.locator('.nav-list').getByRole('button', { name: '租房审查', exact: true }).click()
+  await page.getByRole('button', { name: '开始审查' }).click()
+  await aiRequestStarted
+
+  const editor = page.getByRole('textbox', { name: /在这里粘贴租房合同正文/ })
+  await editor.fill('房屋租赁合同\n月租金 3000 元，押金 3000 元。')
+
+  await expect(page.locator('.status-toast')).toContainText('合同内容已变化，已取消上一轮 AI 审查')
+  await expect(page.getByRole('button', { name: '开始审查' })).toBeEnabled()
+  await expect(page.getByText('旧合同 AI 风险')).toHaveCount(0)
 })
 
 test('dirty shared-rental clauses surface pet sublet decoration and deposit risks', async ({ page }) => {

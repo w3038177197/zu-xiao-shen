@@ -72,9 +72,15 @@ export function createDefaultEvidencePackState() {
 export function normalizeEvidencePackState(savedState) {
   const defaults = createDefaultEvidencePackState()
   const savedEvidence = savedState?.evidence || {}
+  const savedFormData = savedState?.formData && typeof savedState.formData === 'object' ? savedState.formData : {}
 
   return {
-    formData: { ...defaults.formData, ...(savedState?.formData || {}) },
+    formData: Object.fromEntries(
+      Object.entries(defaults.formData).map(([field, defaultValue]) => [
+        field,
+        typeof savedFormData[field] === 'string' ? savedFormData[field] : defaultValue,
+      ]),
+    ),
     evidence: Object.fromEntries(
       Object.entries(evidenceGroupMeta).map(([group, meta]) => {
         const savedGroup = Array.isArray(savedEvidence[group]) ? savedEvidence[group] : []
