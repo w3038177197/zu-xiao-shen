@@ -22,8 +22,12 @@ export default function SubsidyMatcher({ onStatus }) {
   const matchScore = policyMatches[0]?.matchScore || 0
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.subsidyMatcher, JSON.stringify({ city, profile }))
-  }, [city, profile])
+    try {
+      localStorage.setItem(STORAGE_KEYS.subsidyMatcher, JSON.stringify({ city, profile }))
+    } catch {
+      onStatus('本地保存空间不足，补贴匹配仍可继续使用')
+    }
+  }, [city, onStatus, profile])
 
   const matchPolicy = () => {
     onStatus(`已匹配${city}${policyMatches.length}条官方补贴/安居线索，最高匹配度 ${matchScore}%`)
@@ -122,4 +126,3 @@ export default function SubsidyMatcher({ onStatus }) {
     </div>
   )
 }
-

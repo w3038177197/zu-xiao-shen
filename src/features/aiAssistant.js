@@ -391,7 +391,11 @@ export function buildRagContextPrompt(items) {
 
 export async function searchAiKnowledge(query, limit = 5) {
   try {
-    const response = await fetch(`/api/rag/search?q=${encodeURIComponent(query)}&limit=${limit}`)
+    const response = await fetch('/api/rag/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, limit }),
+    })
     const data = await response.json().catch(() => ({}))
 
     if (!response.ok || !Array.isArray(data.items)) {

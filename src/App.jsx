@@ -504,7 +504,7 @@ function App() {
     } catch (error) {
       const fallbackReply = createLocalAiFallbackReply({
         prompt,
-        activeTab,
+        activeTab: aiContextTab,
         findings,
         depositResult,
         ragItems,
@@ -909,7 +909,7 @@ function App() {
           <SubsidyMatcher onStatus={setStatusMessage} />
         ) : activeTab === 'ai' ? (
           <AiAssistantPanel
-            activeTab={activeTab}
+            activeTab={aiContextTab}
             aiConfig={aiConfig}
             aiDraft={aiDraft}
             aiFeedback={aiFeedback}

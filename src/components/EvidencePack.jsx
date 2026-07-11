@@ -40,8 +40,12 @@ export default function EvidencePack({ onStatus }) {
   )
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.evidencePack, JSON.stringify({ formData, evidence, actions, communicationText }))
-  }, [actions, communicationText, evidence, formData])
+    try {
+      localStorage.setItem(STORAGE_KEYS.evidencePack, JSON.stringify({ formData, evidence, actions, communicationText }))
+    } catch {
+      onStatus('本地保存空间不足，退租证据包仍可继续填写，建议及时导出备份')
+    }
+  }, [actions, communicationText, evidence, formData, onStatus])
 
   const updateField = (field, value) => {
     setFormData((current) => ({ ...current, [field]: value }))

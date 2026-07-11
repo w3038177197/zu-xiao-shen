@@ -242,9 +242,7 @@ app.get('/api/health', (_request, response) => {
   })
 })
 
-app.get('/api/rag/search', (request, response) => {
-  const query = String(request.query.q || '')
-  const limit = Number(request.query.limit || 5)
+function sendRagSearchResponse(response, { query, limit }) {
   const items = searchKnowledge(query, limit)
 
   response.json({
@@ -253,6 +251,20 @@ app.get('/api/rag/search', (request, response) => {
     query,
     total: items.length,
     items,
+  })
+}
+
+app.get('/api/rag/search', (request, response) => {
+  sendRagSearchResponse(response, {
+    query: String(request.query.q || ''),
+    limit: Number(request.query.limit || 5),
+  })
+})
+
+app.post('/api/rag/search', (request, response) => {
+  sendRagSearchResponse(response, {
+    query: String(request.body?.query || request.body?.q || ''),
+    limit: Number(request.body?.limit || 5),
   })
 })
 
