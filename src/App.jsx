@@ -186,7 +186,7 @@ function App() {
     const anchor = workspaceRef.current?.querySelector('.topbar h1') || workspaceRef.current
     if (!anchor) return
 
-    scrollPageTo(Math.max(0, anchor.getBoundingClientRect().top + window.scrollY - getStickyOffset() - 12), behavior)
+    scrollPageTo(Math.max(0, anchor.getBoundingClientRect().top + window.scrollY - getStickyOffset() - 16), behavior)
   }, [getStickyOffset, scrollPageTo])
 
   const alignElementBelowSticky = useCallback((selector, behavior = 'auto') => {
