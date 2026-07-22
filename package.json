@@ -11,8 +11,9 @@
     "start": "node server/ai-proxy.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
+    "clean": "node -e \"const fs=require('fs');const path=require('path');const p=path.join('node_modules','.vite');if(fs.existsSync(p))fs.rmSync(p,{recursive:true,force:true})\"",
     "test:ai": "node server/evaluate-rag.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "npm run clean && playwright test"
   },
   "dependencies": {
     "@tesseract.js-data/chi_sim": "^1.0.0",

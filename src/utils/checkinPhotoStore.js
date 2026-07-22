@@ -1,4 +1,4 @@
-const DB_NAME = 'rental-safe-media'
+const DB_NAME = 'zu-xiao-shen-media'
 const STORE_NAME = 'checkin-photos'
 
 function openDatabase() {

@@ -1,8 +1,6 @@
 export const STORAGE_KEYS = {
   history: 'zu-xiao-shen-history',
-  historyLegacy: 'rental-safe-history',
   aiConfig: 'zu-xiao-shen-ai-config',
-  aiConfigLegacy: 'rental-safe-ai-config',
   aiFeedback: 'zu-xiao-shen-ai-feedback',
   evidencePack: 'zu-xiao-shen-evidence-pack',
   checkinInspection: 'zu-xiao-shen-checkin-inspection',
