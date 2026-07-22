@@ -179,14 +179,18 @@ export default class CheckinInspection extends Component {
     return (
       <ScrollView scrollY className='checkin-page'>
         <View className='checkin-hero'>
-          <Text className='eyebrow'>CHECK-IN INSPECTION</Text>
+          <Text className='eyebrow'>入住验房</Text>
           <Text className='page-title'>入住先留证，退租少扯皮</Text>
           <Text className='page-copy'>按房间逐项记录设施状态、瑕疵描述和现场照片，形成可追溯的入住基线。</Text>
         </View>
         <View className='section'>
-          <Text className='section-title'>
-            完成度 {stats.percent}%（{stats.checked}/{stats.total}） 瑕疵 {stats.defects} 处 照片 {stats.photos} 张
-          </Text>
+          <Text className='section-kicker'>本次验房进度</Text>
+          <View className='checkin-stats'>
+            <View><Text>{stats.percent}%</Text><Text>完成度</Text></View>
+            <View><Text>{stats.checked}/{stats.total}</Text><Text>已检查</Text></View>
+            <View><Text>{stats.defects}</Text><Text>瑕疵</Text></View>
+            <View><Text>{stats.photos}</Text><Text>照片</Text></View>
+          </View>
 
           <View className='room-tabs'>
             {ROOMS.map((r, index) => (
@@ -275,7 +279,7 @@ export default class CheckinInspection extends Component {
             {isSaving ? '保存中...' : '保存'}
           </Button>
           <Button className='btn-export' onClick={this.handleExport}>
-            导出报告
+            复制报告
           </Button>
           <Button className='btn-reset' onClick={this.handleReset}>
             重置

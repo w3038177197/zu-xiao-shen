@@ -43,7 +43,7 @@ export default function SubsidyMatcher() {
   return (
     <ScrollView className='subsidy-page' scrollY>
       <View className='subsidy-hero'>
-        <View><Text className='eyebrow'>RENTAL SUBSIDY</Text><Text className='page-title'>毕业生租房补贴线索匹配</Text><Text className='page-copy'>按城市和个人情况筛选官方补贴入口，政策强时效，申请前请再次核对。</Text></View>
+        <View><Text className='eyebrow'>补贴匹配</Text><Text className='page-title'>毕业生租房补贴线索匹配</Text><Text className='page-copy'>按城市和个人情况筛选官方补贴入口，政策强时效，申请前请再次核对。</Text></View>
         <View className='score-box'><Text>{topScore}%</Text><Text>最高匹配度</Text><Text>{city} · {matches.length} 条</Text></View>
       </View>
 
@@ -59,7 +59,7 @@ export default function SubsidyMatcher() {
       </View>
 
       <View className='panel'>
-        <View className='result-head'><View><Text className='eyebrow'>OFFICIAL POLICIES</Text><Text className='panel-title'>{city}官方政策卡片</Text></View><Text className='count'>{topScore}%</Text></View>
+        <View className='result-head'><View><Text className='eyebrow'>官方政策</Text><Text className='panel-title'>{city}政策线索</Text></View><Text className='count'>{topScore}%</Text></View>
         {matches.map((policy) => (
           <View className='policy-card' key={`${policy.city}-${policy.policy}`} onClick={() => copyOfficialUrl(policy)}>
             <View className='policy-head'><Text>{policy.type}</Text><Text>{policy.matchScore}%</Text></View>

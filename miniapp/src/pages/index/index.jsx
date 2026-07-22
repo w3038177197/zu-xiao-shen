@@ -4,17 +4,17 @@ import Taro from '@tarojs/taro'
 import './index.css'
 
 const modules = [
-  { id: 'subsidy', number: '01', title: '补贴匹配', desc: '按城市和个人情况筛官方补贴线索，先判断有没有资格。', icon: '￥' },
-  { id: 'review', number: '02', title: '租房审查', desc: '标出押金、涨租、维修、违约金等关键风险。', icon: '▤' },
-  { id: 'checkin', number: '03', title: '入住验房', desc: '记录房屋初始状态，避免旧问题变成租客责任。', icon: '◇' },
-  { id: 'evidence', number: '04', title: '退租证据包', desc: '整理证据包和话术，让押金争议有材料可讲。', icon: '□' },
+  { id: 'subsidy', number: '01', phase: '找补贴', title: '补贴匹配', desc: '按城市和个人情况筛选官方补贴线索。', action: '去匹配' },
+  { id: 'review', number: '02', phase: '签约前', title: '租房审查', desc: '标出押金、涨租、维修和违约责任风险。', action: '审合同' },
+  { id: 'checkin', number: '03', phase: '入住时', title: '入住验房', desc: '按房间拍照记录，固定房屋初始状态。', action: '去验房' },
+  { id: 'evidence', number: '04', phase: '退租时', title: '退租证据包', desc: '整理证据清单、费用争议和沟通话术。', action: '整理证据' },
 ]
 
-const ideas = [
-  '合同拍照识别：手机拍合同，自动提取条款并进入审查。',
-  '城市政策更新：补贴入口和申请条件定期维护，减少过期信息。',
-  '押金争议导出：把验房、票据、聊天记录整理成 PDF 或 Word。',
-  '租金行情参考：用周边租金帮助判断续租涨价是否合理。',
+const routeSteps = [
+  ['签约前', '先审合同', '重点确认押金、维修、入户、涨租和违约责任。'],
+  ['入住时', '拍照留痕', '当天记录房屋状态，并把瑕疵书面发给房东确认。'],
+  ['居住中', '保存凭证', '租金、水电、维修和沟通记录按时间持续归档。'],
+  ['退租时', '整理证据', '把交接、费用、照片和聊天记录汇总后再协商。'],
 ]
 
 const defaultDeposit = {
@@ -34,9 +34,10 @@ function calculateDeposit(values) {
 
   return {
     estimatedReturn: Math.max(0, deposit - deduction),
+    deduction,
     warning: deduction > deposit
-      ? '当前填写的预计扣款已超过押金，请核对凭证和责任归属。'
-      : '正常损耗不应直接作为押金扣款依据，要求对方提供明细和凭证。',
+      ? '预计扣款已经超过押金，请逐项核对凭证和责任归属。'
+      : '正常使用损耗不应直接扣押金，请要求对方提供明细和凭证。',
   }
 }
 
@@ -54,68 +55,127 @@ export default function Index() {
   }
 
   return (
-    <ScrollView className='home' scrollY>
+    <ScrollView className='home' scrollY enhanced showScrollbar={false}>
       <View className='home-header'>
         <View className='brand-mark'>盾</View>
-        <View><Text className='brand-name'>租小审</Text><Text className='brand-subtitle'>租房全流程风控助手</Text></View>
+        <View className='brand-copy'>
+          <Text className='brand-name'>租小审</Text>
+          <Text className='brand-subtitle'>租房全流程风控助手</Text>
+        </View>
+        <View className='local-status' onClick={() => openModule('ai')}>
+          <View className='status-dot' />
+          <Text>本地模式</Text>
+        </View>
+      </View>
+
+      <View className='stage-nav' aria-label='按租房阶段选择功能'>
+        {modules.map((item) => (
+          <View className='stage-nav-item' key={item.id} onClick={() => openModule(item.id)}>
+            <Text>{item.phase}</Text>
+            <Text>{item.title}</Text>
+          </View>
+        ))}
       </View>
 
       <View className='hero section'>
-        <Text className='eyebrow'>PROJECT HOME</Text>
-        <Text className='hero-title'>租小审项目首页</Text>
-        <Text className='hero-copy'>用首页先讲清楚项目定位、四个核心模块、演示路径和后续开发方向。</Text>
-        <View className='status-pill' onClick={() => openModule('ai')}><View className='status-dot' /><Text>系统 AI 助手 · 本地规则兜底</Text></View>
-        <View className='hero-note'><Text>移动端查看模式</Text><Text>租房合同风险审查、验房和证据包都能在手机端完成。</Text></View>
+        <Text className='eyebrow'>租房使用总览</Text>
+        <Text className='hero-title'>每一步，先看懂再行动</Text>
+        <Text className='hero-copy'>从签约前审合同，到入住留痕和退租协商，把风险、证据和下一步放在一起。</Text>
+        <View className='hero-actions'>
+          <Button className='primary-action' onClick={() => openModule('review')}>立即审查合同</Button>
+          <Button className='secondary-action' onClick={() => openModule('ai')}>问租小审 AI</Button>
+        </View>
+        <View className='privacy-note'>
+          <Text>隐私保护已开启</Text>
+          <Text>默认使用本地规则，合同正文和照片不会因为打开首页而上传。</Text>
+        </View>
       </View>
 
-      <View className='section intro-card'>
-        <Text className='eyebrow'>PROJECT HOME</Text>
-        <Text className='section-title'>租小审：租房全流程风控助手</Text>
-        <Text className='section-copy'>给普通租客的签约、入住、退租和补贴申请助手，把复杂风险翻译成能直接行动的下一步。</Text>
-        <View className='tag-row'><Text>社会服务</Text><Text>租客权益</Text><Text>AI 风险</Text></View>
-        <View className='brief-box'><Text className='eyebrow'>项目一句话</Text><Text className='brief-title'>先看懂合同，再决定怎么签。</Text><Text className='brief-copy'>不是替用户打官司，而是在损失发生前提醒：哪条有问题、为什么有问题、下一步怎么谈。</Text></View>
-        <View className='brief-grid'><View><Text>服务对象</Text><Text>毕业生、第一次租房人群</Text></View><View><Text>核心价值</Text><Text>看懂条款、保留证据、少丢押金</Text></View></View>
-      </View>
-
-      <View className='section'>
-        <Text className='eyebrow'>MODULE ENTRANCES</Text>
-        <Text className='section-title'>从首页直接进入四个核心模块</Text>
+      <View className='section module-section'>
+        <Text className='eyebrow'>现在要处理什么</Text>
+        <Text className='section-title'>按当前租房阶段进入</Text>
         <View className='module-list'>
           {modules.map((item) => (
             <View className='module-item' key={item.id} onClick={() => openModule(item.id)}>
-              <View className='module-number'>{item.number}</View>
-              <View className='module-body'><Text className='module-title'>{item.title}</Text><Text className='module-desc'>{item.desc}</Text></View>
-              <Text className='module-icon'>{item.icon}</Text>
+              <Text className='module-number'>{item.number}</Text>
+              <View className='module-body'>
+                <Text className='module-phase'>{item.phase}</Text>
+                <Text className='module-title'>{item.title}</Text>
+                <Text className='module-desc'>{item.desc}</Text>
+              </View>
+              <Text className='module-action'>{item.action} ›</Text>
             </View>
           ))}
         </View>
       </View>
 
-      <View className='section'>
-        <Text className='eyebrow'>NEXT STAGE</Text>
-        <Text className='section-title'>继续开发的想法，先围绕租房押金做深</Text>
-        <View className='deposit-card'>
-          <Text className='deposit-label'>退租押金计算器</Text>
-          <Text className='deposit-result'>预计应退押金：¥ {result.estimatedReturn.toLocaleString()}</Text>
-          <Text className='deposit-warning'>{result.warning}</Text>
-          <View className='deposit-grid'>
-            {[
-              ['depositAmount', '押金金额'],
-              ['unpaidFees', '未结清费用'],
-              ['repairCost', '维修扣款'],
-              ['cleaningCost', '保洁扣款'],
-            ].map(([key, label]) => (
-              <View className='field' key={key}><Text>{label}</Text><Input type='number' value={deposit[key]} onInput={(event) => updateDeposit(key, event.detail.value)} /></View>
-            ))}
-            <View className='field'><Text>是否有票据</Text><Picker range={['无票据或未提供', '有有效票据']} value={deposit.hasVoucher === 'yes' ? 1 : 0} onChange={(event) => updateDeposit('hasVoucher', Number(event.detail.value) ? 'yes' : 'no')}><View className='picker'>{deposit.hasVoucher === 'yes' ? '有有效票据' : '无票据或未提供'}⌄</View></Picker></View>
-            <View className='field'><Text>是否正常损耗</Text><Picker range={['是，仅正常使用损耗', '否，疑似人为损坏']} value={deposit.normalWear === 'yes' ? 0 : 1} onChange={(event) => updateDeposit('normalWear', Number(event.detail.value) ? 'no' : 'yes')}><View className='picker'>{deposit.normalWear === 'yes' ? '是，仅正常使用损耗' : '否，疑似人为损坏'}⌄</View></Picker></View>
-          </View>
+      <View className='section route-section'>
+        <Text className='eyebrow'>完整租房路线</Text>
+        <Text className='section-title'>四个阶段，材料不要断</Text>
+        <View className='route-list'>
+          {routeSteps.map(([phase, title, desc], index) => (
+            <View className='route-item' key={phase}>
+              <Text className='route-index'>{String(index + 1).padStart(2, '0')}</Text>
+              <View>
+                <Text className='route-phase'>{phase}</Text>
+                <Text className='route-title'>{title}</Text>
+                <Text className='route-desc'>{desc}</Text>
+              </View>
+            </View>
+          ))}
         </View>
-        <View className='idea-list'>{ideas.map((idea, index) => <View className='idea-item' key={idea}><Text>{String(index + 1).padStart(2, '0')}</Text><Text>{idea}</Text></View>)}</View>
       </View>
 
-      <Button className='footer-cta' onClick={() => openModule('review')}>立即体验租房审查 →</Button>
-      <Text className='footer-note'>租房更安心，维权有依据</Text>
+      <View className='section deposit-section'>
+        <Text className='eyebrow'>退租押金试算</Text>
+        <View className='deposit-summary'>
+          <View>
+            <Text className='deposit-result-label'>预计应退</Text>
+            <Text className='deposit-result'>¥ {result.estimatedReturn.toLocaleString()}</Text>
+          </View>
+          <View className='deduction-box'>
+            <Text>预计扣款</Text>
+            <Text>¥ {result.deduction.toLocaleString()}</Text>
+          </View>
+        </View>
+        <Text className='deposit-warning'>{result.warning}</Text>
+        <View className='deposit-grid'>
+          {[
+            ['depositAmount', '押金金额'],
+            ['unpaidFees', '未结清费用'],
+            ['repairCost', '维修扣款'],
+            ['cleaningCost', '保洁扣款'],
+          ].map(([key, label]) => (
+            <View className='field' key={key}>
+              <Text>{label}</Text>
+              <Input type='digit' value={deposit[key]} onInput={(event) => updateDeposit(key, event.detail.value)} />
+            </View>
+          ))}
+          <View className='field'>
+            <Text>是否有票据</Text>
+            <Picker range={['无票据或未提供', '有有效票据']} value={deposit.hasVoucher === 'yes' ? 1 : 0} onChange={(event) => updateDeposit('hasVoucher', Number(event.detail.value) ? 'yes' : 'no')}>
+              <View className='picker'>{deposit.hasVoucher === 'yes' ? '有有效票据' : '无票据或未提供'}<Text>⌄</Text></View>
+            </Picker>
+          </View>
+          <View className='field'>
+            <Text>是否正常损耗</Text>
+            <Picker range={['是，仅正常使用损耗', '否，疑似人为损坏']} value={deposit.normalWear === 'yes' ? 0 : 1} onChange={(event) => updateDeposit('normalWear', Number(event.detail.value) ? 'no' : 'yes')}>
+              <View className='picker'>{deposit.normalWear === 'yes' ? '是，仅正常损耗' : '否，疑似人为损坏'}<Text>⌄</Text></View>
+            </Picker>
+          </View>
+        </View>
+      </View>
+
+      <View className='ai-callout' onClick={() => openModule('ai')}>
+        <View>
+          <Text className='eyebrow'>还有疑问</Text>
+          <Text className='ai-callout-title'>把条款或扣款明细发给租小审 AI</Text>
+          <Text className='ai-callout-copy'>按“风险、证据、行动、话术”继续拆解。</Text>
+        </View>
+        <Text className='ai-callout-action'>去提问 ›</Text>
+      </View>
+
+      <Text className='footer-note'>风险提示仅供租房自查参考，不构成法律意见。</Text>
     </ScrollView>
   )
 }

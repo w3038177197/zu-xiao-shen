@@ -81,14 +81,14 @@ export default class ContractReview extends Component {
     return (
       <ScrollView scrollY className='contract-page'>
         <View className='review-hero'>
-          <Text className='eyebrow'>CONTRACT REVIEW</Text>
+          <Text className='eyebrow'>合同审查</Text>
           <Text className='page-title'>先看懂合同，再决定怎么签</Text>
           <Text className='page-copy'>标出押金、涨租、维修、入户和违约责任，把风险翻译成可直接沟通的修改建议。</Text>
           <View className='privacy-row' onClick={() => this.setState({ localOnly: !localOnly })}><View className={localOnly ? 'toggle active' : 'toggle'}><View /></View><Text>{localOnly ? '仅本地分析，合同不会上传' : '远端 AI 可用（当前仍以本地规则审查）'}</Text></View>
         </View>
 
         <View className='section input-section'>
-          <View className='section-head'><View><Text className='eyebrow'>CONTRACT INPUT</Text><Text className='section-title'>合同正文</Text></View><Text className='char-count'>{contractText.length.toLocaleString()} 字</Text></View>
+          <View className='section-head'><View><Text className='eyebrow'>审查材料</Text><Text className='section-title'>合同正文</Text></View><Text className='char-count'>{contractText.length.toLocaleString()} 字</Text></View>
           <Textarea className='contract-input' placeholder='请粘贴租房合同内容，或从微信聊天中导入 TXT 文件…' value={contractText} onInput={(event) => this.updateContract(event.detail.value)} maxlength={-1} />
           <View className='secondary-actions'><Button onClick={this.chooseFile}>从微信导入 TXT</Button><Button onClick={this.loadDemo}>载入高风险演示合同</Button></View>
         </View>
@@ -100,7 +100,7 @@ export default class ContractReview extends Component {
 
         {summary && (
           <View className='result-section'>
-            <Text className='eyebrow'>RISK OVERVIEW</Text><Text className='section-title'>审查结果</Text>
+            <Text className='eyebrow'>风险总览</Text><Text className='section-title'>审查结果</Text>
             <View className={`summary-card ${summary.tone}`}><View><Text className='risk-score'>{summary.score}</Text><Text className='risk-label'>风险评分</Text></View><View className='summary-copy'><Text className='risk-level'>{summary.label}</Text><Text className='risk-description'>{summary.advice}</Text></View></View>
             <View className='stats-row'><View className='stat-item'><Text>{findings.length}</Text><Text>风险点</Text></View><View className='stat-item high'><Text>{summary.highCount}</Text><Text>高风险</Text></View><View className='stat-item medium'><Text>{summary.mediumCount}</Text><Text>中风险</Text></View><View className='stat-item'><Text>{lowCount}</Text><Text>低风险</Text></View></View>
           </View>
@@ -108,7 +108,7 @@ export default class ContractReview extends Component {
 
         {findings.length > 0 && (
           <View className='findings-section'>
-            <Text className='eyebrow'>RISK DETAILS</Text><Text className='section-title'>逐条修改建议</Text>
+            <Text className='eyebrow'>逐条建议</Text><Text className='section-title'>修改与沟通方案</Text>
             {findings.map((finding, index) => {
               const expanded = expandedIndex === index
               return (

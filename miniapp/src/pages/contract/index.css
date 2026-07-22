@@ -1,8 +1,8 @@
-.contract-page { height: 100vh; box-sizing: border-box; background: #f4f0e7; color: #111713; padding: 24px; }
-.review-hero, .section, .result-section, .findings-section { background: rgba(255,255,255,.4); border: 2px solid #263129; padding: 26px; margin-bottom: 24px; box-shadow: 8px 8px 0 rgba(16,185,96,.1); }
-.eyebrow { display: block; color: #04a85a; font-size: 20px; font-weight: 800; letter-spacing: 2px; margin-bottom: 12px; }
+.contract-page { height: 100vh; box-sizing: border-box; background: #f3efe6; color: #17211b; }
+.review-hero, .section, .result-section, .findings-section { background: rgba(255,255,255,.4); border: 2px solid #263129; padding: 26px; margin: 24px 24px 0; box-shadow: 8px 8px 0 rgba(16,185,96,.1); }
+.eyebrow { display: block; color: #078d50; font-size: 22px; font-weight: 800; letter-spacing: 1px; margin-bottom: 12px; }
 .page-title { display: block; font-family: Georgia, serif; font-size: 43px; font-weight: 800; line-height: 1.15; margin-bottom: 16px; }
-.page-copy { display: block; color: #536057; font-size: 25px; line-height: 1.7; }
+.page-copy { display: block; color: #536057; font-size: 26px; line-height: 1.65; }
 .privacy-row { display: flex; gap: 14px; align-items: center; margin-top: 24px; background: #09261a; color: #fff; padding: 18px; font-size: 22px; }
 .toggle { width: 68px; height: 38px; border-radius: 20px; background: #6f7771; padding: 4px; box-sizing: border-box; }
 .toggle view { width: 30px; height: 30px; border-radius: 50%; background: white; }
@@ -10,11 +10,11 @@
 .toggle.active view { margin-left: 30px; }
 .section-head { display: flex; justify-content: space-between; gap: 16px; }
 .section-title { display: block; font-family: Georgia, serif; font-size: 34px; font-weight: 800; margin-bottom: 20px; }
-.char-count { color: #5f6a62; font-size: 21px; }
+.char-count { color: #5f6a62; font-size: 22px; }
 .contract-input { width: 100%; height: 520px; box-sizing: border-box; border: 2px solid #d6d0c3; background: #fffdf8; padding: 22px; font-size: 25px; line-height: 1.7; }
 .secondary-actions, .action-buttons { display: flex; gap: 14px; margin-top: 18px; }
 .secondary-actions button { flex: 1; border-radius: 0; border: 2px solid #263129; background: #f9f6ef; font-size: 22px; }
-.action-buttons { margin: 0 0 24px; }
+.action-buttons { margin: 24px 24px 0; }
 .btn-analyze, .btn-reset { flex: 1; border-radius: 0; font-size: 27px; font-weight: 800; }
 .btn-analyze { background: #071d14; color: white; border-bottom: 6px solid #0ee276; }
 .btn-analyze[disabled] { background: #8d938f; border-bottom-color: #bbc1bd; }
@@ -24,14 +24,14 @@
 .summary-card.danger { border-left-color: #f06456; }
 .risk-score, .risk-label, .risk-level, .risk-description { display: block; }
 .risk-score { color: #1ee889; font-family: Georgia, serif; font-size: 70px; font-weight: 800; line-height: 1; }
-.risk-label { font-size: 20px; margin-top: 7px; }
+.risk-label { font-size: 22px; margin-top: 7px; }
 .summary-copy { flex: 1; }
 .risk-level { font-size: 31px; font-weight: 800; margin-bottom: 10px; }
 .risk-description { color: #d9e3dc; font-size: 22px; line-height: 1.5; }
 .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); border: 2px solid #263129; border-top: 0; }
 .stat-item { padding: 18px 5px; text-align: center; border-right: 1px solid #c8c3b8; }
 .stat-item:last-child { border-right: 0; }
-.stat-item text { display: block; font-size: 20px; }
+.stat-item text { display: block; font-size: 22px; }
 .stat-item text:first-child { color: #079956; font-family: Georgia, serif; font-size: 35px; font-weight: 800; }
 .stat-item.high text:first-child { color: #d44235; }
 .stat-item.medium text:first-child { color: #b56d00; }
@@ -41,21 +41,21 @@
 .finding-low { border-left: 8px solid #28a96c; }
 .finding-header { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; padding: 22px; }
 .finding-header > view { flex: 1; }
-.finding-number { display: block; color: #05a85b; font-size: 19px; font-weight: 800; }
+.finding-number { display: block; color: #05a85b; font-size: 21px; font-weight: 800; }
 .finding-title { display: block; font-size: 28px; font-weight: 800; line-height: 1.45; margin-top: 7px; }
-.finding-badge { white-space: nowrap; padding: 7px 12px; font-size: 19px; font-weight: 800; }
+.finding-badge { white-space: nowrap; padding: 7px 12px; font-size: 21px; font-weight: 800; }
 .badge-high { background: #ffe4df; color: #a52f24; }
 .badge-medium { background: #fff0d3; color: #8b5500; }
 .badge-low { background: #e4f8ec; color: #087b45; }
 .finding-details { border-top: 1px solid #d8d2c5; padding: 0 22px 8px; }
 .finding-content { margin: 20px 0; }
-.finding-label { display: block; font-size: 21px; font-weight: 800; margin-bottom: 8px; }
+.finding-label { display: block; font-size: 22px; font-weight: 800; margin-bottom: 8px; }
 .finding-text { display: block; color: #39453d; font-size: 23px; line-height: 1.65; }
 .finding-text.evidence, .finding-text.suggestion, .finding-text.replacement { padding: 16px; }
 .finding-text.evidence { background: #fff2d9; }
 .finding-text.suggestion { background: #edf7f0; }
 .finding-text.replacement { background: #ddf8e7; }
-.empty-result { border: 2px solid #263129; background: #fffdf8; padding: 50px 24px; text-align: center; }
+.empty-result { border: 2px solid #263129; background: #fffdf8; padding: 50px 24px; margin: 24px; text-align: center; }
 .empty-result text { display: block; font-size: 23px; margin: 10px; }
 .empty-result text:first-child { color: #079956; font-size: 31px; font-weight: 800; }
-.legal-note { display: block; color: #667168; font-size: 20px; line-height: 1.6; margin: 24px 0 50px; }
+.legal-note { display: block; color: #667168; font-size: 22px; line-height: 1.6; margin: 24px 24px 50px; }

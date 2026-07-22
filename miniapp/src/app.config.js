@@ -9,7 +9,8 @@ export default defineAppConfig({
   ],
   window: {
     backgroundTextStyle: 'light',
-    navigationBarBackgroundColor: '#fff',
+    backgroundColor: '#f3efe6',
+    navigationBarBackgroundColor: '#f3efe6',
     navigationBarTitleText: '租小审',
     navigationBarTextStyle: 'black'
   }

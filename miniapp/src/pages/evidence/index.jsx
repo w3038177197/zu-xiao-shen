@@ -118,7 +118,7 @@ export default class EvidencePack extends Component {
     return (
       <ScrollView scrollY className='evidence-page'>
         <View className='evidence-hero'>
-          <Text className='eyebrow'>EVIDENCE PACK</Text>
+          <Text className='eyebrow'>退租证据包</Text>
           <Text className='page-title'>退租证据整理成包</Text>
           <Text className='page-copy'>把合同、押金凭证、交接照片、费用票据和沟通记录串成一条证据链。</Text>
         </View>

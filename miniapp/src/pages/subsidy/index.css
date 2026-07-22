@@ -1,12 +1,12 @@
-.subsidy-page { height: 100vh; box-sizing: border-box; background: #f4f0e7; color: #111713; padding: 24px; }
-.subsidy-hero, .panel { border: 2px solid #1f2a23; background: rgba(255,255,255,.35); padding: 26px; margin-bottom: 24px; box-shadow: 8px 8px 0 rgba(16,185,96,.12); }
+.subsidy-page { height: 100vh; box-sizing: border-box; background: #f3efe6; color: #17211b; }
+.subsidy-hero, .panel { border: 2px solid #1f2a23; background: rgba(255,255,255,.35); padding: 26px; margin: 24px 24px 0; box-shadow: 8px 8px 0 rgba(16,185,96,.12); }
 .subsidy-hero { display: flex; gap: 20px; align-items: flex-start; }
 .subsidy-hero > view:first-child { flex: 1; min-width: 0; }
-.eyebrow { display: block; color: #04a85a; font-size: 20px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+.eyebrow { display: block; color: #078d50; font-size: 22px; font-weight: 800; letter-spacing: 1px; margin-bottom: 12px; }
 .page-title { display: block; font-family: Georgia, serif; font-size: 42px; font-weight: 800; line-height: 1.12; margin-bottom: 16px; }
 .page-copy { display: block; color: #566158; font-size: 25px; line-height: 1.7; }
 .score-box { width: 156px; background: #09261a; color: white; padding: 22px 12px; text-align: center; }
-.score-box text { display: block; font-size: 21px; margin-top: 8px; }
+.score-box text { display: block; font-size: 22px; margin-top: 8px; }
 .score-box text:first-child { color: #1ee889; font-family: Georgia, serif; font-size: 44px; font-weight: 800; margin: 0; }
 .panel-title { display: block; font-family: Georgia, serif; font-size: 34px; font-weight: 800; margin-bottom: 20px; }
 .field-label { display: block; font-size: 23px; font-weight: 700; margin: 22px 0 10px; }
@@ -17,15 +17,15 @@
 .result-head { display: flex; justify-content: space-between; gap: 16px; }
 .count { color: #04a85a; font-family: Georgia, serif; font-size: 42px; font-weight: 800; }
 .policy-card { border: 2px solid #233027; background: #fffdf8; padding: 24px; margin: 20px 0; }
-.policy-head, .policy-foot { display: flex; justify-content: space-between; gap: 16px; color: #049d54; font-size: 21px; font-weight: 800; }
+.policy-head, .policy-foot { display: flex; justify-content: space-between; gap: 16px; color: #049d54; font-size: 22px; font-weight: 800; }
 .policy-title { display: block; font-size: 31px; font-weight: 800; line-height: 1.4; margin: 18px 0 10px; }
 .policy-amount { display: block; color: #3d4b42; font-size: 25px; line-height: 1.6; }
 .policy-detail { border-top: 1px solid #d8d2c5; margin-top: 20px; padding-top: 18px; }
 .policy-detail text { display: block; font-size: 23px; line-height: 1.6; }
 .policy-detail text:first-child { font-weight: 800; }
 .materials { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
-.materials text { border: 1px solid #8dddb0; background: #edfff3; color: #087a44; padding: 8px 12px; font-size: 20px; }
-.freshness { display: block; background: #eafff1; color: #087a44; padding: 14px; font-size: 20px; line-height: 1.5; }
+.materials text { border: 1px solid #8dddb0; background: #edfff3; color: #087a44; padding: 8px 12px; font-size: 22px; }
+.freshness { display: block; background: #eafff1; color: #087a44; padding: 14px; font-size: 22px; line-height: 1.5; }
 .freshness.stale { background: #fff0d9; color: #9a5b00; }
 .policy-foot { border-top: 1px solid #d8d2c5; margin-top: 18px; padding-top: 18px; color: #343f37; font-weight: 600; }
-.legal-note { display: block; color: #667168; font-size: 21px; line-height: 1.6; margin: 26px 0 40px; }
+.legal-note { display: block; color: #667168; font-size: 22px; line-height: 1.6; margin: 26px 0 40px; }
