@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { Button, Input, Picker, ScrollView, Text, View } from '@tarojs/components'
+import { Button, Input, Picker, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import './index.css'
 
@@ -41,7 +41,7 @@ export default class Index extends Component {
     const result = calculateDeposit(deposit)
 
     return (
-      <ScrollView className='home' scrollY>
+      <View className='home'>
         <View className='home-header'>
           <View className='brand-mark'>盾</View>
           <View><Text className='brand-name'>租小审</Text><Text className='brand-subtitle'>租房全流程风控助手</Text></View>
@@ -90,7 +90,7 @@ export default class Index extends Component {
 
         <Button className='footer-cta' onClick={() => this.openModule('review')}>立即体验租房审查 →</Button>
         <Text className='footer-note'>租房更安心，维权有依据</Text>
-      </ScrollView>
+      </View>
     )
   }
 }
