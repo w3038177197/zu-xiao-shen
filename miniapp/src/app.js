@@ -1,16 +1,9 @@
-import { Component } from 'react'
+import { useLaunch } from '@tarojs/taro'
 import './app.css'
 
-class App extends Component {
-  componentDidMount() {}
-
-  componentDidShow() {}
-
-  componentDidHide() {}
-
-  render() {
-    return this.props.children
-  }
+function App({ children }) {
+  useLaunch(() => {})
+  return children
 }
 
 export default App

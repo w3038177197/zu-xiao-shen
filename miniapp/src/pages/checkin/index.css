@@ -224,3 +224,21 @@
   font-size: 30px;
   padding: 24px 0;
 }
+
+/* 与网页项目一致的移动端视觉 */
+.checkin-page { height: 100vh; box-sizing: border-box; background: #f4f0e7; color: #111713; padding: 24px; }
+.checkin-hero, .checkin-page .section { background: rgba(255,255,255,.4); border: 2px solid #263129; padding: 26px; margin-bottom: 24px; box-shadow: 8px 8px 0 rgba(16,185,96,.1); }
+.checkin-page .eyebrow { display: block; color: #04a85a; font-size: 20px; font-weight: 800; letter-spacing: 2px; margin-bottom: 12px; }
+.checkin-page .page-title { display: block; font-family: Georgia, serif; font-size: 43px; font-weight: 800; line-height: 1.15; margin-bottom: 16px; }
+.checkin-page .page-copy { display: block; color: #536057; font-size: 25px; line-height: 1.7; }
+.checkin-page .section-title { font-family: Georgia, serif; color: #111713; }
+.checkin-page .form-input, .checkin-page .item-notes { border-radius: 0; border-color: #d6d0c3; background: #fffdf8; }
+.checkin-page .room-tab { border-radius: 0; border: 2px solid #263129; background: #fffdf8; color: #263129; }
+.checkin-page .room-tab.active { background: #09261a; border-color: #09261a; color: #1ee889; }
+.checkin-page .inspection-item { border-radius: 0; border: 2px solid #263129; background: #fffdf8; }
+.checkin-page .status-btn { border-radius: 0; }
+.checkin-page .photo-btn { border-radius: 0; background: #09261a; border-bottom: 4px solid #1ee889; }
+.checkin-page .action-buttons { padding: 0 0 48px; }
+.checkin-page .btn-save, .checkin-page .btn-export, .checkin-page .btn-reset { border-radius: 0; font-size: 25px; }
+.checkin-page .btn-save { background: #09261a; border-bottom: 5px solid #1ee889; }
+.checkin-page .btn-export { background: #0a9f58; }

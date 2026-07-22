@@ -250,3 +250,24 @@
   font-size: 30px;
   padding: 24px 0;
 }
+
+/* 与网页项目一致的移动端视觉 */
+.evidence-page { height: 100vh; box-sizing: border-box; background: #f4f0e7; color: #111713; padding: 24px; }
+.evidence-hero, .evidence-page .section, .evidence-page .progress-section { background: rgba(255,255,255,.4); border: 2px solid #263129; padding: 26px; margin-bottom: 24px; color: #111713; box-shadow: 8px 8px 0 rgba(16,185,96,.1); }
+.evidence-page .eyebrow { display: block; color: #04a85a; font-size: 20px; font-weight: 800; letter-spacing: 2px; margin-bottom: 12px; }
+.evidence-page .page-title { display: block; font-family: Georgia, serif; font-size: 43px; font-weight: 800; line-height: 1.15; margin-bottom: 16px; }
+.evidence-page .page-copy { display: block; color: #536057; font-size: 25px; line-height: 1.7; }
+.evidence-page .progress-bar { background: #d9d4c9; border-radius: 0; }
+.evidence-page .progress-fill { background: #0abf68; border-radius: 0; }
+.evidence-page .section-title { font-family: Georgia, serif; color: #111713; }
+.evidence-page .form-input, .evidence-page .communication-text { border-radius: 0; border: 2px solid #d6d0c3; background: #fffdf8; }
+.evidence-page .category-tab, .evidence-page .tab-btn { border-radius: 0; border: 2px solid #263129; background: #fffdf8; color: #263129; }
+.evidence-page .category-tab.active, .evidence-page .tab-btn.active { background: #09261a; border-color: #09261a; color: #1ee889; }
+.evidence-page .evidence-item, .evidence-page .action-item { border-radius: 0; border: 2px solid #263129; background: #fffdf8; }
+.evidence-page .checkbox { border-radius: 0; }
+.evidence-page .checkbox.checked { background: #0abf68; border-color: #09261a; }
+.evidence-page .btn-generate { border-radius: 0; background: #09261a; color: white; border-bottom: 5px solid #1ee889; }
+.evidence-page .action-buttons { padding: 0 0 48px; }
+.evidence-page .btn-save, .evidence-page .btn-export, .evidence-page .btn-reset { border-radius: 0; font-size: 25px; }
+.evidence-page .btn-save { background: #09261a; border-bottom: 5px solid #1ee889; }
+.evidence-page .btn-export { background: #0a9f58; }
