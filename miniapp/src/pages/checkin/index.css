@@ -82,3 +82,14 @@
 .btn-save[disabled] { background: #909790; border-bottom-color: #bcc2bd; }
 .btn-export { background: #118c51; color: #fff; }
 .btn-reset { background: #fffdf7; color: #5a655d; border: 2px solid #9ca49d; }
+.room-type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 26px; }
+.room-type-item { border: 2px solid #d6d0c3; background: #fbf9f2; padding: 16px; }
+.room-type-item.active { border-color: #09261a; background: #09261a; }
+.room-type-label { display: block; font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+.room-type-item.active .room-type-label { color: #1ee889; }
+.room-type-desc { display: block; color: #667168; font-size: 20px; line-height: 1.5; }
+.room-type-item.active .room-type-desc { color: #cfe0d4; }
+.report-section { margin-bottom: calc(40px + env(safe-area-inset-bottom)); }
+.report-text { width: 100%; height: 480px; box-sizing: border-box; border: 2px solid #d6d0c3; background: #fbf9f2; padding: 18px; font-size: 23px; line-height: 1.6; }
+.report-actions { display: flex; gap: 12px; margin-top: 14px; }
+.report-actions button { flex: 1; margin: 0; border-radius: 0; font-size: 23px; font-weight: 800; }

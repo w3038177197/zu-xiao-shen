@@ -28,6 +28,10 @@ export default class EvidencePack extends Component {
     this.setState({ packState })
   }
 
+  onShareAppMessage() {
+    return { title: '租小审：退租前把证据整理成包', path: '/pages/evidence/index' }
+  }
+
   saveData = () => {
     this.setState({ isSaving: true })
     try {

@@ -45,9 +45,15 @@ export default function Index() {
   const [deposit, setDeposit] = useState(defaultDeposit)
   const result = useMemo(() => calculateDeposit(deposit), [deposit])
 
+  Taro.useShareAppMessage(() => ({
+    title: '租小审：租房全流程风险审查与证据助手',
+    path: '/pages/index/index',
+  }))
+
   const openModule = (id) => {
     const path = id === 'review' ? '/pages/contract/index' : `/pages/${id}/index`
-    Taro.navigateTo({ url: path })
+    if (id === 'subsidy') Taro.navigateTo({ url: path })
+    else Taro.switchTab({ url: path })
   }
 
   const updateDeposit = (key, value) => {

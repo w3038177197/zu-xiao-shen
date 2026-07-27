@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import { View, Text, Textarea, Button, Image, ScrollView } from '@tarojs/components'
 import Taro from '@tarojs/taro'
+import { checkinRoomTypes } from '../../../../src/constants/checkinConfig.js'
 import {
   ROOMS,
   INSPECTION_ITEMS,
@@ -12,16 +13,30 @@ import {
 } from '../../features/checkinInspection'
 import './index.css'
 
+const ROOM_TYPE_KEY = 'zu-xiao-shen-checkin-room-type'
+
 export default class CheckinInspection extends Component {
   state = {
     inspectionState: createDefaultCheckinState(),
     currentRoom: 0,
     isSaving: false,
+    roomType: 'studio',
+    report: '',
   }
 
   componentDidMount() {
     const inspectionState = loadCheckinInspectionState()
-    this.setState({ inspectionState })
+    const roomType = Taro.getStorageSync(ROOM_TYPE_KEY) || 'studio'
+    this.setState({ inspectionState, roomType })
+  }
+
+  onShareAppMessage() {
+    return { title: '租小审：入住先留证，退租少扯皮', path: '/pages/checkin/index' }
+  }
+
+  setRoomType = (roomType) => {
+    this.setState({ roomType })
+    Taro.setStorageSync(ROOM_TYPE_KEY, roomType)
   }
 
   saveData = () => {
@@ -118,8 +133,19 @@ export default class CheckinInspection extends Component {
 
   handleDeletePhoto = (roomKey, itemKey, photoIndex) => {
     const photos = [...(this.state.inspectionState[roomKey][itemKey].photos || [])]
-    photos.splice(photoIndex, 1)
+    const [removed] = photos.splice(photoIndex, 1)
+    if (removed?.startsWith('wxfile://')) Taro.removeSavedFile({ filePath: removed }).catch(() => {})
     this.updateRecord(roomKey, itemKey, { photos })
+  }
+
+  cleanupSavedPhotos = () => {
+    Object.values(this.state.inspectionState).forEach((room) => {
+      Object.values(room).forEach((record) => {
+        record.photos?.filter((photo) => photo.startsWith('wxfile://')).forEach((filePath) => {
+          Taro.removeSavedFile({ filePath }).catch(() => {})
+        })
+      })
+    })
   }
 
   handleReset = () => {
@@ -128,18 +154,31 @@ export default class CheckinInspection extends Component {
       content: '将清空所有填写的内容，是否继续？',
       success: (res) => {
         if (res.confirm) {
-          this.setState({ inspectionState: createDefaultCheckinState(), currentRoom: 0 })
+          this.cleanupSavedPhotos()
+          this.setState({ inspectionState: createDefaultCheckinState(), currentRoom: 0, report: '' })
+          saveCheckinInspectionState(createDefaultCheckinState())
         }
       },
     })
   }
 
-  handleExport = () => {
-    const { inspectionState } = this.state
+  getLandlordScript = () => {
+    const defects = getCheckinDefectRows(this.state.inspectionState)
+    const roomType = checkinRoomTypes.find((item) => item.value === this.state.roomType)?.label || '租住房屋'
+    return defects.length
+      ? `您好，我今天入住${roomType}时已按房间拍摄并整理验房记录。记录中标注了${defects.slice(0, 3).map((row) => row.defect).join('、')}等入住前已存在情况。麻烦确认这些问题为入住时现状，后续退租时不作为我的责任扣除押金。`
+      : `您好，我今天入住${roomType}时已按房间拍摄入住验房照片，当前未发现明显瑕疵。我会保留全屋照片和水电燃气表读数，作为退租时双方核对的基准。麻烦确认收到，谢谢。`
+  }
+
+  buildReport = () => {
+    const { inspectionState, roomType } = this.state
     const stats = getCheckinStats(inspectionState)
     const defects = getCheckinDefectRows(inspectionState)
+    const roomTypeLabel = checkinRoomTypes.find((item) => item.value === roomType)?.label || '租住房屋'
 
-    let report = `入住验房记录\n\n`
+    let report = `租小审入住验房报告\n`
+    report += `生成时间：${new Date().toLocaleString('zh-CN', { hour12: false })}\n`
+    report += `房屋类型：${roomTypeLabel}\n`
     report += `完成度：${stats.percent}%（${stats.checked}/${stats.total}）\n`
     report += `疑似瑕疵：${stats.defects} 处\n`
     report += `验房照片：${stats.photos} 张\n\n`
@@ -153,26 +192,43 @@ export default class CheckinInspection extends Component {
         report += `  ${item.label}：${statusText}`
         if (record.defect) report += ` - ${record.defect}`
         if (record.note) report += `（${record.note}）`
+        if (record.photos?.length) report += `［照片${record.photos.length}张］`
         report += `\n`
       })
       report += `\n`
     })
 
-    if (defects.length) {
-      report += `瑕疵清单：\n`
-      defects.forEach((d) => {
-        report += `  ${d.room}-${d.item}：${d.defect}（${d.note}；照片${d.photoCount}张）\n`
-      })
-    }
+    report += `瑕疵清单：\n`
+    report += defects.length
+      ? defects.map((item) => `  ${item.room}-${item.item}：${item.defect}（${item.note}；照片${item.photoCount}张）`).join('\n')
+      : '  本次验房未记录明显瑕疵。'
+    report += `\n\n发给房东/中介的确认话术：\n${this.getLandlordScript()}\n\n`
+    report += '免责声明：本报告仅供租房自查和双方协商参考，不构成法律意见。'
+    return report
+  }
 
+  handleGenerateReport = () => {
+    this.setState({ report: this.buildReport() })
+    Taro.showToast({ title: '验房报告已生成', icon: 'success' })
+  }
+
+  handleExport = () => {
     Taro.setClipboardData({
-      data: report,
-      success: () => Taro.showToast({ title: '已复制到剪贴板', icon: 'success' }),
+      data: this.state.report || this.buildReport(),
+      success: () => Taro.showToast({ title: '报告已复制', icon: 'success' }),
     })
   }
 
+  handleCopyScript = () => {
+    Taro.setClipboardData({ data: this.getLandlordScript(), success: () => Taro.showToast({ title: '话术已复制', icon: 'success' }) })
+  }
+
+  handlePreviewPhoto = (photos, index) => {
+    Taro.previewImage({ current: photos[index], urls: photos }).catch(() => {})
+  }
+
   render() {
-    const { inspectionState, currentRoom, isSaving } = this.state
+    const { inspectionState, currentRoom, isSaving, roomType, report } = this.state
     const room = ROOMS[currentRoom]
     const stats = getCheckinStats(inspectionState)
 
@@ -184,6 +240,16 @@ export default class CheckinInspection extends Component {
           <Text className='page-copy'>按房间逐项记录设施状态、瑕疵描述和现场照片，形成可追溯的入住基线。</Text>
         </View>
         <View className='section'>
+          <Text className='section-kicker'>选择房屋类型</Text>
+          <View className='room-type-grid'>
+            {checkinRoomTypes.map((item) => (
+              <View key={item.value} className={`room-type-item ${roomType === item.value ? 'active' : ''}`} onClick={() => this.setRoomType(item.value)}>
+                <Text className='room-type-label'>{item.label}</Text>
+                <Text className='room-type-desc'>{item.desc}</Text>
+              </View>
+            ))}
+          </View>
+
           <Text className='section-kicker'>本次验房进度</Text>
           <View className='checkin-stats'>
             <View><Text>{stats.percent}%</Text><Text>完成度</Text></View>
@@ -249,7 +315,7 @@ export default class CheckinInspection extends Component {
                     <View className='photo-list'>
                       {(record.photos || []).map((photo, photoIndex) => (
                         <View key={photoIndex} className='photo-item'>
-                          <Image src={photo} className='photo-image' mode='aspectFill' />
+                          <Image src={photo} className='photo-image' mode='aspectFill' onClick={() => this.handlePreviewPhoto(record.photos, photoIndex)} />
                           <View
                             className='photo-delete'
                             onClick={() => this.handleDeletePhoto(room.key, item.key, photoIndex)}
@@ -278,13 +344,22 @@ export default class CheckinInspection extends Component {
           <Button className='btn-save' onClick={this.saveData} disabled={isSaving}>
             {isSaving ? '保存中...' : '保存'}
           </Button>
-          <Button className='btn-export' onClick={this.handleExport}>
-            复制报告
+          <Button className='btn-export' onClick={this.handleGenerateReport}>
+            生成报告
           </Button>
           <Button className='btn-reset' onClick={this.handleReset}>
             重置
           </Button>
         </View>
+
+        {report ? <View className='section report-section'>
+          <Text className='section-kicker'>验房报告</Text>
+          <Textarea className='report-text' value={report} maxlength={-1} disabled />
+          <View className='report-actions'>
+            <Button className='btn-save' onClick={this.handleExport}>复制完整报告</Button>
+            <Button className='btn-export' onClick={this.handleCopyScript}>复制房东话术</Button>
+          </View>
+        </View> : null}
       </ScrollView>
     )
   }

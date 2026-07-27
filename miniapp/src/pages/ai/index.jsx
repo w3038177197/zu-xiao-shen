@@ -1,57 +1,99 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button, ScrollView, Text, Textarea, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
+import { buildLocalReply, formatMessageBlocks } from '../../features/aiAssistant'
+import { analyzeContract, cleanContractTextForReview, getRiskSummary } from '../../features/contractReview'
 import './index.css'
 
+const CONTRACT_KEY = 'zu-xiao-shen-contract-draft'
+const CHAT_KEY = 'zu-xiao-shen-mini-ai-chat'
 const quickPrompts = [
   '合同里押金条款应该重点看什么？',
   '房东要扣保洁费，我该怎么回复？',
   '入住验房需要拍哪些照片？',
   '毕业生租房补贴需要准备什么？',
 ]
+const welcome = { role: 'assistant', content: '结论：我是租小审本地 AI，可以回答合同、押金、验房、退租证据和补贴问题。\n下一步：如果你已粘贴合同，我会自动结合本地审查结果回答。' }
 
-const welcome = { role: 'assistant', content: '我是租小审系统 AI。你可以直接问合同审查、押金扣款、入住验房、退租证据和补贴申请。当前默认仅在本地生成建议。' }
+function loadChat() {
+  try {
+    const saved = Taro.getStorageSync(CHAT_KEY)
+    return Array.isArray(saved) && saved.length ? saved.slice(-40) : [welcome]
+  } catch {
+    return [welcome]
+  }
+}
 
-function localReply(prompt) {
-  if (/押金|扣款|保洁/.test(prompt)) return '先要求对方提供扣款项目、金额、现场照片、维修或保洁清单及有效票据。正常使用损耗不应直接从押金中扣除。建议书面回复：“我愿意配合合理核验，请先提供逐项明细和凭证；无凭证或属于正常损耗的项目，请勿从押金中扣除。”'
-  if (/验房|照片|入住/.test(prompt)) return '优先拍摄带时间信息的全景和近景：墙面地面、门窗锁具、水电燃气表、卫浴渗漏、厨房设备、家具家电序列号。发现瑕疵时同时拍位置全景和细节，并在当天用微信发给房东确认。'
-  if (/补贴|毕业|社保/.test(prompt)) return '先确认城市、毕业年份和学历，再准备身份证明、学历证明、劳动合同、社保记录、租赁合同和无房证明。政策变化快，请到“补贴匹配”页复制官方入口并核对最新申报窗口。'
-  if (/合同|条款|签/.test(prompt)) return '先逐条检查押金退还期限、租期内涨租、维修责任、出租方入户、提前解除、违约金、费用凭证和争议管辖。尤其警惕“出租方单方认定”“押金不退”“无需通知即可入户”等不对等表述。'
-  return '建议先判断问题处于签约、入住、居住中还是退租阶段，再收集合同原文、付款凭证、现场照片和书面沟通。把具体条款或扣款明细发来，我可以继续按“风险、证据、行动、话术”帮你拆解。'
+function loadReviewContext() {
+  try {
+    const contractText = String(Taro.getStorageSync(CONTRACT_KEY) || '')
+    if (!contractText.trim()) return { contractText: '', findings: [], summary: null }
+    const findings = analyzeContract(cleanContractTextForReview(contractText))
+    return { contractText, findings, summary: getRiskSummary(findings) }
+  } catch {
+    return { contractText: '', findings: [], summary: null }
+  }
 }
 
 export default function AiAssistant() {
-  const [messages, setMessages] = useState([welcome])
+  const [messages, setMessages] = useState(loadChat)
   const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
+  const [context, setContext] = useState(loadReviewContext)
+
+  useEffect(() => {
+    try {
+      Taro.setStorageSync(CHAT_KEY, messages.slice(-40))
+    } catch {
+      // Storage can be unavailable or full; the current chat remains usable.
+    }
+  }, [messages])
+
+  Taro.useShareAppMessage(() => ({ title: '租小审：租房问题随时问', path: '/pages/ai/index' }))
+
+  const contextLabel = useMemo(() => {
+    if (!context.contractText) return '未关联合同'
+    if (!context.summary) return '已关联合同正文'
+    return `合同 ${context.summary.score} 分 · ${context.summary.label}`
+  }, [context])
 
   const send = (value = draft) => {
     const prompt = value.trim()
-    if (!prompt || sending) return
-    const userMessage = { role: 'user', content: prompt }
-    setSending(true)
-    setMessages((current) => [...current, userMessage])
+    if (!prompt) return
+    const nextContext = loadReviewContext()
+    setContext(nextContext)
+    const reply = buildLocalReply({ prompt, ...nextContext })
+    setMessages((current) => [...current, { role: 'user', content: prompt }, { role: 'assistant', content: reply, meta: '本地知识库' }])
     setDraft('')
-    setTimeout(() => {
-      setMessages((current) => [...current, { role: 'assistant', content: localReply(prompt) }])
-      setSending(false)
-    }, 350)
   }
 
   const clear = () => {
-    setMessages([welcome])
-    Taro.showToast({ title: '对话已重置', icon: 'success' })
+    Taro.showModal({
+      title: '清空对话',
+      content: '本机保存的聊天记录将被清空，是否继续？',
+      success: ({ confirm }) => {
+        if (confirm) setMessages([welcome])
+      },
+    })
+  }
+
+  const copyMessage = (content) => {
+    Taro.setClipboardData({ data: content, success: () => Taro.showToast({ title: '回复已复制', icon: 'success' }) })
   }
 
   return (
     <View className='ai-page'>
-      <View className='ai-hero'><View><Text className='eyebrow'>租房 AI 助手</Text><Text className='page-title'>租房问题，直接问</Text><Text className='page-copy'>围绕当前租房阶段给出能执行的证据清单、沟通话术和下一步。</Text></View><Text className='local-badge'>仅本地分析</Text></View>
+      <View className='ai-hero'>
+        <View><Text className='eyebrow'>租房 AI 助手</Text><Text className='page-title'>租房问题，直接问</Text><Text className='page-copy'>结合当前合同，给出证据清单、沟通话术和下一步。</Text></View>
+        <View className='hero-badges'><Text className='local-badge'>仅本地分析</Text><Text className='context-badge'>{contextLabel}</Text></View>
+      </View>
       <ScrollView className='chat-thread' scrollY scrollIntoView={`message-${messages.length - 1}`}>
         <View className='quick-list'>{quickPrompts.map((item) => <Text key={item} onClick={() => send(item)}>{item}</Text>)}</View>
-        {messages.map((message, index) => <View id={`message-${index}`} key={`${message.role}-${index}`} className={`message ${message.role}`}><Text className='message-role'>{message.role === 'user' ? '我' : '租小审 AI'}</Text><Text className='message-content'>{message.content}</Text></View>)}
-        {sending && <View className='message assistant'><Text className='message-role'>租小审 AI</Text><Text className='message-content'>正在整理建议…</Text></View>}
+        {messages.map((message, index) => <View id={`message-${index}`} key={`${message.role}-${index}`} className={`message ${message.role}`}>
+          <View className='message-head'><Text className='message-role'>{message.role === 'user' ? '我' : `租小审 AI${message.meta ? ` · ${message.meta}` : ''}`}</Text>{message.role === 'assistant' && index > 0 ? <Text className='message-copy' onClick={() => copyMessage(message.content)}>复制</Text> : null}</View>
+          {message.role === 'assistant' ? <View className='message-blocks'>{formatMessageBlocks(message.content).map((block, blockIndex) => <View className='message-block' key={blockIndex}>{block.title ? <Text className='block-title'>{block.title}</Text> : null}{block.lines.map((line, lineIndex) => <Text className='block-line' key={lineIndex}>{line}</Text>)}</View>)}</View> : <Text className='message-content'>{message.content}</Text>}
+        </View>)}
       </ScrollView>
-      <View className='composer'><Textarea value={draft} maxlength={1000} placeholder='输入合同条款、扣款明细或你的问题…' onInput={(event) => setDraft(event.detail.value)} /><View className='composer-actions'><Button onClick={clear}>重置</Button><Button className='send-button' disabled={!draft.trim() || sending} onClick={() => send()}>发送</Button></View></View>
+      <View className='composer'><Textarea value={draft} maxlength={1000} placeholder='输入合同条款或你的问题…' onInput={(event) => setDraft(event.detail.value)} /><View className='composer-actions'><Button onClick={clear}>重置</Button><Button className='send-button' disabled={!draft.trim()} onClick={() => send()}>发送</Button></View></View>
     </View>
   )
 }
