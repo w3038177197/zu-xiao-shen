@@ -10,12 +10,13 @@
     "build": "vite build",
     "start": "node server/ai-proxy.mjs",
     "lint": "eslint .",
-    "preview": "vite preview",
+    "preview": "npm run build && wrangler dev",
     "clean": "node -e \"const fs=require('fs');const path=require('path');const p=path.join('node_modules','.vite');if(fs.existsSync(p))fs.rmSync(p,{recursive:true,force:true})\"",
     "test:ai": "node server/evaluate-rag.mjs",
     "test:e2e": "npm run clean && playwright test",
     "sync:miniapp-review": "node scripts/sync-miniapp-review.mjs",
-    "test:miniapp-core": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-miniapp-core.mjs"
+    "test:miniapp-core": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-miniapp-core.mjs",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@tesseract.js-data/chi_sim": "^1.0.0",
@@ -33,6 +34,7 @@
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.47.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
     "@types/react": "^19.2.14",
@@ -43,6 +45,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "wrangler": "^4.114.0"
   }
 }
