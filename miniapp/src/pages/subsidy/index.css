@@ -29,3 +29,24 @@
 .freshness.stale { background: #fff0d9; color: #9a5b00; }
 .policy-foot { border-top: 1px solid #d8d2c5; margin-top: 18px; padding-top: 18px; color: #343f37; font-weight: 600; }
 .legal-note { display: block; color: #667168; font-size: 22px; line-height: 1.6; margin: 26px 0 40px; }
+
+/* Mobile product layout */
+.subsidy-page { background: #eef2ec; color: #193327; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+.subsidy-hero, .subsidy-page .panel { margin: 18px 18px 0; padding: 22px; border: 0; border-radius: 22px; background: #fbfcf9; box-shadow: 0 8px 22px rgba(41, 76, 53, .06); }
+.subsidy-hero { display: block; background: #dbe9d8; }
+.subsidy-page .eyebrow { color: #347350; font-size: 18px; letter-spacing: 0; margin-bottom: 7px; }
+.subsidy-page .page-title { font-family: inherit; font-size: 34px; line-height: 1.2; margin-bottom: 10px; }
+.subsidy-page .page-copy { color: #607365; font-size: 21px; line-height: 1.55; }
+.score-box { width: auto; display: flex; align-items: center; justify-content: space-between; margin-top: 16px; padding: 14px 16px; border-radius: 16px; background: #173d2b; text-align: left; }
+.score-box text { margin: 0; font-size: 19px; }
+.score-box text:first-child { font-family: inherit; font-size: 34px; }
+.panel-title { font-family: inherit; font-size: 28px; }
+.picker-field, .profile-input { border: 1px solid #ccd8cc; border-radius: 14px; background: #fff; font-size: 21px; }
+.profile-input { min-height: 160px; }
+.primary-button { min-height: 50px; border-radius: 15px; background: #173d2b; border-bottom: 0; font-size: 22px; }
+.count { font-family: inherit; font-size: 34px; }
+.policy-card { padding: 19px; border: 1px solid #d4ded3; border-radius: 18px; background: #fff; }
+.policy-title { font-size: 26px; }
+.policy-amount { font-size: 21px; }
+.materials text { border-radius: 999px; }
+.freshness { border-radius: 13px; }

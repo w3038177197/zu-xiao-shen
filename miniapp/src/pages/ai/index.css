@@ -28,3 +28,25 @@
 .composer button { width: 150px; margin: 0; border-radius: 0; border: 2px solid #263129; background: #fffdf8; font-size: 23px; }
 .composer .send-button { background: #09261a; color: white; border-bottom: 5px solid #1ee889; }
 .composer .send-button[disabled] { background: #8e958f; border-bottom-color: #b7bdb9; }
+
+/* Mobile product layout */
+.ai-page { background: #eef2ec; color: #193327; padding: 16px 16px calc(14px + env(safe-area-inset-bottom)); }
+.ai-hero { display: block; padding: 20px; border: 0; border-radius: 22px; background: #dbe9d8; box-shadow: none; }
+.ai-page .eyebrow { color: #347350; font-size: 18px; letter-spacing: 0; margin-bottom: 7px; }
+.ai-page .page-title { font-family: inherit; font-size: 32px; line-height: 1.2; margin-bottom: 8px; }
+.ai-page .page-copy { color: #607365; font-size: 20px; line-height: 1.5; }
+.hero-badges { flex-direction: row; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+.local-badge, .context-badge { align-self: auto; border: 0; border-radius: 999px; padding: 8px 11px; font-size: 17px; }
+.chat-thread { margin: 14px 0; }
+.quick-list { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 14px; }
+.quick-list text { flex: 0 0 auto; max-width: 250px; padding: 9px 12px; border: 1px solid #cbdaca; border-radius: 999px; background: #f7faf6; color: #347350; font-size: 18px; white-space: nowrap; }
+.message { max-width: 92%; padding: 15px; border: 0; border-radius: 18px 18px 18px 6px; background: #fbfcf9; box-shadow: 0 5px 16px rgba(41, 76, 53, .05); }
+.message.user { border-radius: 18px 18px 6px 18px; background: #173d2b; }
+.message-role { font-size: 17px; }
+.message-content, .block-line { font-size: 20px; line-height: 1.55; }
+.block-title { border-radius: 10px; background: #e3efe2; font-size: 18px; }
+.composer { padding: 12px; border: 0; border-radius: 20px; background: #fbfcf9; box-shadow: 0 -6px 24px rgba(41, 76, 53, .08); }
+.composer textarea { height: 92px; padding: 4px; font-size: 20px; }
+.composer-actions { margin-top: 8px; }
+.composer button { width: auto; min-width: 94px; min-height: 44px; border: 1px solid #c8d5c8; border-radius: 13px; background: #f3f7f2; font-size: 19px; }
+.composer .send-button { background: #173d2b; border: 0; }

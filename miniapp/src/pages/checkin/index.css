@@ -98,3 +98,33 @@
 .report-text { width: 100%; height: 480px; box-sizing: border-box; border: 2px solid #d6d0c3; background: #fbf9f2; padding: 18px; font-size: 23px; line-height: 1.6; }
 .report-actions { display: flex; gap: 12px; margin-top: 14px; }
 .report-actions button { flex: 1; margin: 0; border-radius: 0; font-size: 23px; font-weight: 800; }
+
+/* Mobile product layout */
+.checkin-page { background: #eef2ec; color: #193327; padding-bottom: calc(116px + env(safe-area-inset-bottom)); }
+.checkin-hero, .checkin-page .section { margin: 18px 18px 0; padding: 22px; border: 0; border-radius: 22px; background: #fbfcf9; box-shadow: 0 8px 22px rgba(41, 76, 53, .06); }
+.checkin-hero { background: #dbe9d8; }
+.checkin-page .eyebrow, .checkin-page .section-kicker { color: #347350; font-size: 18px; letter-spacing: 0; margin-bottom: 7px; }
+.checkin-page .page-title { font-family: inherit; font-size: 34px; line-height: 1.2; margin-bottom: 10px; }
+.checkin-page .page-copy { color: #607365; font-size: 21px; line-height: 1.55; }
+.room-type-grid { gap: 10px; }
+.room-type-item { padding: 14px; border: 1px solid #ced9cd; border-radius: 16px; background: #f5f8f3; }
+.room-type-item.active { border-color: #173d2b; background: #173d2b; }
+.checkin-stats { border: 0; border-radius: 16px; overflow: hidden; background: #e5ece4; }
+.checkin-stats view { border-right-color: #d1dbd0; background: #f6f9f5; }
+.room-tab { padding: 11px 16px; border: 1px solid #cbd7cb; border-radius: 999px; background: #f5f8f3; font-size: 20px; }
+.room-tab.active { background: #173d2b; border-color: #173d2b; color: #b7e8bb; }
+.inspection-item { padding: 18px; border: 1px solid #d5ded4; border-radius: 18px; background: #fff; }
+.item-name { font-size: 25px; }
+.status-btn { padding: 12px; border: 1px solid #ccd7cc; border-radius: 13px; font-size: 21px; }
+.item-notes { min-height: 96px; padding: 14px; border: 1px solid #ccd7cc; border-radius: 14px; background: #f7faf6; font-size: 20px; }
+.photo-item, .photo-image { border-radius: 14px; }
+.photo-btn { border-radius: 13px; background: #173d2b; border-bottom: 0; font-size: 19px; }
+.storage-tools { align-items: flex-start; }
+.btn-clear-photos { border: 1px solid #c6d2c6; border-radius: 12px; background: #f6f9f5; font-size: 18px; }
+.checkin-page .action-buttons { grid-template-columns: 1fr 1fr; padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); background: rgba(238, 242, 236, .96); }
+.checkin-page .action-buttons button { min-height: 48px; border-radius: 14px; font-size: 20px; }
+.checkin-page .action-buttons .btn-reset { grid-column: 1 / -1; }
+.checkin-page .btn-save { background: #173d2b; border-bottom: 0; }
+.checkin-page .btn-export { background: #32764f; }
+.report-text { border: 1px solid #ccd7cc; border-radius: 15px; background: #f7faf6; font-size: 20px; }
+.report-actions button { border-radius: 13px; font-size: 19px; }

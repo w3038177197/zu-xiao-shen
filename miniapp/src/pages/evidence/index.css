@@ -53,3 +53,29 @@
 .btn-save[disabled] { background: #909790; border-bottom-color: #bcc2bd; }
 .btn-export { background: #118c51; color: #fff; }
 .btn-reset { background: #fffdf7; color: #5a655d; border: 2px solid #9ca49d; }
+
+/* Mobile product layout */
+.evidence-page { background: #eef2ec; color: #193327; padding-bottom: calc(116px + env(safe-area-inset-bottom)); }
+.evidence-hero, .evidence-page .section, .evidence-page .progress-section { margin: 18px 18px 0; padding: 22px; border: 0; border-radius: 22px; background: #fbfcf9; box-shadow: 0 8px 22px rgba(41, 76, 53, .06); }
+.evidence-hero { background: #dbe9d8; }
+.evidence-page .eyebrow { color: #347350; font-size: 18px; letter-spacing: 0; margin-bottom: 7px; }
+.evidence-page .page-title { font-family: inherit; font-size: 34px; line-height: 1.2; margin-bottom: 10px; }
+.evidence-page .page-copy { color: #607365; font-size: 21px; line-height: 1.55; }
+.evidence-page .progress-title { font-size: 24px; }
+.evidence-page .progress-bar { height: 9px; border-radius: 999px; }
+.evidence-page .progress-fill { border-radius: 999px; background: #347f54; }
+.evidence-page .section-title { font-family: inherit; font-size: 28px; }
+.evidence-page .form-input { min-height: 52px; padding: 11px 13px; border: 1px solid #ccd8cc; border-radius: 14px; background: #fff; font-size: 20px; }
+.category-tab, .tab-btn { padding: 10px 14px; border: 1px solid #c8d5c8; border-radius: 999px; background: #f5f8f3; font-size: 19px; }
+.category-tab.active, .tab-btn.active { background: #173d2b; border-color: #173d2b; color: #b7e8bb; }
+.evidence-item, .action-item { padding: 15px; border: 1px solid #d3ddd2; border-radius: 16px; background: #fff; }
+.checkbox { width: 32px; height: 32px; border: 1px solid #89998c; border-radius: 10px; font-size: 21px; }
+.item-name { font-size: 22px; }
+.item-desc { font-size: 19px; }
+.btn-generate { min-height: 48px; border-radius: 14px; background: #173d2b; border-bottom: 0; font-size: 21px; }
+.communication-text { border: 1px solid #ccd8cc; border-radius: 15px; background: #f7faf6; font-size: 20px; }
+.evidence-page .action-buttons { grid-template-columns: 1fr 1fr; padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); background: rgba(238, 242, 236, .96); }
+.evidence-page .action-buttons button { min-height: 48px; border-radius: 14px; font-size: 19px; }
+.evidence-page .action-buttons .btn-reset { grid-column: 1 / -1; }
+.evidence-page .btn-save { background: #173d2b; border-bottom: 0; }
+.evidence-page .btn-export { background: #32764f; }

@@ -15,15 +15,15 @@ export default defineAppConfig({
     list: [
       { pagePath: 'pages/index/index', text: '首页', iconPath: 'assets/tabs/home.png', selectedIconPath: 'assets/tabs/home-active.png' },
       { pagePath: 'pages/contract/index', text: '审查', iconPath: 'assets/tabs/review.png', selectedIconPath: 'assets/tabs/review-active.png' },
-      { pagePath: 'pages/ai/index', text: 'AI助手', iconPath: 'assets/tabs/ai.png', selectedIconPath: 'assets/tabs/ai-active.png' },
+      { pagePath: 'pages/ai/index', text: 'AI', iconPath: 'assets/tabs/ai.png', selectedIconPath: 'assets/tabs/ai-active.png' },
       { pagePath: 'pages/checkin/index', text: '验房', iconPath: 'assets/tabs/checkin.png', selectedIconPath: 'assets/tabs/checkin-active.png' },
-      { pagePath: 'pages/evidence/index', text: '证据包', iconPath: 'assets/tabs/evidence.png', selectedIconPath: 'assets/tabs/evidence-active.png' }
+      { pagePath: 'pages/evidence/index', text: '证据', iconPath: 'assets/tabs/evidence.png', selectedIconPath: 'assets/tabs/evidence-active.png' }
     ]
   },
   window: {
     backgroundTextStyle: 'light',
-    backgroundColor: '#f3efe6',
-    navigationBarBackgroundColor: '#f3efe6',
+    backgroundColor: '#eef2ec',
+    navigationBarBackgroundColor: '#eef2ec',
     navigationBarTitleText: '租小审',
     navigationBarTextStyle: 'black'
   }
