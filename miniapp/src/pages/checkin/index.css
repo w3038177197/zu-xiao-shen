@@ -49,6 +49,11 @@
 .checkin-stats view:last-child { border-right: 0; }
 .checkin-stats text { display: block; font-size: 22px; color: #647067; }
 .checkin-stats text:first-child { color: #087f4a; font-size: 29px; font-weight: 800; margin-bottom: 4px; }
+.storage-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -6px 0 22px; }
+.storage-hint { flex: 1; color: #647067; font-size: 22px; line-height: 1.5; }
+.storage-hint.warning { color: #9a3425; font-weight: 800; }
+.btn-clear-photos { flex-shrink: 0; margin: 0; padding: 0 18px; border-radius: 0; background: #fffdf7; color: #5a655d; border: 2px solid #9ca49d; font-size: 22px; font-weight: 800; }
+.btn-clear-photos::after { border-radius: 0; }
 
 .room-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
 .room-tab { padding: 13px 20px; font-size: 24px; background: #fffdf7; color: #263129; border: 2px solid #263129; }

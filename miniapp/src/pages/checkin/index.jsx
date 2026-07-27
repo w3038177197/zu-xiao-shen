@@ -73,6 +73,16 @@ export default class CheckinInspection extends Component {
     this.updateRecord(roomKey, itemKey, { defect })
   }
 
+  savePhotoFile = async (tempPath) => {
+    try {
+      const saveRes = await Taro.saveFile({ tempFilePath: tempPath })
+      return saveRes.savedFilePath
+    } catch (err) {
+      console.error('保存文件失败:', err)
+      return null
+    }
+  }
+
   handleTakePhoto = async (roomKey, itemKey) => {
     try {
       const res = await Taro.chooseImage({
@@ -80,19 +90,11 @@ export default class CheckinInspection extends Component {
         sizeType: ['compressed'],
         sourceType: ['camera'],
       })
-      
-      // 持久化照片文件
-      const savedPaths = await Promise.all(
-        res.tempFilePaths.map(async (tempPath) => {
-          try {
-            const saveRes = await Taro.saveFile({ tempFilePath: tempPath })
-            return saveRes.savedFilePath
-          } catch (err) {
-            console.error('保存文件失败:', err)
-            return tempPath // 降级使用临时路径
-          }
-        })
-      )
+      const savedPaths = (await Promise.all(res.tempFilePaths.map(this.savePhotoFile))).filter(Boolean)
+      if (savedPaths.length === 0) {
+        Taro.showToast({ title: '本地存储已满或异常，照片未持久保存', icon: 'none', duration: 3000 })
+        return
+      }
       
       this.updateRecord(roomKey, itemKey, {
         photos: [...(this.state.inspectionState[roomKey][itemKey].photos || []), ...savedPaths],
@@ -109,19 +111,14 @@ export default class CheckinInspection extends Component {
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
       })
-      
-      // 持久化照片文件
-      const savedPaths = await Promise.all(
-        res.tempFilePaths.map(async (tempPath) => {
-          try {
-            const saveRes = await Taro.saveFile({ tempFilePath: tempPath })
-            return saveRes.savedFilePath
-          } catch (err) {
-            console.error('保存文件失败:', err)
-            return tempPath // 降级使用临时路径
-          }
-        })
-      )
+      const savedPaths = (await Promise.all(res.tempFilePaths.map(this.savePhotoFile))).filter(Boolean)
+      if (savedPaths.length === 0) {
+        Taro.showToast({ title: '本地存储已满或异常，照片未持久保存', icon: 'none', duration: 3000 })
+        return
+      }
+      if (savedPaths.length < res.tempFilePaths.length) {
+        Taro.showToast({ title: '部分照片未持久保存', icon: 'none', duration: 3000 })
+      }
       
       this.updateRecord(roomKey, itemKey, {
         photos: [...(this.state.inspectionState[roomKey][itemKey].photos || []), ...savedPaths],
@@ -145,6 +142,27 @@ export default class CheckinInspection extends Component {
           Taro.removeSavedFile({ filePath }).catch(() => {})
         })
       })
+    })
+  }
+
+  handleCleanupPhotos = () => {
+    Taro.showModal({
+      title: '清理照片',
+      content: '将删除已保存的验房照片，文字记录会保留。是否继续？',
+      success: (res) => {
+        if (!res.confirm) return
+        this.cleanupSavedPhotos()
+        const next = {}
+        Object.keys(this.state.inspectionState).forEach((roomKey) => {
+          next[roomKey] = {}
+          Object.keys(this.state.inspectionState[roomKey]).forEach((itemKey) => {
+            next[roomKey][itemKey] = { ...this.state.inspectionState[roomKey][itemKey], photos: [] }
+          })
+        })
+        this.setState({ inspectionState: next })
+        saveCheckinInspectionState(next)
+        Taro.showToast({ title: '照片已清理', icon: 'success' })
+      },
     })
   }
 
@@ -257,6 +275,16 @@ export default class CheckinInspection extends Component {
             <View><Text>{stats.defects}</Text><Text>瑕疵</Text></View>
             <View><Text>{stats.photos}</Text><Text>照片</Text></View>
           </View>
+          {stats.photos > 0 ? (
+            <View className='storage-tools'>
+              <Text className={`storage-hint ${stats.photos > 50 ? 'warning' : ''}`}>
+                已保存 {stats.photos} 张验房照片，建议交接完成后清理本地空间
+              </Text>
+              <Button className='btn-clear-photos' onClick={this.handleCleanupPhotos}>
+                只清照片
+              </Button>
+            </View>
+          ) : null}
 
           <View className='room-tabs'>
             {ROOMS.map((r, index) => (

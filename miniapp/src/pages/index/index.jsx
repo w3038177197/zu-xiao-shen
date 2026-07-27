@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Button, Input, Picker, ScrollView, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
+import { calculateDepositReturn } from '../../../../src/utils/money.js'
 import './index.css'
 
 const modules = [
@@ -27,17 +28,12 @@ const defaultDeposit = {
 }
 
 function calculateDeposit(values) {
-  const deposit = Math.max(0, Number(values.depositAmount) || 0)
-  const deduction = (Number(values.unpaidFees) || 0)
-    + (Number(values.repairCost) || 0)
-    + (Number(values.cleaningCost) || 0)
+  const result = calculateDepositReturn(values)
 
   return {
-    estimatedReturn: Math.max(0, deposit - deduction),
-    deduction,
-    warning: deduction > deposit
-      ? '预计扣款已经超过押金，请逐项核对凭证和责任归属。'
-      : '正常使用损耗不应直接扣押金，请要求对方提供明细和凭证。',
+    estimatedReturn: result.estimatedReturn,
+    deduction: result.totalDeduction,
+    warning: result.warning,
   }
 }
 

@@ -4,6 +4,7 @@
   "description": "租小审微信小程序版本",
   "appid": "wx1ffa57d1c8b48905",
   "setting": {
+    "__usePrivacyCheck__": true,
     "urlCheck": false,
     "es6": false,
     "enhance": false,
