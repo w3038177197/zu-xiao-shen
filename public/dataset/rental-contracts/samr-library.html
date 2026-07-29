@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>&#x9996;&#x9875; - 合同示范文本库 - 国家市场监督管理总局</title>
+    <link rel="stylesheet" type="text/css" href="/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="/css/site.css?v=OtV7oUGsHf20trmUOt_HMfE3Yy6NQbZ8gaVoQJjVFdU" />
+    <link rel="stylesheet" type="text/css" href="/css/font/iconfont.css" />
+</head>
+<body>
+
+    <div class="samr-layer">
+    </div>
+    <div class="samr-overlay">
+        <div class="samr-modal-box">
+            <div class="samr-modal">
+                <div onclick="hideModal()" class="samr-modal-close">
+                    <img src="/images/close.svg" />
+                </div>
+                <div class="samr-modal-content">
+                    <div class="title">文本库使用说明</div>
+                    <div class="content">
+                        <p>合同示范文本库收集了市场监管部门制定发布的合同示范文本，供社会公众查阅下载。</p>
+                        <p>当事人可以参照各类合同示范文本订立合同。根据规定，当事人参照合同示范文本订立合同的，应充分理解合同中条款的内容，并自行承担合同订立履行所发生的法律后果。当事人对合同条款理解发生争议时，应按照有关法律法规规定对条款进行解释。</p>
+                        <p>对于当事人利用、冒用合同示范文本，实施侵害消费者权益、危害国家利益和社会公共利益等合同违法行为的，各级市场监管部门一经发现，将依法追究其责任。</p>
+                    </div>
+                    <div onclick="hideModal()" class="samr-modal-confirm-btn">我知道了</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <div>
+        <div style="overflow:hidden">
+            
+<div class="overflow-hidden">
+    <div class="samr-home-head">
+        <div class="samr-pt-8">
+            <img class="samr-home-logo" src="images/logo.png" alt="国家市场监督管理总局" />
+        </div>
+        <div>
+            <i style="color: #D51B20;font-size: 48px;margin-top:50px; display: block;text-align:center;" class="iconfont">&#xe674;</i>
+        </div>
+    </div>
+    <div class="samr-search-box">
+        <div class="samr-search">
+            <div class="samr-home-fieldGroup">
+                <input type="text" overflow='visible' placeholder="请输入关键词搜索" id="search-box">
+            </div>
+        </div>
+        <div class="search-btn" onclick="onSearch()">搜索</div>
+    </div>
+    <div class="samr-container">
+        <div class="samr-mt-2 samr-pb-2 samr-catecary">
+            <div onclick="submit()">常用关键词：</div>
+            <div class="samr-catecaries">
+                <a onclick="commonKeyword('买卖')">买卖</a>
+                <a onclick="commonKeyword('租赁')">租赁</a>
+                <a onclick="commonKeyword('建设')">建设</a>
+                <a onclick="commonKeyword('广告')">广告</a>
+                <a onclick="commonKeyword('服务')">服务</a>
+                <a onclick="commonKeyword('公用事业')">公用事业</a>
+            </div>
+        </div>
+        <div style="clear:both"></div>
+        <div id="filter-box" class="filter-box">
+            <div class="samr-home-filter">
+                <div class="title">高级检索：</div>
+                <div class="btns">
+                    <div onclick="filterOptVisible(true)" style="display: none" class="filter-opt-showbtn">
+                        收起
+                        <i style="font-size: 13px;" class="iconfont">&#xe69a;</i>
+                    </div>
+                    <div onclick="filterOptVisible(false)" class="filter-opt-hidebtn">
+                        展开
+                        <i style="font-size: 13px;" class="iconfont">&#xe699;</i>
+                    </div>
+                </div>
+            </div>
+            <div style="clear:both"></div>
+            <div style="display: none" class="samr-home-filter-block">
+                <div id="years" class="samr-float-l">
+                    <span>年份</span>
+                        <span onclick="changeOption(1,'years')" class="item"><input type="radio" name="years" value="1" />&nbsp;1999&#x5E74;&#x4EE5;&#x524D;</span>
+                        <span onclick="changeOption(2,'years')" class="item"><input type="radio" name="years" value="2" />&nbsp;2000-2004&#x5E74;</span>
+                        <span onclick="changeOption(3,'years')" class="item"><input type="radio" name="years" value="3" />&nbsp;2005-2009&#x5E74;</span>
+                        <span onclick="changeOption(4,'years')" class="item"><input type="radio" name="years" value="4" />&nbsp;2010-2014&#x5E74;</span>
+                        <span onclick="changeOption(5,'years')" class="item"><input type="radio" name="years" value="5" />&nbsp;2015-2019&#x5E74;</span>
+                        <span onclick="changeOption(6,'years')" class="item"><input type="radio" name="years" value="6" />&nbsp;2020&#x5E74;&#x4EE5;&#x540E;</span>
+                </div>
+                <div style="clear:both"></div>
+                <div id="regions" class="samr-float-l">
+                    <span style="height: 92px;">地区</span>
+                        <span onclick="changeOption(1,'regions')" class="item"><input type="radio" name="regions" value="1" />&nbsp;&#x5317;&#x4EAC;</span>
+                        <span onclick="changeOption(2,'regions')" class="item"><input type="radio" name="regions" value="2" />&nbsp;&#x5929;&#x6D25;</span>
+                        <span onclick="changeOption(3,'regions')" class="item"><input type="radio" name="regions" value="3" />&nbsp;&#x6CB3;&#x5317;</span>
+                        <span onclick="changeOption(4,'regions')" class="item"><input type="radio" name="regions" value="4" />&nbsp;&#x5C71;&#x897F;</span>
+                        <span onclick="changeOption(5,'regions')" class="item"><input type="radio" name="regions" value="5" />&nbsp;&#x5185;&#x8499;&#x53E4;</span>
+                        <span onclick="changeOption(6,'regions')" class="item"><input type="radio" name="regions" value="6" />&nbsp;&#x8FBD;&#x5B81;</span>
+                        <span onclick="changeOption(7,'regions')" class="item"><input type="radio" name="regions" value="7" />&nbsp;&#x5409;&#x6797;</span>
+                        <span onclick="changeOption(8,'regions')" class="item"><input type="radio" name="regions" value="8" />&nbsp;&#x9ED1;&#x9F99;&#x6C5F;</span>
+                        <span onclick="changeOption(9,'regions')" class="item"><input type="radio" name="regions" value="9" />&nbsp;&#x4E0A;&#x6D77;</span>
+                        <span onclick="changeOption(10,'regions')" class="item"><input type="radio" name="regions" value="10" />&nbsp;&#x6C5F;&#x82CF;</span>
+                        <span onclick="changeOption(11,'regions')" class="item"><input type="radio" name="regions" value="11" />&nbsp;&#x6D59;&#x6C5F;</span>
+                        <span onclick="changeOption(12,'regions')" class="item"><input type="radio" name="regions" value="12" />&nbsp;&#x5B89;&#x5FBD;</span>
+                        <span onclick="changeOption(13,'regions')" class="item"><input type="radio" name="regions" value="13" />&nbsp;&#x798F;&#x5EFA;</span>
+                        <span onclick="changeOption(14,'regions')" class="item"><input type="radio" name="regions" value="14" />&nbsp;&#x6C5F;&#x897F;</span>
+                        <span onclick="changeOption(15,'regions')" class="item"><input type="radio" name="regions" value="15" />&nbsp;&#x5C71;&#x4E1C;</span>
+                        <span onclick="changeOption(16,'regions')" class="item"><input type="radio" name="regions" value="16" />&nbsp;&#x6CB3;&#x5357;</span>
+                        <span onclick="changeOption(17,'regions')" class="item"><input type="radio" name="regions" value="17" />&nbsp;&#x6E56;&#x5317;</span>
+                        <span onclick="changeOption(18,'regions')" class="item"><input type="radio" name="regions" value="18" />&nbsp;&#x6E56;&#x5357;</span>
+                        <span onclick="changeOption(19,'regions')" class="item"><input type="radio" name="regions" value="19" />&nbsp;&#x5E7F;&#x4E1C;</span>
+                        <span onclick="changeOption(20,'regions')" class="item"><input type="radio" name="regions" value="20" />&nbsp;&#x5E7F;&#x897F;</span>
+                        <span onclick="changeOption(21,'regions')" class="item"><input type="radio" name="regions" value="21" />&nbsp;&#x6D77;&#x5357;</span>
+                        <span onclick="changeOption(22,'regions')" class="item"><input type="radio" name="regions" value="22" />&nbsp;&#x91CD;&#x5E86;</span>
+                        <span onclick="changeOption(23,'regions')" class="item"><input type="radio" name="regions" value="23" />&nbsp;&#x56DB;&#x5DDD;</span>
+                        <span onclick="changeOption(24,'regions')" class="item"><input type="radio" name="regions" value="24" />&nbsp;&#x8D35;&#x5DDE;</span>
+                        <span onclick="changeOption(25,'regions')" class="item"><input type="radio" name="regions" value="25" />&nbsp;&#x4E91;&#x5357;</span>
+                        <span onclick="changeOption(26,'regions')" class="item"><input type="radio" name="regions" value="26" />&nbsp;&#x897F;&#x85CF;</span>
+                        <span onclick="changeOption(27,'regions')" class="item"><input type="radio" name="regions" value="27" />&nbsp;&#x9655;&#x897F;</span>
+                        <span onclick="changeOption(28,'regions')" class="item"><input type="radio" name="regions" value="28" />&nbsp;&#x7518;&#x8083;</span>
+                        <span onclick="changeOption(29,'regions')" class="item"><input type="radio" name="regions" value="29" />&nbsp;&#x9752;&#x6D77;</span>
+                        <span onclick="changeOption(30,'regions')" class="item"><input type="radio" name="regions" value="30" />&nbsp;&#x5B81;&#x590F;</span>
+                        <span onclick="changeOption(31,'regions')" class="item"><input type="radio" name="regions" value="31" />&nbsp;&#x65B0;&#x7586;</span>
+                        <span onclick="changeOption(32,'regions')" class="item"><input type="radio" name="regions" value="32" />&nbsp;&#x4EAC;&#x6D25;&#x5180;</span>
+                </div>
+                <div style="clear:both"></div>
+                <div id="types" class="samr-float-l">
+                    <span>分类</span>
+                        <span onclick="changeOption(1,'types')" class="item"><input type="radio" name="types" value="1" />&nbsp;&#x751F;&#x6D3B;&#x6D88;&#x8D39;</span>
+                        <span onclick="changeOption(2,'types')" class="item"><input type="radio" name="types" value="2" />&nbsp;&#x519C;&#x8D44;&#x519C;&#x4E1A;</span>
+                        <span onclick="changeOption(3,'types')" class="item"><input type="radio" name="types" value="3" />&nbsp;&#x751F;&#x4EA7;&#x7ECF;&#x8425;</span>
+                        <span onclick="changeOption(4,'types')" class="item"><input type="radio" name="types" value="4" />&nbsp;&#x5EFA;&#x8BBE;&#x5DE5;&#x7A0B;</span>
+                        <span onclick="changeOption(5,'types')" class="item"><input type="radio" name="types" value="5" />&nbsp;&#x5176;&#x4ED6;</span>
+                </div>
+                <div style="clear:both"></div>
+                <div>
+                    <div class="samr-filter-border samr-ml-1"></div>
+                    <div onclick="clearCheck()" class="filter-opt-clearbtn">
+                        <i style="font-size: 13px;" class="iconfont">&#xe698;</i>
+                        清空
+                    </div>
+                    <div class="samr-filter-border samr-mr-1"></div>
+                </div>
+                <div style="clear:both"></div>
+            </div>
+        </div>
+        <div style="clear:both"></div>
+    </div>
+
+    <div class="samr-container">
+        <div class="samr-home-list-box">
+            <div style="width:360px" class="item-box">
+                <div class="category"><span class="text">部委合同示范文本</span><span onclick="viewMore(false)" class="more">更多</span></div>
+                <div class="samr-home-list">
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=429808cc-f59f-4392-b23c-b23c998b33c7" target="_blank" title="&#x6574;&#x53BF;&#xFF08;&#x533A;&#xFF09;&#x516C;&#x5171;&#x673A;&#x6784;&#x80FD;&#x6E90;&#x8D39;&#x7528;&#x6258;&#x7BA1;&#x9879;&#x76EE;&#x6846;&#x67B6;&#x534F;&#x8BAE;&#xFF08;&#x56FD;&#x7BA1;&#x5C40;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;">
+                                &#x6574;&#x53BF;&#xFF08;&#x533A;&#xFF09;&#x516C;&#x5171;&#x673A;&#x6784;&#x80FD;&#x6E90;&#x8D39;&#x7528;&#x6258;&#x7BA1;&#x9879;&#x76EE;&#x6846;&#x67B6;&#x534F;&#x8BAE;&#xFF08;&#x56FD;&#x7BA1;&#x5C40;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;
+                            </a>
+                                <img class="samr-home-newimg" src="images/new.svg" alt="新" />
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=a1a47ab6-0fc8-465d-aea1-6b7a952fd6ed" target="_blank" title="&#x516C;&#x5171;&#x673A;&#x6784;&#x80FD;&#x6E90;&#x8D39;&#x7528;&#x6258;&#x7BA1;&#x9879;&#x76EE;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x56FD;&#x7BA1;&#x5C40;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;">
+                                &#x516C;&#x5171;&#x673A;&#x6784;&#x80FD;&#x6E90;&#x8D39;&#x7528;&#x6258;&#x7BA1;&#x9879;&#x76EE;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x56FD;&#x7BA1;&#x5C40;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;
+                            </a>
+                                <img class="samr-home-newimg" src="images/new.svg" alt="新" />
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=9520797a-e6a7-4cb7-b569-7240d7623f3c" target="_blank" title="&#x5408;&#x540C;&#x8282;&#x6C34;&#x7BA1;&#x7406;&#x9879;&#x76EE;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x6C34;&#x5229;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;">
+                                &#x5408;&#x540C;&#x8282;&#x6C34;&#x7BA1;&#x7406;&#x9879;&#x76EE;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x6C34;&#x5229;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;
+                            </a>
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=ea53524e-0970-4806-adeb-d98332f7d397" target="_blank" title="&#x7814;&#x5B66;&#x65C5;&#x6E38;&#x5408;&#x540C;&#xFF08;&#x6587;&#x5316;&#x548C;&#x65C5;&#x6E38;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;">
+                                &#x7814;&#x5B66;&#x65C5;&#x6E38;&#x5408;&#x540C;&#xFF08;&#x6587;&#x5316;&#x548C;&#x65C5;&#x6E38;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;
+                            </a>
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=0d8aeab8-3602-4261-913d-0477ad7a4fa2" target="_blank" title="&#x5883;&#x5185;&#x65C5;&#x6E38;&#x7EC4;&#x56E2;&#x793E;&#x4E0E;&#x5730;&#x63A5;&#x793E;&#x5408;&#x540C;&#xFF08;&#x6587;&#x5316;&#x548C;&#x65C5;&#x6E38;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;">
+                                &#x5883;&#x5185;&#x65C5;&#x6E38;&#x7EC4;&#x56E2;&#x793E;&#x4E0E;&#x5730;&#x63A5;&#x793E;&#x5408;&#x540C;&#xFF08;&#x6587;&#x5316;&#x548C;&#x65C5;&#x6E38;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;
+                            </a>
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=72b8ae0e-139d-4e59-ac4b-c761c2e2156a" target="_blank" title="&#x5883;&#x5185;&#x65C5;&#x6E38;&#x201C;&#x4E00;&#x65E5;&#x6E38;&#x201D;&#x5408;&#x540C;&#xFF08;&#x6587;&#x5316;&#x548C;&#x65C5;&#x6E38;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;">
+                                &#x5883;&#x5185;&#x65C5;&#x6E38;&#x201C;&#x4E00;&#x65E5;&#x6E38;&#x201D;&#x5408;&#x540C;&#xFF08;&#x6587;&#x5316;&#x548C;&#x65C5;&#x6E38;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;
+                            </a>
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=83d6d99b-6fb2-47e4-96e7-b7cb3ad6ee7e" target="_blank" title="&#x5927;&#x9646;&#x5C45;&#x6C11;&#x8D74;&#x53F0;&#x6E7E;&#x5730;&#x533A;&#x65C5;&#x6E38;&#x5408;&#x540C;&#xFF08;&#x6587;&#x5316;&#x548C;&#x65C5;&#x6E38;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;">
+                                &#x5927;&#x9646;&#x5C45;&#x6C11;&#x8D74;&#x53F0;&#x6E7E;&#x5730;&#x533A;&#x65C5;&#x6E38;&#x5408;&#x540C;&#xFF08;&#x6587;&#x5316;&#x548C;&#x65C5;&#x6E38;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;
+                            </a>
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=b47bb5dc-565c-4955-910b-f6fd312920ad" target="_blank" title="&#x56E2;&#x961F;&#x51FA;&#x5883;&#x65C5;&#x6E38;&#x5408;&#x540C;&#xFF08;&#x6587;&#x5316;&#x548C;&#x65C5;&#x6E38;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;">
+                                &#x56E2;&#x961F;&#x51FA;&#x5883;&#x65C5;&#x6E38;&#x5408;&#x540C;&#xFF08;&#x6587;&#x5316;&#x548C;&#x65C5;&#x6E38;&#x90E8;&#x3001;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2026&#x7248;&#xFF09;
+                            </a>
+                        </div>
+                </div>
+            </div>
+            <div style="width:360px" class="item-box samr-ml-2">
+                <div class="category"><span class="text">地方合同示范文本</span><span onclick="viewMore(true)" class="more">更多</span></div>
+                <div class="samr-home-list">
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=4d2978b0-783a-40b4-88d5-50273f8a4f52" target="_blank" title="&#x9ED1;&#x9F99;&#x6C5F;&#x7701;&#x517B;&#x8001;&#x673A;&#x6784;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x8BD5;&#x884C;&#xFF09;&#xFF08;&#x9ED1;&#x9F99;&#x6C5F;&#x7701;2025&#x7248;&#xFF09;">
+                                &#x9ED1;&#x9F99;&#x6C5F;&#x7701;&#x517B;&#x8001;&#x673A;&#x6784;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x8BD5;&#x884C;&#xFF09;&#xFF08;&#x9ED1;&#x9F99;&#x6C5F;&#x7701;2025&#x7248;&#xFF09;                                
+                            </a>
+                                <img class="samr-home-newimg" src="images/new.svg" alt="新" />
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=a3d7a649-b72e-4ab2-b71e-fa10379d1b17" target="_blank" title="&#x9ED1;&#x9F99;&#x6C5F;&#x7701;&#x9884;&#x4ED8;&#x5F0F;&#x6D88;&#x8D39;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x8BD5;&#x884C;&#xFF09;&#xFF08;&#x9ED1;&#x9F99;&#x6C5F;&#x7701;2025&#x7248;&#xFF09;">
+                                &#x9ED1;&#x9F99;&#x6C5F;&#x7701;&#x9884;&#x4ED8;&#x5F0F;&#x6D88;&#x8D39;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x8BD5;&#x884C;&#xFF09;&#xFF08;&#x9ED1;&#x9F99;&#x6C5F;&#x7701;2025&#x7248;&#xFF09;                                
+                            </a>
+                                <img class="samr-home-newimg" src="images/new.svg" alt="新" />
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=c1bfbbc8-9699-4bf3-984f-43379b71d7f5" target="_blank" title="&#x9ED1;&#x9F99;&#x6C5F;&#x7701;&#x5BB6;&#x5EAD;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x4E2D;&#x4ECB;&#x5236;&#xFF09;&#xFF08;&#x9ED1;&#x9F99;&#x6C5F;&#x7701;2025&#x7248;&#xFF09;">
+                                &#x9ED1;&#x9F99;&#x6C5F;&#x7701;&#x5BB6;&#x5EAD;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x4E2D;&#x4ECB;&#x5236;&#xFF09;&#xFF08;&#x9ED1;&#x9F99;&#x6C5F;&#x7701;2025&#x7248;&#xFF09;                                
+                            </a>
+                                <img class="samr-home-newimg" src="images/new.svg" alt="新" />
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=791da923-1a00-4d42-a278-adb991e71f47" target="_blank" title="&#x9ED1;&#x9F99;&#x6C5F;&#x7701;&#x5BB6;&#x5C45;&#x88C5;&#x9970;&#x88C5;&#x4FEE;&#x5DE5;&#x7A0B;&#x65BD;&#x5DE5;&#x5408;&#x540C; &#xFF08;&#x8BD5;&#x884C;&#xFF09;&#xFF08;&#x9ED1;&#x9F99;&#x6C5F;&#x7701;2025&#x7248;&#xFF09;">
+                                &#x9ED1;&#x9F99;&#x6C5F;&#x7701;&#x5BB6;&#x5C45;&#x88C5;&#x9970;&#x88C5;&#x4FEE;&#x5DE5;&#x7A0B;&#x65BD;&#x5DE5;&#x5408;&#x540C; &#xFF08;&#x8BD5;&#x884C;&#xFF09;&#xFF08;&#x9ED1;&#x9F99;&#x6C5F;&#x7701;2025&#x7248;&#xFF09;                                
+                            </a>
+                                <img class="samr-home-newimg" src="images/new.svg" alt="新" />
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=161e33a0-b88d-4682-8fb1-c3b816ce1ded" target="_blank" title="&#x5C71;&#x4E1C;&#x7701;&#x4F53;&#x80B2;&#x5065;&#x8EAB;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x5C71;&#x4E1C;&#x7701;2025&#x7248;&#xFF09;">
+                                &#x5C71;&#x4E1C;&#x7701;&#x4F53;&#x80B2;&#x5065;&#x8EAB;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x5C71;&#x4E1C;&#x7701;2025&#x7248;&#xFF09;                                
+                            </a>
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=cbb13efd-97cf-4941-a76a-1627faf942cc" target="_blank" title="&#x5C71;&#x4E1C;&#x7701;&#x65B0;&#x5EFA;&#x5546;&#x54C1;&#x623F;&#x4E70;&#x5356;&#x5408;&#x540C;&#xFF08;&#x9884;&#x552E;&#xFF09;&#xFF08;&#x5C71;&#x4E1C;&#x7701;2025&#x7248;&#xFF09;">
+                                &#x5C71;&#x4E1C;&#x7701;&#x65B0;&#x5EFA;&#x5546;&#x54C1;&#x623F;&#x4E70;&#x5356;&#x5408;&#x540C;&#xFF08;&#x9884;&#x552E;&#xFF09;&#xFF08;&#x5C71;&#x4E1C;&#x7701;2025&#x7248;&#xFF09;                                
+                            </a>
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=ed241d43-f167-405b-a8f1-6d07709cf1b5" target="_blank" title="&#x65B0;&#x7586;&#x7EF4;&#x543E;&#x5C14;&#x81EA;&#x6CBB;&#x533A;&#x4E2D;&#x5C0F;&#x5B66;&#x6821;&#x6821;&#x5916;&#x4F9B;&#x9910;&#x5408;&#x540C;&#xFF08;&#x65B0;&#x7586;&#x81EA;&#x6CBB;&#x533A;2025&#x7248;&#xFF09;">
+                                &#x65B0;&#x7586;&#x7EF4;&#x543E;&#x5C14;&#x81EA;&#x6CBB;&#x533A;&#x4E2D;&#x5C0F;&#x5B66;&#x6821;&#x6821;&#x5916;&#x4F9B;&#x9910;&#x5408;&#x540C;&#xFF08;&#x65B0;&#x7586;&#x81EA;&#x6CBB;&#x533A;2025&#x7248;&#xFF09;                                
+                            </a>
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 315px;" href="/View?id=435a0213-939b-4319-a241-6af02c7b4760" target="_blank" title="&#x65B0;&#x7586;&#x7EF4;&#x543E;&#x5C14;&#x81EA;&#x6CBB;&#x533A;&#x5B66;&#x6821;&#x98DF;&#x5802;&#x59D4;&#x6258;&#x7BA1;&#x7406;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x65B0;&#x7586;&#x81EA;&#x6CBB;&#x533A;2025&#x7248;&#xFF09;">
+                                &#x65B0;&#x7586;&#x7EF4;&#x543E;&#x5C14;&#x81EA;&#x6CBB;&#x533A;&#x5B66;&#x6821;&#x98DF;&#x5802;&#x59D4;&#x6258;&#x7BA1;&#x7406;&#x670D;&#x52A1;&#x5408;&#x540C;&#xFF08;&#x65B0;&#x7586;&#x81EA;&#x6CBB;&#x533A;2025&#x7248;&#xFF09;                                
+                            </a>
+                        </div>
+                </div>
+            </div>
+            <div style="width:240px;" class="item-box samr-ml-2">
+                <div class="category">政策文件</div>
+                <div class="samr-home-list">
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 210px;" href="/Article?id=fd34b695-06cf-4e11-87f6-89ce58254378" target="_blank" title="&#x5408;&#x540C;&#x884C;&#x653F;&#x76D1;&#x7BA1;&#x529E;&#x6CD5;&#xFF08;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2023&#xFF09;">
+                                &#x5408;&#x540C;&#x884C;&#x653F;&#x76D1;&#x7BA1;&#x529E;&#x6CD5;&#xFF08;&#x5E02;&#x573A;&#x76D1;&#x7BA1;&#x603B;&#x5C40;2023&#xFF09;
+                            </a>
+                        </div>
+                        <div class="item">
+                            <div class="symbol"></div>
+                            <a style="max-width: 210px;" href="/Article?id=185d6e4d-93ac-42fe-a168-e2cac41ef57a" target="_blank" title="&#x5DE5;&#x5546;&#x603B;&#x5C40;&#x5173;&#x4E8E;&#x5236;&#x5B9A;&#x63A8;&#x884C;&#x5408;&#x540C;&#x793A;&#x8303;&#x6587;&#x672C;&#x5DE5;&#x4F5C;&#x7684;&#x6307;&#x5BFC;&#x610F;&#x89C1;">
+                                &#x5DE5;&#x5546;&#x603B;&#x5C40;&#x5173;&#x4E8E;&#x5236;&#x5B9A;&#x63A8;&#x884C;&#x5408;&#x540C;&#x793A;&#x8303;&#x6587;&#x672C;&#x5DE5;&#x4F5C;&#x7684;&#x6307;&#x5BFC;&#x610F;&#x89C1;
+                            </a>
+                        </div>
+                </div>
+            </div>
+            <div style="clear:both"></div>
+        </div>
+        <div style="clear:both"></div>
+    </div>
+
+</div>
+
+
+        </div>
+
+        <div class="samr-footer">
+            <div class="samr-container">
+                <div class="mid samr-relative">
+                    <p>版权所有：国家市场监督管理总局</p>
+                    <p><a style="color:#333333" href="https://beian.miit.gov.cn/" target="_blank">京ICP备18022388号-1</a></p>
+                    <p>地址：北京市海淀区马甸东路9号&nbsp;&nbsp;&nbsp;邮政编码：100088</p>
+                    <p>由法天使-中国合同库提供支持&nbsp;&nbsp;&nbsp;支持热线：400-6677-071</p>
+                    <div style="position:absolute;top:40px;right:230px;">
+                        <a href="https://bszs.conac.cn/sitename?method=show&id=8974CA8FB0A733FBE05310291AACBC75" target="_blank">
+                            <img style="height:80px;" src="/images/foot_gov.png" />
+                        </a>
+                    </div>
+                    <div style="position:absolute;top:50px;right:100px;" id="box_jiucuo">
+                        <script id="_jiucuo_" sitecode="bm30000012" src="https://pucha.kaipuyun.cn/exposure/jiucuo.js"></script>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+
+    <script src="/lib/jquery/dist/jquery.min-3.6.4.js"></script>
+    <script src="/lib/respond/respond.min.js" type="text/javascript"></script>
+    <script src="/lib/bootstrap/dist/js/bootstrap.bundle.min.js" type="text/javascript"></script>
+    <script src="/js/site.js?v=b-YenRqOxUhkd120_YA1ti8TQeUtA4c8f71xWi-_G8g" type="text/javascript"></script>
+    <script src="/js/jquery.paging.min.js" type="text/javascript"></script>
+    <script src="/js/jquery.dotdotdot.min.js" type="text/javascript"></script>
+
+    
+    <script type="text/javascript">
+
+        $(function () {
+            if (window.addEventListener) {
+                $("#search-box").keydown(function (event) {
+                    if (event.keyCode === 13) {
+                        onSearch();
+                    }
+                });
+            } else {
+                document.getElementById("search-box").attachEvent('onkeydown', function (event) {
+                    if (event.keyCode === 13) {
+                        onSearch();
+                    }
+                });
+            }
+            var samr = getCookie("samr") || '';
+            if (!samr) {
+                showModal();
+                setCookie("samr", "isopen")
+            }
+        })
+
+
+        // 搜索函数
+        function onSearch() {
+            location.href = searchUrl($("#search-box").val());
+        }
+
+        function changeOption(key, parentId) {
+            $("#" + parentId + " > span > input:radio[value!=" + key + "]").prop({
+                checked: false
+            });
+            $("#" + parentId + " > span > input:radio[value=" + key + "]").prop({
+                checked: true
+            });
+        }
+
+        function filterOptVisible(isopen) {
+            if (isopen) {
+                $(".samr-home-filter-block").hide();
+                $("#filter-box").addClass("filter-box");
+                $(".filter-opt-hidebtn").show();
+                $(".filter-opt-showbtn").hide();
+                clearCheck();
+            } else {
+                $(".samr-home-filter-block").show();
+                $("#filter-box").removeClass("filter-box");
+                $(".filter-opt-showbtn").show();
+                $(".filter-opt-hidebtn").hide();
+            }
+        }
+
+        function clearCheck() {
+            $("input[type='radio']").prop({
+                checked: false
+            });
+        }
+
+        function searchUrl(key) {
+            var arr = [];
+            var url = "/List?";
+            arr.push("key=" + encodeURI(key));
+
+            $("#years > span > input:checked").each(function () {
+                arr.push("y=" + $(this)[0].defaultValue);
+            });
+
+            $("#regions > span > input:checked").each(function () {
+                arr.push("s=" + $(this)[0].defaultValue);
+                //url = "/Local?"
+            });
+
+            $("#types > span > input:checked").each(function () {
+                arr.push("t=" + $(this)[0].defaultValue);
+            });
+
+            return url + arr.join("&");
+        }
+
+        function commonKeyword(key) {
+
+            location.href = searchUrl(key);
+        }
+
+        function viewMore(isLocal) {
+            if (isLocal) location.href = "/Local";
+            else location.href = "/National";
+        }
+
+        function viewDetail(id) {
+            location.href = "/View?id=" + id;
+        }
+
+    </script>
+
+
+
+</body>
+</html>

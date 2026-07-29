@@ -1,7 +1,7 @@
 // 由 scripts/sync-miniapp-review.mjs 从 Web 端自动生成，请勿手工修改。
 import { LEGAL_DISCLAIMER } from '../constants/legal.js'
-import { contractTypeOptions, partyRoleOptions, reviewDepthOptions } from '../../../src/constants/reviewOptions.js'
-import { knowledgeBaseItems } from '../../../src/data/knowledgeBase.js'
+import { contractTypeOptions, partyRoleOptions, reviewDepthOptions } from '../shared/reviewOptions.js'
+import { knowledgeBaseItems } from '../shared/knowledgeBase.js'
 
 const riskRules = [
   {

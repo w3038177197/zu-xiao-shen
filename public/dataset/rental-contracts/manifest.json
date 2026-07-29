@@ -1,0 +1,57 @@
+{
+  "dataset": "public-rental-contract-templates",
+  "license_note": "Public government templates; retain source URLs. No personally signed contracts.",
+  "fetched_at": "2026-07-27",
+  "items": [
+    {
+      "id": "samr-2025-town-rental-contract",
+      "title": "Town Housing Lease Contract (SAMR 2025)",
+      "publisher": "SAMR Contract Model Text Library",
+      "source_url": "https://htsfwb.samr.gov.cn/View?id=2340996b-882d-47a4-b74d-c30784628737",
+      "local_file": "samr-2025-page.html",
+      "sha256": "5E083D6D85E6BABFB06E933005F5F971B09B92BA05C1795C3FAC25D9961F0332",
+      "content_type": "text/html",
+      "validation": "Source page fetched successfully; official model text."
+    },
+    {
+      "id": "qhd-2025-town-rental-contract-pdf",
+      "title": "Town Housing Lease Contract (model PDF)",
+      "publisher": "Qinhuangdao Administration for Market Regulation",
+      "source_url": "http://scj.qhd.gov.cn/BAFa08c0dc/New/qhdscjFile/2025-05-06/1072c74c-6241-4483-8121-5b3de9f765d6.pdf",
+      "local_file": "qhd-2025-rental-contract.pdf",
+      "sha256": "03F15ABA33ADFA3934878EDE51D5CB1832C1E588CCC21DD12B462F536E062F95",
+      "content_type": "application/pdf",
+      "validation": "PDF opens and text extracts; convert pdftotext output to UTF-8 before training use."
+    },
+    {
+      "id": "samr-library-index",
+      "title": "SAMR model contract library index",
+      "publisher": "SAMR Contract Model Text Library",
+      "source_url": "https://htsfwb.samr.gov.cn/",
+      "local_file": "samr-library.html",
+      "sha256": "AF48D1D21A976E386A64BEDD9B6DDCBDF9C0724C801A46675F6F1209E49E26F8",
+      "content_type": "text/html",
+      "validation": "Public index page fetched successfully."
+    },
+    {
+      "id": "shenzhen-housing-library-index",
+      "title": "Shenzhen housing materials download index",
+      "publisher": "Shenzhen Housing and Construction Bureau",
+      "source_url": "https://zjj.sz.gov.cn/ztfw/zfbz/zlxzzx/index.html",
+      "local_file": "shenzhen-rental-library.html",
+      "sha256": "FC671D16B84A6F99E848C9492D4E20D3751E027B0F70017D430AF00D39D47244",
+      "content_type": "text/html",
+      "validation": "Public government download index fetched successfully."
+    },
+    {
+      "id": "siping-rental-model-index",
+      "title": "Siping rental contract model publication",
+      "publisher": "Siping Administration for Market Regulation",
+      "source_url": "http://scjd.siping.gov.cn/wsbs/zlxz/202506/t20250604_738998.html",
+      "local_file": "siping-2025-rental.html",
+      "sha256": "38A66BF717ED519102D5C73FC65858BDCE73DF6AFCEA1F62FAB0089A344B5589",
+      "content_type": "text/html",
+      "validation": "Public government publication fetched successfully."
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+name: miniapp-ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install miniapp dependencies
+        run: npm ci
+        working-directory: miniapp
+      - name: Lint
+        run: npm run lint
+      - name: miniapp-core
+        run: npm run test:miniapp-core
+      - name: miniapp-reliability
+        run: npm run test:miniapp-reliability
+      - name: miniapp-ai
+        run: npm run test:miniapp-ai
+      - name: miniapp-usage
+        run: npm run test:miniapp-usage
+      - name: contract-import
+        run: npm run test:contract-import
+      - name: subsidy-policies
+        run: npm run check:subsidy-policies
+      - name: build web
+        run: npm run build
+      - name: build weapp
+        run: npm run build:weapp
+        working-directory: miniapp

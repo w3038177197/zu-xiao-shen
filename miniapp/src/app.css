@@ -4,7 +4,8 @@ page {
     'Microsoft Yahei', sans-serif;
   background: #eef2ec;
   color: #193327;
-  font-size: 16px;
+  /* 28rpx ≈ 14 CSS px on a 750-wide Taro design canvas. */
+  font-size: 28px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -12,4 +13,28 @@ view, text, button, input, textarea, picker, scroll-view {
   box-sizing: border-box;
 }
 
-button { padding: 0; }
+button {
+  padding: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(18, 75, 50, 0.12);
+}
+
+.ai-task-btn {
+  width: 100%;
+  min-height: 84px;
+  margin: 18px 0 0;
+  border: 0;
+  border-radius: 14px;
+  background: #173d2b;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 84px;
+}
+
+.ai-task-btn::after { border: 0; }
+
+.ai-task-btn[disabled] {
+  background: #d8dfd8;
+  color: #78847b;
+}

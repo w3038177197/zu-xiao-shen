@@ -1,5 +1,5 @@
 import { Component } from 'react'
-import { View, Text, Input, Textarea, Button, ScrollView } from '@tarojs/components'
+import { View, Text, Input, Textarea, Button, Picker, ScrollView } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import {
   evidenceGroupMeta,
@@ -10,22 +10,72 @@ import {
   saveEvidencePackState,
   buildEvidenceCommunication,
   createEvidencePackageText,
+  addAttachment,
+  removeAttachment,
+  getGroupAttachments,
+  getAttachmentStats,
+  importModuleReferences,
 } from '../../features/evidencePack'
+import {
+  buildCheckinPhotoRefs,
+  buildCheckinReportRef,
+  buildContractTextRef,
+  buildReviewReportRefs,
+} from '../../features/evidenceImport'
+import { createDebouncedSaver } from '../../utils/debounceSave'
+import { copyText } from '../../utils/copyText'
+import { exportTextToFile } from '../../utils/textFileExport'
+import { exportEvidencePdf, exportEvidenceZip } from '../../utils/evidencePackageExport'
+import { deleteEvidenceAttachmentTransaction } from '../../utils/evidenceAttachmentTransactions'
+import { getCapabilityFailure, showCapabilityFailure } from '../../utils/privacyAuth'
+import { openAiTask } from '../../utils/aiTaskHandoff'
+import {
+  persistAttachment,
+  removePersistedFile,
+  pickImageFromAlbum,
+  pickFileFromChat,
+  previewImageAttachment,
+  openFileAttachment,
+  formatSize,
+} from '../../utils/evidenceAttachments'
 import './index.css'
 
 const GROUPS = Object.entries(evidenceGroupMeta)
+const TODAY = new Date().toISOString().slice(0, 10)
+const STEPS = [
+  { key: 'basic', label: '1 基本资料' },
+  { key: 'attachments', label: '2 证据附件' },
+  { key: 'output', label: '3 说明与导出' },
+]
 
 export default class EvidencePack extends Component {
+  autoSaver = createDebouncedSaver((state) => saveEvidencePackState(state))
+
   state = {
     packState: createDefaultEvidencePackState(),
     currentTab: 'deposit',
     currentGroup: 0,
+    showExtraInfo: false,
     isSaving: false,
+    isAttaching: false,
+    isImporting: false,
+    exportingType: '',
+    textPreview: null,
+    activeStep: 'basic',
+    operationNotice: '',
   }
 
   componentDidMount() {
     const packState = loadEvidencePackState()
     this.setState({ packState })
+  }
+
+  componentDidHide() {
+    this.autoSaver.flush()
+  }
+
+  componentWillUnmount() {
+    this.autoSaver.flush()
   }
 
   onShareAppMessage() {
@@ -34,15 +84,14 @@ export default class EvidencePack extends Component {
 
   saveData = () => {
     this.setState({ isSaving: true })
-    try {
-      saveEvidencePackState(this.state.packState)
-      Taro.showToast({ title: '保存成功', icon: 'success' })
-    } catch (error) {
-      console.error('保存失败:', error)
-      Taro.showToast({ title: '保存失败', icon: 'none' })
-    } finally {
-      this.setState({ isSaving: false })
-    }
+    this.autoSaver.cancel()
+    const saved = saveEvidencePackState(this.state.packState)
+    Taro.showToast({ title: saved ? '保存成功' : '保存失败，请清理空间后重试', icon: saved ? 'success' : 'none' })
+    this.setState({ isSaving: false })
+  }
+
+  scheduleSave = () => {
+    this.autoSaver.schedule(this.state.packState)
   }
 
   handleFormChange = (field, value) => {
@@ -51,7 +100,7 @@ export default class EvidencePack extends Component {
         ...prev.packState,
         formData: { ...prev.packState.formData, [field]: value },
       },
-    }))
+    }), this.scheduleSave)
   }
 
   handleEvidenceToggle = (group, index) => {
@@ -60,7 +109,7 @@ export default class EvidencePack extends Component {
       evidence[group] = [...evidence[group]]
       evidence[group][index] = !evidence[group][index]
       return { packState: { ...prev.packState, evidence } }
-    })
+    }, this.scheduleSave)
   }
 
   handleActionToggle = (index) => {
@@ -68,7 +117,7 @@ export default class EvidencePack extends Component {
       const actions = [...prev.packState.actions]
       actions[index] = !actions[index]
       return { packState: { ...prev.packState, actions } }
-    })
+    }, this.scheduleSave)
   }
 
   handleGenerateCommunication = () => {
@@ -76,17 +125,177 @@ export default class EvidencePack extends Component {
     const text = buildEvidenceCommunication(currentTab, packState.formData)
     this.setState((prev) => ({
       packState: { ...prev.packState, communicationText: text },
-    }))
+    }), this.scheduleSave)
     Taro.showToast({ title: '已生成沟通说明', icon: 'success' })
+  }
+
+  handleCommunicationChange = (value) => {
+    this.setState((prev) => ({
+      packState: { ...prev.packState, communicationText: value },
+    }), this.scheduleSave)
+  }
+
+  handleAddFromAlbum = async (group) => {
+    if (this.state.isAttaching) return
+    this.setState({ isAttaching: true })
+    try {
+      const { tempFilePath, fileName, size } = await pickImageFromAlbum()
+      const attachment = await persistAttachment(tempFilePath, 'album', fileName, size)
+      await this.commitAttachment(group, attachment)
+    } catch (error) {
+      const detail = getCapabilityFailure(error, 'album')
+      if (!detail.cancelled) {
+        this.setState({ operationNotice: detail.reason === 'api-failed' && error?.message ? `${error.message}。请检查相册权限或重新选择。` : '相册图片添加失败，请检查照片权限后重试。' })
+        if (detail.reason === 'api-failed' && error?.message) {
+          Taro.showToast({ title: error.message, icon: 'none' })
+        } else {
+          await showCapabilityFailure(error, 'album', '相册图片添加失败')
+        }
+      }
+    } finally {
+      this.setState({ isAttaching: false })
+    }
+  }
+
+  handleAddFromChat = async (group) => {
+    if (this.state.isAttaching) return
+    this.setState({ isAttaching: true })
+    try {
+      const { tempFilePath, fileName, size } = await pickFileFromChat()
+      const attachment = await persistAttachment(tempFilePath, 'chat', fileName, size)
+      await this.commitAttachment(group, attachment)
+    } catch (error) {
+      const detail = getCapabilityFailure(error, 'chatFile')
+      if (!detail.cancelled) {
+        this.setState({ operationNotice: detail.reason === 'api-failed' && error?.message ? `${error.message}。请重新选择微信文件。` : '微信文件添加失败，请确认文件仍可访问后重试。' })
+        if (detail.reason === 'api-failed' && error?.message) {
+          Taro.showToast({ title: error.message, icon: 'none' })
+        } else {
+          await showCapabilityFailure(error, 'chatFile', '微信文件添加失败')
+        }
+      }
+    } finally {
+      this.setState({ isAttaching: false })
+    }
+  }
+
+  // 添加附件后立即同步保存：失败则回滚 state 并清理已持久化的文件
+  commitAttachment = async (group, attachment) => {
+    const prev = this.state.packState
+    const next = addAttachment(prev, group, attachment)
+    this.setState({ packState: next })
+    this.autoSaver.cancel()
+    const saved = saveEvidencePackState(next)
+    if (!saved) {
+      // 回滚到添加前的 state，并清理刚保存到小程序文件系统的附件
+      this.setState({ packState: prev })
+      await removePersistedFile(attachment.localPath)
+      this.setState({ operationNotice: '附件保存失败：本地空间不足。请到首页清理无用文件后重试。' })
+      Taro.showToast({ title: '附件保存失败，请清理空间后重试', icon: 'none' })
+      return
+    }
+    this.setState({ operationNotice: '' })
+    Taro.showToast({ title: '附件已添加', icon: 'success' })
+  }
+
+  handlePreviewAttachment = (attachment, group) => {
+    if (!attachment) return
+    if (attachment.fileType === 'image' && attachment.localPath) {
+      const groupImages = getGroupAttachments(this.state.packState, group)
+        .filter((item) => item.fileType === 'image' && item.localPath)
+      previewImageAttachment(attachment, groupImages)
+    } else if (attachment.textContent) {
+      // 文本类模块引用：内容较长时复制到剪贴板，较短时弹窗展示
+      const text = attachment.textContent
+      if (text.length > 800) {
+        copyText(text, '内容较长，已复制到剪贴板')
+      } else {
+        this.setState({ textPreview: { title: attachment.fileName, text } })
+      }
+    } else {
+      openFileAttachment(attachment)
+    }
+  }
+
+  closeTextPreview = () => {
+    this.setState({ textPreview: null })
+  }
+
+  handleDeleteAttachment = (attachment, group) => {
+    Taro.showModal({
+      title: '删除附件',
+      content: `确定删除「${attachment.fileName}」？删除后无法恢复。`,
+      success: async ({ confirm }) => {
+        if (!confirm) return
+        const prev = this.state.packState
+        const next = removeAttachment(prev, group, attachment.id)
+        this.autoSaver.cancel()
+        const result = await deleteEvidenceAttachmentTransaction({
+          previousState: prev,
+          nextState: next,
+          attachment,
+          saveState: saveEvidencePackState,
+          removeFile: removePersistedFile,
+        })
+        if (result.reason === 'storage-failed') {
+          this.setState({ operationNotice: '附件记录删除失败：本地空间不足。请清理空间后重试。' })
+          Taro.showToast({ title: '附件记录删除失败，请清理空间后重试', icon: 'none' })
+          return
+        }
+        if (result.ok) {
+          this.setState({ packState: result.state })
+          Taro.showToast({ title: result.reason === 'reference-removed' ? '已删除引用' : '已删除', icon: 'success' })
+          return
+        }
+        if (result.reason === 'rollback-failed') {
+          this.setState({ packState: result.state })
+          Taro.showToast({ title: '记录已删除，文件未清理，可到首页清理', icon: 'none', duration: 3000 })
+        } else {
+          this.setState({ operationNotice: '文件删除失败，请保留当前页面并重新操作。' })
+          Taro.showToast({ title: '文件删除失败，请重试', icon: 'none' })
+        }
+      },
+    })
   }
 
   handleReset = () => {
     Taro.showModal({
       title: '确认重置',
-      content: '将清空所有填写的内容，是否继续？',
-      success: (res) => {
-        if (res.confirm) {
-          this.setState({ packState: createDefaultEvidencePackState(), currentGroup: 0 })
+      content: '将清空所有填写的内容和已上传附件，是否继续？',
+      success: async (res) => {
+        if (!res.confirm) return
+        // 1. 保存 prevState（用于收集待删除附件）
+        const prev = this.state.packState
+        // 2. 创建 emptyState
+        const emptyState = createDefaultEvidencePackState()
+        // 3. 先调用 saveEvidencePackState(emptyState)
+        this.autoSaver.cancel()
+        const saved = saveEvidencePackState(emptyState)
+        // 4. Storage 保存失败：停止操作，不删除任何文件，不更新 UI
+        if (!saved) {
+          Taro.showToast({ title: '重置失败，请清理空间后重试', icon: 'none' })
+          return
+        }
+        // 5. Storage 保存成功后，再 Promise.all 删除附件文件（模块引用跳过，不删除原模块文件）
+        const allAttachments = []
+        Object.keys(evidenceGroupMeta).forEach((group) => {
+          getGroupAttachments(prev, group).forEach((att) => {
+            if (att.source !== 'module') {
+              allAttachments.push(att)
+            }
+          })
+        })
+        const results = await Promise.all(
+          allAttachments.map((att) => removePersistedFile(att.localPath))
+        )
+        const hasCleanupFailure = results.some((r) => !r.ok)
+        // 6. 更新 UI 为 emptyState
+        this.setState({ packState: emptyState, currentGroup: 0 })
+        // 7. 部分文件清理失败时提示
+        if (hasCleanupFailure) {
+          Taro.showToast({ title: '记录已重置，部分本地文件清理失败', icon: 'none' })
+        } else {
+          Taro.showToast({ title: '已重置并保存', icon: 'success' })
         }
       },
     })
@@ -94,121 +303,367 @@ export default class EvidencePack extends Component {
 
   handleExport = () => {
     const report = createEvidencePackageText(this.state.packState)
-    Taro.setClipboardData({
-      data: report,
-      success: () => Taro.showToast({ title: '已复制到剪贴板', icon: 'success' }),
-    })
+    copyText(report, '已复制到剪贴板')
   }
 
-  getProgress = () => {
-    const { evidence } = this.state.packState
-    let total = 0
-    let collected = 0
-    Object.values(evidence).forEach((checks) => {
-      checks.forEach((v) => {
-        total++
-        if (v) collected++
+  handleExportTxt = async () => {
+    const report = createEvidencePackageText(this.state.packState)
+    this.setState({ exportingType: 'txt' })
+    try {
+      await exportTextToFile('退租证据包摘要.txt', report)
+    } finally {
+      this.setState({ exportingType: '' })
+    }
+  }
+
+  handleExportPdf = async () => {
+    const report = createEvidencePackageText(this.state.packState)
+    this.setState({ exportingType: 'pdf' })
+    try {
+      await exportEvidencePdf(report)
+    } finally {
+      this.setState({ exportingType: '' })
+    }
+  }
+
+  handleExportZip = async () => {
+    const report = createEvidencePackageText(this.state.packState)
+    this.setState({ exportingType: 'zip' })
+    try {
+      const result = await exportEvidenceZip({
+        packState: this.state.packState,
+        reportText: report,
+        groupLabels: Object.fromEntries(GROUPS.map(([key, meta]) => [key, meta.title])),
       })
-    })
-    return { total, collected, percentage: total > 0 ? Math.round((collected / total) * 100) : 0 }
+      if (result.ok && result.skipped?.length) {
+        Taro.showModal({
+          title: '证据包已导出',
+          content: `已打包 ${result.included.length} 个附件；另有 ${result.skipped.length} 个本地文件无法读取，未放入 ZIP。请回到附件列表重新添加后再导出。`,
+          showCancel: false,
+        })
+      }
+    } finally {
+      this.setState({ exportingType: '' })
+    }
+  }
+
+  handleExportFiles = async () => {
+    if (this.state.exportingType) return
+    try {
+      const result = await Taro.showActionSheet({
+        itemList: ['ZIP 完整证据包（含附件）', 'PDF 证据摘要', 'TXT 证据摘要'],
+      })
+      if (result.tapIndex === 0) await this.handleExportZip()
+      else if (result.tapIndex === 1) await this.handleExportPdf()
+      else if (result.tapIndex === 2) await this.handleExportTxt()
+    } catch {
+      // 用户关闭导出菜单，不需要错误提示。
+    }
+  }
+
+  // 模块引用导入：读取其他模块的持久化数据生成引用，按来源和路径去重
+  // 不复制或删除原模块的持久化文件，只把引用记录写入证据包
+  handleImportCheckinPhotos = async () => {
+    if (this.state.isImporting) return
+    this.setState({ isImporting: true })
+    try {
+      const refs = buildCheckinPhotoRefs()
+      if (!refs.length) {
+        Taro.showToast({ title: '暂无可导入的验房照片', icon: 'none' })
+        return
+      }
+      const group = 'photos'
+      const { state: next, added, skipped } = importModuleReferences(this.state.packState, group, refs)
+      if (added === 0) {
+        Taro.showToast({ title: `${refs.length} 张验房照片均已导入，无新增`, icon: 'none' })
+        return
+      }
+      this.autoSaver.cancel()
+      const saved = saveEvidencePackState(next)
+      if (!saved) {
+        Taro.showToast({ title: '保存失败，请清理空间后重试', icon: 'none' })
+        return
+      }
+      this.setState({ packState: next })
+      Taro.showToast({ title: `已导入 ${added} 张验房照片${skipped ? `，${skipped} 张已存在` : ''}`, icon: 'none' })
+    } catch (error) {
+      Taro.showToast({ title: error?.message || '导入失败，请重试', icon: 'none' })
+    } finally {
+      this.setState({ isImporting: false })
+    }
+  }
+
+  handleImportCheckinReport = async () => {
+    if (this.state.isImporting) return
+    this.setState({ isImporting: true })
+    try {
+      const ref = buildCheckinReportRef()
+      if (!ref) {
+        Taro.showToast({ title: '暂无可导入的验房记录', icon: 'none' })
+        return
+      }
+      const group = 'photos'
+      const { state: next, added } = importModuleReferences(this.state.packState, group, [ref])
+      if (added === 0) {
+        Taro.showToast({ title: '验房报告已导入，如需更新请先删除原引用', icon: 'none' })
+        return
+      }
+      this.autoSaver.cancel()
+      const saved = saveEvidencePackState(next)
+      if (!saved) {
+        Taro.showToast({ title: '保存失败，请清理空间后重试', icon: 'none' })
+        return
+      }
+      this.setState({ packState: next })
+      Taro.showToast({ title: '已导入验房报告', icon: 'success' })
+    } catch (error) {
+      Taro.showToast({ title: error?.message || '导入失败，请重试', icon: 'none' })
+    } finally {
+      this.setState({ isImporting: false })
+    }
+  }
+
+  handleImportContractText = async () => {
+    if (this.state.isImporting) return
+    this.setState({ isImporting: true })
+    try {
+      const ref = buildContractTextRef()
+      if (!ref) {
+        Taro.showToast({ title: '合同正文为空，请先在合同审查页录入', icon: 'none' })
+        return
+      }
+      const group = 'contract'
+      const { state: next, added } = importModuleReferences(this.state.packState, group, [ref])
+      if (added === 0) {
+        Taro.showToast({ title: '合同正文已导入，如需更新请先删除原引用', icon: 'none' })
+        return
+      }
+      this.autoSaver.cancel()
+      const saved = saveEvidencePackState(next)
+      if (!saved) {
+        Taro.showToast({ title: '保存失败，请清理空间后重试', icon: 'none' })
+        return
+      }
+      this.setState({ packState: next })
+      Taro.showToast({ title: '已导入合同正文', icon: 'success' })
+    } catch (error) {
+      Taro.showToast({ title: error?.message || '导入失败，请重试', icon: 'none' })
+    } finally {
+      this.setState({ isImporting: false })
+    }
+  }
+
+  handleImportReviewReport = async () => {
+    if (this.state.isImporting) return
+    this.setState({ isImporting: true })
+    try {
+      const refs = buildReviewReportRefs()
+      if (!refs.length) {
+        Taro.showToast({ title: '暂无可导入的审查报告', icon: 'none' })
+        return
+      }
+      const group = 'contract'
+      const { state: next, added, skipped } = importModuleReferences(this.state.packState, group, refs)
+      if (added === 0) {
+        Taro.showToast({ title: `${refs.length} 份审查报告均已导入，无新增`, icon: 'none' })
+        return
+      }
+      this.autoSaver.cancel()
+      const saved = saveEvidencePackState(next)
+      if (!saved) {
+        Taro.showToast({ title: '保存失败，请清理空间后重试', icon: 'none' })
+        return
+      }
+      this.setState({ packState: next })
+      Taro.showToast({ title: `已导入 ${added} 份审查报告${skipped ? `，${skipped} 份已存在` : ''}`, icon: 'none' })
+    } catch (error) {
+      Taro.showToast({ title: error?.message || '导入失败，请重试', icon: 'none' })
+    } finally {
+      this.setState({ isImporting: false })
+    }
+  }
+
+  // 进度只统计真实附件数量和覆盖组数，不再用百分比进度条避免误导
+  getProgress = () => {
+    const stats = getAttachmentStats(this.state.packState)
+    const totalGroups = GROUPS.length
+    const collectedGroups = Object.values(stats.byGroup).filter((count) => count > 0).length
+    return {
+      totalGroups,
+      collectedGroups,
+      totalAttachments: stats.total,
+    }
+  }
+
+  handleAiEvidenceCheck = () => {
+    this.autoSaver.flush()
+    openAiTask('evidence')
   }
 
   render() {
-    const { packState, currentTab, currentGroup, isSaving } = this.state
+    const { packState, currentTab, currentGroup, isSaving, isAttaching, isImporting, exportingType, textPreview, activeStep, operationNotice } = this.state
     const { formData, evidence, actions, communicationText } = packState
     const progress = this.getProgress()
+    const hasAiContext = progress.totalAttachments > 0
+      || actions.some(Boolean)
+      || Object.values(evidence).some((items) => Array.isArray(items) && items.some(Boolean))
+      || Object.values(formData).some((value) => String(value || '').trim())
     const [activeGroupKey, activeGroupMeta] = GROUPS[currentGroup] || GROUPS[0]
+    const activeGroupAttachments = getGroupAttachments(packState, activeGroupKey)
+    const moduleSourceLabel = (att) => {
+      if (att.source !== 'module') return att.source === 'album' ? '相册' : '微信文件'
+      const map = { checkin: '验房模块', contract: '合同模块', review: '审查模块' }
+      return `引用·${map[att.sourceModule] || att.sourceModule || '其他模块'}`
+    }
 
     return (
-      <ScrollView scrollY className='evidence-page'>
+      <ScrollView scrollY enableFlex className='evidence-page'>
         <View className='evidence-hero'>
           <Text className='eyebrow'>退租证据包</Text>
           <Text className='page-title'>退租证据整理成包</Text>
           <Text className='page-copy'>把合同、押金凭证、交接照片、费用票据和沟通记录串成一条证据链。</Text>
         </View>
         <View className='progress-section'>
-          <Text className='progress-title'>证据收集进度</Text>
-          <View className='progress-bar'>
-            <View className='progress-fill' style={{ width: `${progress.percentage}%` }} />
-          </View>
+          <View className='progress-head'><Text className='progress-title'>证据收集进度</Text><Button className='reset-link' onClick={this.handleReset}>重置记录</Button></View>
           <Text className='progress-text'>
-            {progress.collected} / {progress.total} 项 ({progress.percentage}%)
+            已添加 {progress.totalAttachments} 个真实附件，覆盖 {progress.collectedGroups}/{progress.totalGroups} 类
           </Text>
         </View>
+        <View className='step-tabs' aria-label='证据包步骤'>
+          {STEPS.map((step) => <Button key={step.key} className={activeStep === step.key ? 'active' : ''} aria-current={activeStep === step.key ? 'step' : undefined} onClick={() => this.setState({ activeStep: step.key })}>{step.label}</Button>)}
+        </View>
+        {operationNotice ? <View className='operation-notice' aria-live='polite'><Text>{operationNotice}</Text><Button aria-label='关闭错误提示' onClick={() => this.setState({ operationNotice: '' })}>关闭</Button></View> : null}
 
+        {activeStep === 'basic' ? <>
         <View className='section'>
           <Text className='section-title'>基本信息</Text>
 
           <View className='form-item'>
             <Text className='form-label'>房屋地址</Text>
-            <Input className='form-input' placeholder='请输入房屋地址' value={formData.address} onInput={(e) => this.handleFormChange('address', e.detail.value)} />
+            <Input className='form-input' aria-label='房屋地址' name='address' placeholder='请输入房屋地址…' value={formData.address} onInput={(e) => this.handleFormChange('address', e.detail.value)} />
           </View>
           <View className='form-item'>
             <Text className='form-label'>押金金额（元）</Text>
-            <Input className='form-input' type='number' placeholder='请输入押金金额' value={formData.deposit} onInput={(e) => this.handleFormChange('deposit', e.detail.value)} />
+            <Input className='form-input' aria-label='押金金额' name='deposit' type='digit' placeholder='请输入押金金额…' value={formData.deposit} onInput={(e) => this.handleFormChange('deposit', e.detail.value)} />
           </View>
           <View className='form-item'>
             <Text className='form-label'>月租金（元）</Text>
-            <Input className='form-input' type='number' placeholder='请输入月租金' value={formData.monthlyRent} onInput={(e) => this.handleFormChange('monthlyRent', e.detail.value)} />
+            <Input className='form-input' aria-label='月租金' name='monthlyRent' type='digit' placeholder='请输入月租金…' value={formData.monthlyRent} onInput={(e) => this.handleFormChange('monthlyRent', e.detail.value)} />
           </View>
-          <View className='form-item'>
-            <Text className='form-label'>房东/中介</Text>
-            <Input className='form-input' placeholder='请输入房东或中介姓名' value={formData.landlordName} onInput={(e) => this.handleFormChange('landlordName', e.detail.value)} />
-          </View>
-          <View className='form-item'>
-            <Text className='form-label'>联系电话</Text>
-            <Input className='form-input' placeholder='请输入联系电话' value={formData.landlordPhone} onInput={(e) => this.handleFormChange('landlordPhone', e.detail.value)} />
-          </View>
-          <View className='form-item'>
-            <Text className='form-label'>入住日期</Text>
-            <Input className='form-input' placeholder='如 2025-06-01' value={formData.checkinDate} onInput={(e) => this.handleFormChange('checkinDate', e.detail.value)} />
-          </View>
-          <View className='form-item'>
-            <Text className='form-label'>退租日期</Text>
-            <Input className='form-input' placeholder='如 2026-06-01' value={formData.checkoutDate} onInput={(e) => this.handleFormChange('checkoutDate', e.detail.value)} />
-          </View>
-          <View className='form-item'>
-            <Text className='form-label'>交接日期</Text>
-            <Input className='form-input' placeholder='如 2026-06-05' value={formData.handoverDate} onInput={(e) => this.handleFormChange('handoverDate', e.detail.value)} />
-          </View>
-          <View className='form-item'>
-            <Text className='form-label'>交接时间</Text>
-            <Input className='form-input' placeholder='如 10:00' value={formData.handoverTime} onInput={(e) => this.handleFormChange('handoverTime', e.detail.value)} />
-          </View>
-        </View>
-
-        <View className='section'>
-          <Text className='section-title'>证据清单</Text>
-          <View className='category-tabs'>
-            {GROUPS.map(([key, meta], index) => (
-              <View
-                key={key}
-                className={`category-tab ${currentGroup === index ? 'active' : ''}`}
-                onClick={() => this.setState({ currentGroup: index })}
-              >
-                {meta.title}
+          <Button className='extra-toggle' aria-expanded={this.state.showExtraInfo} onClick={() => this.setState(({ showExtraInfo }) => ({ showExtraInfo: !showExtraInfo }))}>
+            <Text>补充交接信息（选填）</Text><Text>{this.state.showExtraInfo ? '收起 ⌃' : '展开 ⌄'}</Text>
+          </Button>
+          {this.state.showExtraInfo ? <View className='extra-fields'>
+            <View className='form-item'>
+              <Text className='form-label'>房东/中介</Text>
+              <Input className='form-input' aria-label='房东或中介姓名' name='landlordName' placeholder='请输入房东或中介姓名…' value={formData.landlordName} onInput={(e) => this.handleFormChange('landlordName', e.detail.value)} />
+            </View>
+            <View className='form-item'>
+              <Text className='form-label'>联系电话</Text>
+              <Input className='form-input' aria-label='联系电话' name='landlordPhone' type='number' maxlength={11} placeholder='请输入联系电话…' value={formData.landlordPhone} onInput={(e) => this.handleFormChange('landlordPhone', e.detail.value)} />
+            </View>
+            {[['checkinDate', '入住日期'], ['checkoutDate', '退租日期'], ['handoverDate', '交接日期']].map(([field, label]) => (
+              <View className='form-item' key={field}>
+                <Text className='form-label'>{label}</Text>
+                <Picker aria-label={label} mode='date' value={formData[field] || TODAY} onChange={(e) => this.handleFormChange(field, e.detail.value)}>
+                  <View className={`form-input picker-input ${formData[field] ? '' : 'placeholder'}`}>{formData[field] || `请选择${label}`}<Text>⌄</Text></View>
+                </Picker>
               </View>
             ))}
+            <View className='form-item'>
+              <Text className='form-label'>交接时间</Text>
+              <Picker aria-label='交接时间' mode='time' value={formData.handoverTime || '09:00'} onChange={(e) => this.handleFormChange('handoverTime', e.detail.value)}>
+                <View className={`form-input picker-input ${formData.handoverTime ? '' : 'placeholder'}`}>{formData.handoverTime || '请选择交接时间'}<Text>⌄</Text></View>
+              </Picker>
+            </View>
+          </View> : null}
+        </View>
+        <View className='step-actions'><Button onClick={() => this.setState({ activeStep: 'attachments' })}>下一步：添加证据</Button></View>
+        </> : null}
+
+        {activeStep === 'attachments' ? <>
+        <View className='section'>
+          <View className='section-head'>
+            <View><Text className='eyebrow'>证据清单</Text><Text className='section-title'>证据与附件</Text></View>
+            <Text className='group-attachment-count'>{activeGroupAttachments.length} 个附件</Text>
+          </View>
+          <View className='category-tabs'>
+            {GROUPS.map(([key, meta], index) => {
+              const count = getGroupAttachments(packState, key).length
+              return (
+                <Button
+                  key={key}
+                  className={`category-tab ${currentGroup === index ? 'active' : ''}`}
+                  onClick={() => this.setState({ currentGroup: index })}
+                >
+                  {meta.title}{count > 0 ? ` (${count})` : ''}
+                </Button>
+              )
+            })}
           </View>
 
           <View className='evidence-list'>
             {activeGroupMeta.items.map((item, itemIndex) => (
               <View key={itemIndex} className='evidence-item'>
-                <View className='item-header' onClick={() => this.handleEvidenceToggle(activeGroupKey, itemIndex)}>
+                <Button className='item-header' aria-checked={evidence[activeGroupKey][itemIndex]} onClick={() => this.handleEvidenceToggle(activeGroupKey, itemIndex)}>
                   <View className={`checkbox ${evidence[activeGroupKey][itemIndex] ? 'checked' : ''}`}>
                     {evidence[activeGroupKey][itemIndex] && <Text>✓</Text>}
                   </View>
                   <Text className='item-name'>{item}</Text>
-                </View>
+                </Button>
               </View>
             ))}
           </View>
-        </View>
 
+          <View className='attachment-area'>
+            <View className='attachment-head'>
+              <Text className='attachment-title'>{activeGroupMeta.title}的附件</Text>
+              <Text className='attachment-hint'>支持图片、PDF、Word、TXT，可从其他模块导入引用</Text>
+            </View>
+            {activeGroupAttachments.length ? (
+              <View className='attachment-list'>
+                {activeGroupAttachments.map((attachment) => (
+                  <View key={attachment.id} className={`attachment-card ${attachment.source === 'module' ? 'is-module-ref' : ''}`}>
+                    <View className='attachment-info'>
+                      <Text className='attachment-name'>{attachment.fileType === 'image' ? '🖼' : '📄'} {attachment.fileName}</Text>
+                      <Text className='attachment-meta'>{attachment.source === 'module' ? moduleSourceLabel(attachment) : `${formatSize(attachment.size)} · ${moduleSourceLabel(attachment)}`} · {attachment.createdAt.slice(0, 10)}</Text>
+                    </View>
+                    <View className='attachment-actions'>
+                      <Button className='btn-preview' onClick={() => this.handlePreviewAttachment(attachment, activeGroupKey)}>{attachment.textContent ? '查看' : '预览'}</Button>
+                      <Button className='btn-delete-attachment' onClick={() => this.handleDeleteAttachment(attachment, activeGroupKey)}>删除</Button>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text className='attachment-empty'>该组暂无附件，点击下方按钮添加或从其他模块导入。</Text>
+            )}
+            <View className='attachment-add-row'>
+              <Button className='btn-add-album' disabled={isAttaching || isImporting} onClick={() => this.handleAddFromAlbum(activeGroupKey)}>{isAttaching ? '处理中…' : '从相册添加图片'}</Button>
+              <Button className='btn-add-chat' disabled={isAttaching || isImporting} onClick={() => this.handleAddFromChat(activeGroupKey)}>{isAttaching ? '处理中…' : '从微信选择文件'}</Button>
+            </View>
+            {activeGroupKey === 'photos' ? (
+              <View className='import-row'>
+                <Button className='btn-import' disabled={isImporting} onClick={this.handleImportCheckinPhotos}>{isImporting ? '导入中…' : '导入验房照片'}</Button>
+                <Button className='btn-import' disabled={isImporting} onClick={this.handleImportCheckinReport}>{isImporting ? '导入中…' : '导入验房报告'}</Button>
+              </View>
+            ) : null}
+            {activeGroupKey === 'contract' ? (
+              <View className='import-row'>
+                <Button className='btn-import' disabled={isImporting} onClick={this.handleImportContractText}>{isImporting ? '导入中…' : '导入合同正文'}</Button>
+                <Button className='btn-import' disabled={isImporting} onClick={this.handleImportReviewReport}>{isImporting ? '导入中…' : '导入审查报告'}</Button>
+              </View>
+            ) : null}
+          </View>
+        </View>
+        <View className='step-actions'><Button className='secondary' onClick={() => this.setState({ activeStep: 'basic' })}>上一步</Button><Button onClick={() => this.setState({ activeStep: 'output' })}>下一步：生成说明</Button></View>
+        </> : null}
+
+        {activeStep === 'output' ? <>
         <View className='section'>
           <Text className='section-title'>下一步行动</Text>
           {evidenceActions.map((action, index) => (
-            <View key={index} className='action-item' onClick={() => this.handleActionToggle(index)}>
+            <Button key={index} className='action-item' aria-checked={actions[index]} onClick={() => this.handleActionToggle(index)}>
               <View className={`checkbox ${actions[index] ? 'checked' : ''}`}>
                 {actions[index] && <Text>✓</Text>}
               </View>
@@ -216,7 +671,7 @@ export default class EvidencePack extends Component {
                 <Text className='item-name'>{action.title}</Text>
                 <Text className='item-desc'>{action.desc}</Text>
               </View>
-            </View>
+            </Button>
           ))}
         </View>
 
@@ -224,34 +679,53 @@ export default class EvidencePack extends Component {
           <Text className='section-title'>沟通说明</Text>
           <View className='tab-row'>
             {evidenceToolTabs.map((tab) => (
-              <View
+              <Button
                 key={tab.value}
                 className={`tab-btn ${currentTab === tab.value ? 'active' : ''}`}
                 onClick={() => this.setState({ currentTab: tab.value })}
               >
                 {tab.label}
-              </View>
+              </Button>
             ))}
           </View>
           <Button className='btn-generate' onClick={this.handleGenerateCommunication}>
             生成沟通说明
           </Button>
           {communicationText ? (
-            <Textarea className='communication-text' value={communicationText} maxlength={2000} onInput={(e) => this.setState((prev) => ({ packState: { ...prev.packState, communicationText: e.detail.value } }))} />
+            <Textarea className='communication-text' aria-label='沟通说明' adjustPosition cursorSpacing={20} value={communicationText} maxlength={2000} onInput={(e) => this.handleCommunicationChange(e.detail.value)} />
           ) : null}
+          <Button className='ai-task-btn' disabled={!hasAiContext} onClick={this.handleAiEvidenceCheck}>{hasAiContext ? '让 AI 检查证据缺口' : '暂无证据资料可检查'}</Button>
         </View>
 
         <View className='action-buttons'>
           <Button className='btn-save' onClick={this.saveData} disabled={isSaving}>
-            {isSaving ? '保存中...' : '保存'}
+            {isSaving ? '保存中…' : '保存'}
+          </Button>
+          <Button className='btn-export' onClick={this.handleExportFiles} disabled={Boolean(exportingType)}>
+            {exportingType ? '正在生成…' : '导出文件'}
           </Button>
           <Button className='btn-export' onClick={this.handleExport}>
             复制报告摘要
           </Button>
-          <Button className='btn-reset' onClick={this.handleReset}>
-            重置
-          </Button>
         </View>
+        </> : null}
+
+        {textPreview ? (
+          <View className='text-preview-mask'>
+            <View className='text-preview-card'>
+              <View className='text-preview-head'>
+                <Text className='text-preview-title'>{textPreview.title}</Text>
+                <Button className='text-preview-close' onClick={this.closeTextPreview}>关闭</Button>
+              </View>
+              <ScrollView scrollY className='text-preview-body'>
+                <Text className='text-preview-content'>{textPreview.text}</Text>
+              </ScrollView>
+              <View className='text-preview-actions'>
+                <Button className='btn-copy-text' onClick={() => copyText(textPreview.text, '已复制到剪贴板')}>复制全文</Button>
+              </View>
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
     )
   }

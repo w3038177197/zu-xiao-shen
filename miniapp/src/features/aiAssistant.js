@@ -1,4 +1,6 @@
-import { aiReplySections, knowledgeBaseItems } from '../../../src/data/knowledgeBase.js'
+import { aiReplySections, knowledgeBaseItems } from '../shared/knowledgeBase.js'
+import { analyzeContract, cleanContractTextForReview, getRiskSummary } from './contractReview.js'
+import { getWorkflowContextLines, loadWorkflowContext } from './workflowContext.js'
 
 function compactText(value, maxLength) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim()
@@ -35,20 +37,101 @@ function actionAdvice(prompt) {
   return '先判断问题处于签约、入住、居住中还是退租阶段，再收集合同原文、付款凭证、现场照片和书面沟通记录。'
 }
 
-export function buildLocalReply({ prompt, contractText, findings = [], summary = null }) {
+function answerConclusion(prompt) {
+  if (/押金|扣款|保洁|退还/.test(prompt)) return '先不要只接受口头扣款结论，应同时核对合同约定、实际损失和有效凭证。'
+  if (/验房|照片|入住|瑕疵/.test(prompt)) return '验房的关键不是照片数量，而是让位置、问题、时间和双方确认能够对应起来。'
+  if (/补贴|毕业|社保|人才|学历/.test(prompt)) return '本地匹配只能筛选政策线索，最终资格取决于最新官方条件和经办审核。'
+  if (/解除|退租|违约|搬走/.test(prompt)) return '先固定通知、交接和费用证据，再协商解除与押金结算，能显著减少后续争议。'
+  if (/合同|条款|签|涨租|维修|入户/.test(prompt)) return '应先找到具体条款对应的权利、义务和违约后果，再决定是否签署或要求修改。'
+  return '先明确所处租房阶段和争议事实，再用合同、凭证、照片与书面沟通交叉核对。'
+}
+
+function buildContextRisk(prompt, context) {
+  const { review, checkin, evidence, subsidy } = context
+  const topFinding = review?.findings?.[0]
+  const contractRisk = review?.summary && topFinding
+    ? `当前合同评分 ${review.summary.score}/100（${review.summary.label}），优先处理「${topFinding.title}」。`
+    : ''
+  if (/验房|照片|入住|瑕疵/.test(prompt)) {
+    if (!checkin?.hasData) return '本机还没有验房记录，暂时无法判断房屋现状或照片完整度。'
+    const stats = checkin.stats
+    const firstDefect = checkin.defects?.[0]
+    return `本机验房已完成 ${stats.checked}/${stats.total} 项，记录 ${stats.defects} 处瑕疵、${stats.photos} 张照片。${firstDefect ? `优先核对「${firstDefect.room}-${firstDefect.item}：${firstDefect.defect}」。` : '目前没有已标记的瑕疵。'}`
+  }
+  if (/押金|扣款|退租|保洁|维修|交接|证据/.test(prompt)) {
+    const evidenceRisk = evidence?.hasData
+      ? `本机证据包已有 ${evidence.attachmentStats.total} 个附件，清单完成 ${evidence.checklist.checked}/${evidence.checklist.total} 项。${evidence.deposit ? `登记押金为 ${evidence.deposit} 元。` : '押金金额尚未登记。'}`
+      : '本机还没有退租证据包，扣款与押金判断缺少合同、照片和费用凭证支撑。'
+    return [contractRisk, evidenceRisk].filter(Boolean).join(' ')
+  }
+  if (/补贴|毕业|社保|人才|学历/.test(prompt)) {
+    if (!subsidy?.hasData) return '本机还没有补贴匹配资料，请先填写城市、学历、毕业时间、就业和社保情况。'
+    return `已读取 ${subsidy.city || '当前城市'} 的 ${subsidy.total} 条政策线索：满足 ${subsidy.satisfied} 条，待确认 ${subsidy.pending} 条，不满足 ${subsidy.unsatisfied} 条。`
+  }
+  if (review?.summary && topFinding) {
+    return `当前合同评分 ${review.summary.score}/100（${review.summary.label}），共 ${review.findings.length} 个风险点。优先处理「${topFinding.title}」，合同证据为「${compactText(topFinding.evidence || topFinding.explain, 72)}」。`
+  }
+  return context.contractText
+    ? '已关联合同正文，但当前版本还没有可用审查结果，建议先运行本地合同审查。'
+    : '本机还没有合同正文，请粘贴具体条款，或先到合同审查页录入合同。'
+}
+
+function buildNextStep(prompt, context) {
+  if (/验房|照片|入住|瑕疵/.test(prompt) && context.checkin?.stats?.checked < context.checkin?.stats?.total) {
+    return `继续完成剩余 ${context.checkin.stats.total - context.checkin.stats.checked} 项验房，并给瑕疵同时补全景、近景和带时间的沟通记录。`
+  }
+  if (/押金|扣款|退租|保洁|维修|交接|证据/.test(prompt) && !context.evidence?.attachmentStats?.total) {
+    return '先到证据包添加合同、入住/退租照片、扣款明细和费用票据，再回来核对具体扣款。'
+  }
+  if (/补贴|毕业|社保|人才|学历/.test(prompt) && context.subsidy?.pending) {
+    return `补齐 ${context.subsidy.pending} 条待确认线索所需信息，并打开政策官网核对申报时间与材料。`
+  }
+  return '把对方的具体要求、合同原文或扣款明细发来，我会继续按现有本机资料拆解。'
+}
+
+export function loadAllModuleContext() {
+  const context = loadWorkflowContext()
+  if (!context.contractText || context.review.isCurrent) return context
+  try {
+    const findings = analyzeContract(cleanContractTextForReview(context.contractText))
+    return {
+      ...context,
+      review: {
+        ...context.review,
+        findings,
+        summary: getRiskSummary(findings),
+      },
+    }
+  } catch {
+    return context
+  }
+}
+
+export function buildLocalReply({ prompt, context, contractText, findings = [], summary = null }) {
   const knowledge = pickKnowledge(prompt)
-  const topFinding = findings[0]
-  const risk = summary && topFinding
-    ? `当前合同评分 ${summary.score}/100（${summary.label}），共 ${findings.length} 个风险点。优先处理「${topFinding.title}」，合同证据为「${compactText(topFinding.evidence || topFinding.explain, 72)}」。`
-    : contractText
-      ? '已关联合同正文，但还没有可用审查结果，建议先到合同审查页运行本地审查。'
-      : '当前未关联合同，可以先粘贴合同，或直接发送具体条款。'
+  const resolvedContext = context || {
+    contractText: contractText || '',
+    review: { findings, summary },
+    checkin: { hasData: false },
+    evidence: { hasData: false },
+    subsidy: { hasData: false },
+  }
+  const contextLines = getWorkflowContextLines(resolvedContext)
+  if (/^(?:你好|您好|嗨|哈喽|hi|hello)[!！。,.，?？\s]*$/i.test(String(prompt || '').trim())) {
+    return [
+      '结论：你好，我可以帮你检查合同、准备验房、整理退租证据和核对租房补贴线索。',
+      `本机资料：${contextLines.length ? contextLines.join('；') : '当前还没有已关联的租房资料。'}`,
+      '你可以这样问：合同押金条款有什么风险？入住时要拍哪些照片？房东扣保洁费怎么回复？',
+      '提醒：页面会优先使用联网 AI；服务不可用或未授权时，会自动使用本地知识库回答。',
+    ].join('\n')
+  }
   return [
-    `结论：${actionAdvice(prompt)}`,
-    `重点风险：${risk}`,
+    `结论：${answerConclusion(prompt)}`,
+    `重点风险：${buildContextRisk(prompt, resolvedContext)}`,
     `建议动作：${actionAdvice(prompt)}`,
-    `依据：${knowledge.map((item) => `${item.title}（${item.source || '租小审内置知识库'}）`).join('；')}`,
-    '下一步：发送对方的具体要求、合同原文或扣款明细，我会继续按证据和沟通话术拆解。政策与法规请以官方最新口径为准。',
+    `依据：${contextLines.length ? `本机资料：${contextLines.join('；')}。` : '本机暂无已关联业务资料。'}内置知识库：${knowledge.map((item) => `${item.title}（${item.source || '租小审内置知识库'}）`).join('；')}`,
+    '提醒：当前回答由本地规则与知识库生成，不是联网大模型；政策和法规请以官方最新口径为准。',
+    `下一步：${buildNextStep(prompt, resolvedContext)}`,
   ].join('\n')
 }
 

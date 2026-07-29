@@ -1,7 +1,14 @@
 import { Component } from 'react'
 import { View, Text, Textarea, Button, Image, ScrollView } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { checkinRoomTypes } from '../../../../src/constants/checkinConfig.js'
+import { STORAGE_KEYS } from '../../constants/appConfig'
+import {
+  CHECKIN_MAX_PHOTOS_PER_ITEM,
+  CHECKIN_MAX_PHOTO_BYTES,
+  CHECKIN_PHOTO_MAX_EDGE,
+  CHECKIN_PHOTO_QUALITY,
+  checkinRoomTypes,
+} from '../../constants/checkinConfig'
 import {
   ROOMS,
   INSPECTION_ITEMS,
@@ -11,23 +18,47 @@ import {
   saveCheckinInspectionState,
   loadCheckinInspectionState,
 } from '../../features/checkinInspection'
+import { createDebouncedSaver } from '../../utils/debounceSave'
+import { copyText } from '../../utils/copyText'
+import { isUserCancellation, showCapabilityFailure } from '../../utils/privacyAuth'
+import { exportTextToFile } from '../../utils/textFileExport'
+import { openAiTask } from '../../utils/aiTaskHandoff'
+import { removePersistedFile } from '../../utils/evidenceAttachments'
+import { getEvidenceReferencedCheckinPhotoPaths } from '../../features/evidenceImport'
+import {
+  createCheckinStateWithoutPhotos,
+  deleteCheckinPhoto,
+  persistAddedCheckinPhotos,
+  replaceCheckinStateAndRemovePhotos,
+} from '../../utils/checkinPhotoTransactions'
 import './index.css'
 
-const ROOM_TYPE_KEY = 'zu-xiao-shen-checkin-room-type'
-
 export default class CheckinInspection extends Component {
+  autoSaver = createDebouncedSaver((state) => saveCheckinInspectionState(state))
+
   state = {
     inspectionState: createDefaultCheckinState(),
     currentRoom: 0,
     isSaving: false,
     roomType: 'studio',
     report: '',
+    expandedItemKey: null,
+    operationNotice: '',
+    lastPhotoSource: '',
   }
 
   componentDidMount() {
     const inspectionState = loadCheckinInspectionState()
-    const roomType = Taro.getStorageSync(ROOM_TYPE_KEY) || 'studio'
+    const roomType = Taro.getStorageSync(STORAGE_KEYS.checkinRoomType) || 'studio'
     this.setState({ inspectionState, roomType })
+  }
+
+  componentDidHide() {
+    this.autoSaver.flush()
+  }
+
+  componentWillUnmount() {
+    this.autoSaver.flush()
   }
 
   onShareAppMessage() {
@@ -35,21 +66,16 @@ export default class CheckinInspection extends Component {
   }
 
   setRoomType = (roomType) => {
-    this.setState({ roomType })
-    Taro.setStorageSync(ROOM_TYPE_KEY, roomType)
+    this.setState({ roomType, report: '' })
+    Taro.setStorageSync(STORAGE_KEYS.checkinRoomType, roomType)
   }
 
   saveData = () => {
     this.setState({ isSaving: true })
-    try {
-      saveCheckinInspectionState(this.state.inspectionState)
-      Taro.showToast({ title: '保存成功', icon: 'success' })
-    } catch (error) {
-      console.error('保存失败:', error)
-      Taro.showToast({ title: '保存失败', icon: 'none' })
-    } finally {
-      this.setState({ isSaving: false })
-    }
+    this.autoSaver.cancel()
+    const saved = saveCheckinInspectionState(this.state.inspectionState)
+    Taro.showToast({ title: saved ? '保存成功' : '保存失败，请清理空间后重试', icon: saved ? 'success' : 'none' })
+    this.setState({ isSaving: false })
   }
 
   updateRecord = (roomKey, itemKey, patch) => {
@@ -57,12 +83,17 @@ export default class CheckinInspection extends Component {
       const next = { ...prev.inspectionState }
       next[roomKey] = { ...next[roomKey] }
       next[roomKey][itemKey] = { ...next[roomKey][itemKey], ...patch }
-      return { inspectionState: next }
-    })
+      return { inspectionState: next, report: '' }
+    }, this.scheduleSave)
+  }
+
+  scheduleSave = () => {
+    this.autoSaver.schedule(this.state.inspectionState)
   }
 
   handleStatusChange = (roomKey, itemKey, status) => {
     this.updateRecord(roomKey, itemKey, { status })
+    this.setState({ expandedItemKey: status === 'defect' ? `${roomKey}-${itemKey}` : null })
   }
 
   handleNotesChange = (roomKey, itemKey, note) => {
@@ -75,7 +106,26 @@ export default class CheckinInspection extends Component {
 
   savePhotoFile = async (tempPath) => {
     try {
-      const saveRes = await Taro.saveFile({ tempFilePath: tempPath })
+      let sourcePath = tempPath
+      const fileInfo = await Taro.getFileInfo({ filePath: tempPath }).catch(() => null)
+      if (fileInfo?.size > CHECKIN_MAX_PHOTO_BYTES) {
+        const compressed = await Taro.compressImage({
+          src: tempPath,
+          quality: Math.round(CHECKIN_PHOTO_QUALITY * 100),
+          compressedWidth: CHECKIN_PHOTO_MAX_EDGE,
+          compressedHeight: CHECKIN_PHOTO_MAX_EDGE,
+        }).catch(() => null)
+        if (compressed?.tempFilePath) sourcePath = compressed.tempFilePath
+      }
+
+      const finalInfo = await Taro.getFileInfo({ filePath: sourcePath }).catch(() => null)
+      if (finalInfo?.size > CHECKIN_MAX_PHOTO_BYTES) return null
+      const saveRes = await Taro.saveFile({ tempFilePath: sourcePath })
+      const savedInfo = await Taro.getFileInfo({ filePath: saveRes.savedFilePath }).catch(() => null)
+      if (savedInfo?.size > CHECKIN_MAX_PHOTO_BYTES) {
+        Taro.removeSavedFile({ filePath: saveRes.savedFilePath }).catch(() => {})
+        return null
+      }
       return saveRes.savedFilePath
     } catch (err) {
       console.error('保存文件失败:', err)
@@ -83,7 +133,37 @@ export default class CheckinInspection extends Component {
     }
   }
 
+  getRemainingPhotoCount = (roomKey, itemKey) => {
+    const photos = this.state.inspectionState[roomKey]?.[itemKey]?.photos || []
+    return Math.max(0, CHECKIN_MAX_PHOTOS_PER_ITEM - photos.length)
+  }
+
+  showPhotoFailure = (error, sourceType) => {
+    if (isUserCancellation(error)) return
+    showCapabilityFailure(error, sourceType, sourceType === 'camera' ? '拍照没有完成' : '相册选图没有完成')
+  }
+
+  retryLastPhoto = () => {
+    const { lastPhotoSource, lastPhotoRoomKey, lastPhotoItemKey } = this.state
+    this.setState({ operationNotice: '', lastPhotoSource: '', lastPhotoRoomKey: '', lastPhotoItemKey: '' })
+    if (!lastPhotoSource || this.state.isSaving) return
+    if (lastPhotoSource === 'camera') this.handleTakePhoto(lastPhotoRoomKey, lastPhotoItemKey)
+    else if (lastPhotoSource === 'album') this.handleChoosePhoto(lastPhotoRoomKey, lastPhotoItemKey)
+  }
+
+  createSafePhotoRemover = () => {
+    const evidencePaths = getEvidenceReferencedCheckinPhotoPaths()
+    return async (filePath) => {
+      if (evidencePaths.has(filePath)) return { ok: true, reason: 'evidence-reference' }
+      return removePersistedFile(filePath)
+    }
+  }
+
   handleTakePhoto = async (roomKey, itemKey) => {
+    if (!this.getRemainingPhotoCount(roomKey, itemKey)) {
+      Taro.showToast({ title: `每项最多 ${CHECKIN_MAX_PHOTOS_PER_ITEM} 张照片`, icon: 'none' })
+      return
+    }
     try {
       const res = await Taro.chooseImage({
         count: 1,
@@ -92,56 +172,108 @@ export default class CheckinInspection extends Component {
       })
       const savedPaths = (await Promise.all(res.tempFilePaths.map(this.savePhotoFile))).filter(Boolean)
       if (savedPaths.length === 0) {
+        this.setState({ operationNotice: '照片未保存：本地空间不足或文件异常。请到首页清理无用文件后重试。', lastPhotoSource: 'camera', lastPhotoRoomKey: roomKey, lastPhotoItemKey: itemKey })
         Taro.showToast({ title: '本地存储已满或异常，照片未持久保存', icon: 'none', duration: 3000 })
         return
       }
-      
-      this.updateRecord(roomKey, itemKey, {
-        photos: [...(this.state.inspectionState[roomKey][itemKey].photos || []), ...savedPaths],
+
+      this.autoSaver.cancel()
+      const result = await persistAddedCheckinPhotos({
+        state: this.state.inspectionState,
+        roomKey,
+        itemKey,
+        savedPaths,
+        saveState: saveCheckinInspectionState,
+        removeFile: removePersistedFile,
       })
+      if (!result.ok) {
+        this.setState({ operationNotice: '照片记录保存失败，照片未加入验房记录。请清理本地空间后重试。', lastPhotoSource: 'camera', lastPhotoRoomKey: roomKey, lastPhotoItemKey: itemKey })
+        Taro.showToast({ title: result.cleanupFailed ? '记录保存失败，请到首页清理无用文件' : '记录保存失败，照片未添加', icon: 'none', duration: 3000 })
+        return
+      }
+      this.setState({ inspectionState: result.state, report: '', operationNotice: '', lastPhotoSource: '', lastPhotoRoomKey: '', lastPhotoItemKey: '' })
     } catch (error) {
-      console.error('拍照失败:', error)
+      if (!isUserCancellation(error)) this.setState({ operationNotice: '拍照失败：请检查相机权限后重新拍摄。', lastPhotoSource: 'camera', lastPhotoRoomKey: roomKey, lastPhotoItemKey: itemKey })
+      this.showPhotoFailure(error, 'camera')
     }
   }
 
   handleChoosePhoto = async (roomKey, itemKey) => {
+    const remaining = this.getRemainingPhotoCount(roomKey, itemKey)
+    if (!remaining) {
+      Taro.showToast({ title: `每项最多 ${CHECKIN_MAX_PHOTOS_PER_ITEM} 张照片`, icon: 'none' })
+      return
+    }
     try {
       const res = await Taro.chooseImage({
-        count: 9,
+        count: remaining,
         sizeType: ['compressed'],
-        sourceType: ['album', 'camera'],
+        sourceType: ['album'],
       })
       const savedPaths = (await Promise.all(res.tempFilePaths.map(this.savePhotoFile))).filter(Boolean)
       if (savedPaths.length === 0) {
+        this.setState({ operationNotice: '照片未保存：本地空间不足或文件异常。请到首页清理无用文件后重试。', lastPhotoSource: 'album', lastPhotoRoomKey: roomKey, lastPhotoItemKey: itemKey })
         Taro.showToast({ title: '本地存储已满或异常，照片未持久保存', icon: 'none', duration: 3000 })
         return
       }
       if (savedPaths.length < res.tempFilePaths.length) {
         Taro.showToast({ title: '部分照片未持久保存', icon: 'none', duration: 3000 })
       }
-      
-      this.updateRecord(roomKey, itemKey, {
-        photos: [...(this.state.inspectionState[roomKey][itemKey].photos || []), ...savedPaths],
+
+      this.autoSaver.cancel()
+      const result = await persistAddedCheckinPhotos({
+        state: this.state.inspectionState,
+        roomKey,
+        itemKey,
+        savedPaths,
+        saveState: saveCheckinInspectionState,
+        removeFile: removePersistedFile,
       })
+      if (!result.ok) {
+        this.setState({ operationNotice: '照片记录保存失败，照片未加入验房记录。请清理本地空间后重试。', lastPhotoSource: 'album', lastPhotoRoomKey: roomKey, lastPhotoItemKey: itemKey })
+        Taro.showToast({ title: result.cleanupFailed ? '记录保存失败，请到首页清理无用文件' : '记录保存失败，照片未添加', icon: 'none', duration: 3000 })
+        return
+      }
+      this.setState({ inspectionState: result.state, report: '', operationNotice: '', lastPhotoSource: '', lastPhotoRoomKey: '', lastPhotoItemKey: '' })
     } catch (error) {
-      console.error('选择图片失败:', error)
+      if (!isUserCancellation(error)) this.setState({ operationNotice: '相册读取失败：请检查照片权限后重新选择。', lastPhotoSource: 'album', lastPhotoRoomKey: roomKey, lastPhotoItemKey: itemKey })
+      this.showPhotoFailure(error, 'album')
     }
   }
 
   handleDeletePhoto = (roomKey, itemKey, photoIndex) => {
-    const photos = [...(this.state.inspectionState[roomKey][itemKey].photos || [])]
-    const [removed] = photos.splice(photoIndex, 1)
-    if (removed?.startsWith('wxfile://')) Taro.removeSavedFile({ filePath: removed }).catch(() => {})
-    this.updateRecord(roomKey, itemKey, { photos })
-  }
-
-  cleanupSavedPhotos = () => {
-    Object.values(this.state.inspectionState).forEach((room) => {
-      Object.values(room).forEach((record) => {
-        record.photos?.filter((photo) => photo.startsWith('wxfile://')).forEach((filePath) => {
-          Taro.removeSavedFile({ filePath }).catch(() => {})
+    Taro.showModal({
+      title: '删除这张照片？',
+      content: '删除后无法恢复，其他验房记录不会受影响。',
+      success: async ({ confirm }) => {
+        if (!confirm) return
+        this.autoSaver.cancel()
+        const result = await deleteCheckinPhoto({
+          state: this.state.inspectionState,
+          roomKey,
+          itemKey,
+          photoIndex,
+          saveState: saveCheckinInspectionState,
+          removeFile: this.createSafePhotoRemover(),
         })
-      })
+        if (result.ok) {
+          this.setState({ inspectionState: result.state, report: '' })
+          Taro.showToast({
+            title: result.retainedFile ? '已从验房移除，证据包照片已保留' : '照片已删除',
+            icon: result.retainedFile ? 'none' : 'success',
+            duration: result.retainedFile ? 3000 : 1500,
+          })
+          return
+        }
+        if (result.reason === 'storage-failed') {
+          Taro.showToast({ title: '照片记录删除失败，请清理空间后重试', icon: 'none' })
+        } else if (result.reason === 'rollback-failed') {
+          this.setState({ inspectionState: result.state, report: '' })
+          Taro.showToast({ title: '记录已删除，文件清理失败，可到首页清理', icon: 'none', duration: 3000 })
+        } else {
+          Taro.showToast({ title: '文件删除失败，请重试', icon: 'none' })
+        }
+      },
     })
   }
 
@@ -149,19 +281,28 @@ export default class CheckinInspection extends Component {
     Taro.showModal({
       title: '清理照片',
       content: '将删除已保存的验房照片，文字记录会保留。是否继续？',
-      success: (res) => {
+      success: async (res) => {
         if (!res.confirm) return
-        this.cleanupSavedPhotos()
-        const next = {}
-        Object.keys(this.state.inspectionState).forEach((roomKey) => {
-          next[roomKey] = {}
-          Object.keys(this.state.inspectionState[roomKey]).forEach((itemKey) => {
-            next[roomKey][itemKey] = { ...this.state.inspectionState[roomKey][itemKey], photos: [] }
-          })
+        this.autoSaver.cancel()
+        const previousState = this.state.inspectionState
+        const nextState = createCheckinStateWithoutPhotos(previousState)
+        const result = await replaceCheckinStateAndRemovePhotos({
+          previousState,
+          nextState,
+          saveState: saveCheckinInspectionState,
+          removeFile: this.createSafePhotoRemover(),
         })
-        this.setState({ inspectionState: next })
-        saveCheckinInspectionState(next)
-        Taro.showToast({ title: '照片已清理', icon: 'success' })
+        if (!result.ok) {
+          Taro.showToast({ title: '照片记录保存失败，未清理任何文件', icon: 'none' })
+          return
+        }
+        this.setState({ inspectionState: result.state, report: '' })
+        const title = result.cleanupFailed
+          ? '记录已清理，部分本地文件清理失败'
+          : result.retainedFiles
+            ? `照片记录已清理，证据包引用保留 ${result.retainedFiles} 张`
+            : '照片已清理'
+        Taro.showToast({ title, icon: result.cleanupFailed || result.retainedFiles ? 'none' : 'success', duration: 3000 })
       },
     })
   }
@@ -170,12 +311,28 @@ export default class CheckinInspection extends Component {
     Taro.showModal({
       title: '确认重置',
       content: '将清空所有填写的内容，是否继续？',
-      success: (res) => {
-        if (res.confirm) {
-          this.cleanupSavedPhotos()
-          this.setState({ inspectionState: createDefaultCheckinState(), currentRoom: 0, report: '' })
-          saveCheckinInspectionState(createDefaultCheckinState())
+      success: async (res) => {
+        if (!res.confirm) return
+        this.autoSaver.cancel()
+        const previousState = this.state.inspectionState
+        const nextState = createDefaultCheckinState()
+        const result = await replaceCheckinStateAndRemovePhotos({
+          previousState,
+          nextState,
+          saveState: saveCheckinInspectionState,
+          removeFile: this.createSafePhotoRemover(),
+        })
+        if (!result.ok) {
+          Taro.showToast({ title: '重置保存失败，原记录和照片均已保留', icon: 'none' })
+          return
         }
+        this.setState({ inspectionState: result.state, currentRoom: 0, report: '' })
+        const title = result.cleanupFailed
+          ? '记录已重置，部分本地文件清理失败'
+          : result.retainedFiles
+            ? `记录已重置，证据包引用保留 ${result.retainedFiles} 张`
+            : '已重置并保存'
+        Taro.showToast({ title, icon: result.cleanupFailed || result.retainedFiles ? 'none' : 'success', duration: 3000 })
       },
     })
   }
@@ -231,14 +388,20 @@ export default class CheckinInspection extends Component {
   }
 
   handleExport = () => {
-    Taro.setClipboardData({
-      data: this.state.report || this.buildReport(),
-      success: () => Taro.showToast({ title: '报告已复制', icon: 'success' }),
-    })
+    copyText(this.state.report || this.buildReport(), '报告已复制')
+  }
+
+  handleExportTxt = () => {
+    exportTextToFile('验房报告.txt', this.state.report || this.buildReport())
   }
 
   handleCopyScript = () => {
-    Taro.setClipboardData({ data: this.getLandlordScript(), success: () => Taro.showToast({ title: '话术已复制', icon: 'success' }) })
+    copyText(this.getLandlordScript(), '话术已复制')
+  }
+
+  handleAiCheck = () => {
+    this.autoSaver.flush()
+    openAiTask('checkin')
   }
 
   handlePreviewPhoto = (photos, index) => {
@@ -246,29 +409,33 @@ export default class CheckinInspection extends Component {
   }
 
   render() {
-    const { inspectionState, currentRoom, isSaving, roomType, report } = this.state
+    const { inspectionState, currentRoom, isSaving, roomType, report, expandedItemKey, operationNotice, lastPhotoSource } = this.state
     const room = ROOMS[currentRoom]
     const stats = getCheckinStats(inspectionState)
 
     return (
-      <ScrollView scrollY className='checkin-page'>
+      <ScrollView scrollY enableFlex scrollWithAnimation scrollIntoView={report ? 'checkin-report' : ''} className='checkin-page'>
         <View className='checkin-hero'>
           <Text className='eyebrow'>入住验房</Text>
           <Text className='page-title'>入住先留证，退租少扯皮</Text>
           <Text className='page-copy'>按房间逐项记录设施状态、瑕疵描述和现场照片，形成可追溯的入住基线。</Text>
         </View>
+        {operationNotice ? <View className='operation-notice' aria-live='polite'><Text>{operationNotice}</Text><View className='operation-notice-actions'>{lastPhotoSource ? <Button aria-label='重试上次拍照或选图' disabled={isSaving} onClick={this.retryLastPhoto}>重试</Button> : null}<Button aria-label='关闭错误提示' onClick={() => this.setState({ operationNotice: '' })}>关闭</Button></View></View> : null}
         <View className='section'>
           <Text className='section-kicker'>选择房屋类型</Text>
           <View className='room-type-grid'>
             {checkinRoomTypes.map((item) => (
-              <View key={item.value} className={`room-type-item ${roomType === item.value ? 'active' : ''}`} onClick={() => this.setRoomType(item.value)}>
+              <Button key={item.value} className={`room-type-item ${roomType === item.value ? 'active' : ''}`} onClick={() => this.setRoomType(item.value)}>
                 <Text className='room-type-label'>{item.label}</Text>
                 <Text className='room-type-desc'>{item.desc}</Text>
-              </View>
+              </Button>
             ))}
           </View>
 
-          <Text className='section-kicker'>本次验房进度</Text>
+          <View className='section-kicker-row'>
+            <Text className='section-kicker'>本次验房进度</Text>
+            <Button className='reset-link' onClick={this.handleReset}>重置记录</Button>
+          </View>
           <View className='checkin-stats'>
             <View><Text>{stats.percent}%</Text><Text>完成度</Text></View>
             <View><Text>{stats.checked}/{stats.total}</Text><Text>已检查</Text></View>
@@ -288,80 +455,100 @@ export default class CheckinInspection extends Component {
 
           <View className='room-tabs'>
             {ROOMS.map((r, index) => (
-              <View
+              <Button
                 key={r.key}
                 className={`room-tab ${currentRoom === index ? 'active' : ''}`}
-                onClick={() => this.setState({ currentRoom: index })}
+                onClick={() => this.setState({ currentRoom: index, expandedItemKey: null })}
               >
                 {r.label}
-              </View>
+              </Button>
             ))}
           </View>
 
           <View className='inspection-list'>
             {INSPECTION_ITEMS.map((item) => {
               const record = inspectionState[room.key]?.[item.key] || { status: 'unchecked', defect: '', note: '', photos: [] }
+              const itemKey = `${room.key}-${item.key}`
+              const expanded = record.status === 'unchecked' || expandedItemKey === itemKey
               return (
-                <View key={item.key} className='inspection-item'>
-                  <Text className='item-name'>{item.label}</Text>
+                <View key={item.key} className={`inspection-item ${expanded ? '' : 'collapsed'}`}>
+                  <View className='inspection-head'>
+                    <View><Text className='item-name'>{item.label}</Text><Text className='item-desc'>{item.desc}</Text></View>
+                    {!expanded ? <Button className='item-expand' onClick={() => this.setState({ expandedItemKey: itemKey })}>补充记录</Button> : null}
+                  </View>
+
+                  {!expanded ? <Text className={`item-summary ${record.status}`}>{record.status === 'good' ? '良好' : '瑕疵'} · {(record.photos || []).length} 张照片{record.note ? ' · 已备注' : ''}</Text> : <>
 
                   <View className='status-buttons'>
-                    <View
+                    <Button
                       className={`status-btn ${record.status === 'good' ? 'active good' : ''}`}
                       onClick={() => this.handleStatusChange(room.key, item.key, 'good')}
                     >
                       良好
-                    </View>
-                    <View
+                    </Button>
+                    <Button
                       className={`status-btn ${record.status === 'defect' ? 'active poor' : ''}`}
                       onClick={() => this.handleStatusChange(room.key, item.key, 'defect')}
                     >
                       瑕疵
-                    </View>
+                    </Button>
                   </View>
 
                   {record.status === 'defect' && (
                     <Textarea
                       className='item-notes'
-                      placeholder='描述瑕疵情况'
+                      aria-label={`${room.label}${item.label}瑕疵描述`}
+                      name={`${room.key}-${item.key}-defect`}
+                      adjustPosition
+                      cursorSpacing={20}
+                      placeholder='描述瑕疵情况…'
                       value={record.defect}
                       onInput={(e) => this.handleDefectChange(room.key, item.key, e.detail.value)}
                       maxlength={200}
                     />
                   )}
 
-                  <Textarea
-                    className='item-notes'
-                    placeholder='备注说明（可选）'
-                    value={record.note}
-                    onInput={(e) => this.handleNotesChange(room.key, item.key, e.detail.value)}
-                    maxlength={200}
-                  />
+                  {record.status !== 'unchecked' ? <>
+                    <Textarea
+                      className='item-notes'
+                      aria-label={`${room.label}${item.label}备注`}
+                      name={`${room.key}-${item.key}-note`}
+                      adjustPosition
+                      cursorSpacing={20}
+                      placeholder='备注说明（可选）…'
+                      value={record.note}
+                      onInput={(e) => this.handleNotesChange(room.key, item.key, e.detail.value)}
+                      maxlength={200}
+                    />
 
-                  <View className='photo-section'>
-                    <Text className='photo-label'>照片记录</Text>
+                    <View className='photo-section'>
+                    <Text className='photo-label'>照片记录（{(record.photos || []).length}/{CHECKIN_MAX_PHOTOS_PER_ITEM}）</Text>
                     <View className='photo-list'>
                       {(record.photos || []).map((photo, photoIndex) => (
                         <View key={photoIndex} className='photo-item'>
-                          <Image src={photo} className='photo-image' mode='aspectFill' onClick={() => this.handlePreviewPhoto(record.photos, photoIndex)} />
-                          <View
+                          <Button className='photo-preview' aria-label={`预览第 ${photoIndex + 1} 张照片`} onClick={() => this.handlePreviewPhoto(record.photos, photoIndex)}>
+                            <Image src={photo} className='photo-image' mode='aspectFill' lazyLoad />
+                          </Button>
+                          <Button
                             className='photo-delete'
+                            aria-label={`删除第 ${photoIndex + 1} 张照片`}
                             onClick={() => this.handleDeletePhoto(room.key, item.key, photoIndex)}
                           >
                             ×
-                          </View>
+                          </Button>
                         </View>
                       ))}
-                      <View className='photo-actions'>
-                        <View className='photo-btn' onClick={() => this.handleTakePhoto(room.key, item.key)}>
-                          拍照
+                      {(record.photos || []).length < CHECKIN_MAX_PHOTOS_PER_ITEM ? (
+                        <View className='photo-actions'>
+                          <Button className='photo-btn' onClick={() => this.handleTakePhoto(room.key, item.key)}>拍照</Button>
+                          <Button className='photo-btn' onClick={() => this.handleChoosePhoto(room.key, item.key)}>相册</Button>
                         </View>
-                        <View className='photo-btn' onClick={() => this.handleChoosePhoto(room.key, item.key)}>
-                          相册
-                        </View>
-                      </View>
+                      ) : <Text className='photo-limit-hint'>已达到单项照片上限</Text>}
                     </View>
-                  </View>
+                    </View>
+                  </> : <Text className='unchecked-hint'>先选择“良好”或“瑕疵”，再补充备注和照片</Text>}
+                  {record.status !== 'unchecked' ? <Button className='item-collapse' onClick={() => this.setState({ expandedItemKey: null })}>完成并收起</Button> : null}
+                  </>}
                 </View>
               )
             })}
@@ -370,23 +557,22 @@ export default class CheckinInspection extends Component {
 
         <View className='action-buttons'>
           <Button className='btn-save' onClick={this.saveData} disabled={isSaving}>
-            {isSaving ? '保存中...' : '保存'}
+            {isSaving ? '保存中…' : '保存'}
           </Button>
           <Button className='btn-export' onClick={this.handleGenerateReport}>
             生成报告
           </Button>
-          <Button className='btn-reset' onClick={this.handleReset}>
-            重置
-          </Button>
         </View>
 
-        {report ? <View className='section report-section'>
+        {report ? <View id='checkin-report' className='section report-section'>
           <Text className='section-kicker'>验房报告</Text>
-          <Textarea className='report-text' value={report} maxlength={-1} disabled />
+          <Textarea className='report-text' aria-label='验房报告' value={report} maxlength={-1} disabled />
           <View className='report-actions'>
+            <Button className='btn-save' onClick={this.handleExportTxt}>导出报告 TXT</Button>
             <Button className='btn-save' onClick={this.handleExport}>复制完整报告</Button>
             <Button className='btn-export' onClick={this.handleCopyScript}>复制房东话术</Button>
           </View>
+          <Button className='ai-task-btn' disabled={!stats.checked} onClick={this.handleAiCheck}>{stats.checked ? '让 AI 解读验房记录' : '暂无验房记录可解读'}</Button>
         </View> : null}
       </ScrollView>
     )

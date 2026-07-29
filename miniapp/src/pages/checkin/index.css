@@ -75,12 +75,15 @@
 .photo-list { display: flex; flex-wrap: wrap; gap: 12px; }
 .photo-item { position: relative; width: 150px; height: 150px; }
 .photo-image { width: 100%; height: 100%; }
+.photo-preview { width: 100%; height: 100%; margin: 0; padding: 0; background: transparent; line-height: normal; }
+.photo-preview::after { border: 0; }
 .photo-delete { position: absolute; top: -9px; right: -9px; width: 40px; height: 40px; background: #b63d31; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; }
 .photo-actions { display: flex; gap: 10px; }
 .photo-btn { min-width: 92px; padding: 14px 20px; box-sizing: border-box; font-size: 23px; background: #09261a; color: #fff; border-bottom: 4px solid #1dd77a; text-align: center; }
 .photo-btn:active { opacity: .84; }
+.photo-limit-hint { display: block; padding: 12px 0; color: #9a3425; font-size: 20px; font-weight: 700; }
 
-.action-buttons { position: sticky; bottom: 0; z-index: 2; display: grid; grid-template-columns: 1fr 1.1fr .8fr; gap: 10px; padding: 14px 24px calc(14px + env(safe-area-inset-bottom)); background: #f3efe6; }
+.action-buttons { position: sticky; bottom: 0; z-index: 2; display: grid; grid-template-columns: 1fr 1.1fr .8fr; gap: 10px; padding: 14px 24px 8px; background: #f3efe6; }
 .action-buttons button { min-width: 0; margin: 0; border-radius: 0; font-size: 24px; font-weight: 800; }
 .action-buttons button::after { border-radius: 0; }
 .btn-save { background: #09261a; color: #fff; border-bottom: 5px solid #1dd77a; }
@@ -94,13 +97,13 @@
 .room-type-item.active .room-type-label { color: #1ee889; }
 .room-type-desc { display: block; color: #667168; font-size: 20px; line-height: 1.5; }
 .room-type-item.active .room-type-desc { color: #cfe0d4; }
-.report-section { margin-bottom: calc(40px + env(safe-area-inset-bottom)); }
+.report-section { margin-bottom: 16px; }
 .report-text { width: 100%; height: 480px; box-sizing: border-box; border: 2px solid #d6d0c3; background: #fbf9f2; padding: 18px; font-size: 23px; line-height: 1.6; }
 .report-actions { display: flex; gap: 12px; margin-top: 14px; }
 .report-actions button { flex: 1; margin: 0; border-radius: 0; font-size: 23px; font-weight: 800; }
 
 /* Mobile product layout */
-.checkin-page { background: #eef2ec; color: #193327; padding-bottom: calc(116px + env(safe-area-inset-bottom)); }
+.checkin-page { background: #eef2ec; color: #193327; }
 .checkin-hero, .checkin-page .section { margin: 18px 18px 0; padding: 22px; border: 0; border-radius: 22px; background: #fbfcf9; box-shadow: 0 8px 22px rgba(41, 76, 53, .06); }
 .checkin-hero { background: #dbe9d8; }
 .checkin-page .eyebrow, .checkin-page .section-kicker { color: #347350; font-size: 18px; letter-spacing: 0; margin-bottom: 7px; }
@@ -117,14 +120,90 @@
 .item-name { font-size: 25px; }
 .status-btn { padding: 12px; border: 1px solid #ccd7cc; border-radius: 13px; font-size: 21px; }
 .item-notes { min-height: 96px; padding: 14px; border: 1px solid #ccd7cc; border-radius: 14px; background: #f7faf6; font-size: 20px; }
-.photo-item, .photo-image { border-radius: 14px; }
+.photo-item, .photo-preview, .photo-image { border-radius: 14px; }
 .photo-btn { border-radius: 13px; background: #173d2b; border-bottom: 0; font-size: 19px; }
 .storage-tools { align-items: flex-start; }
 .btn-clear-photos { border: 1px solid #c6d2c6; border-radius: 12px; background: #f6f9f5; font-size: 18px; }
-.checkin-page .action-buttons { grid-template-columns: 1fr 1fr; padding: 12px 18px calc(12px + env(safe-area-inset-bottom)); background: rgba(238, 242, 236, .96); }
+.checkin-page .action-buttons { grid-template-columns: 1fr 1fr; padding: 12px 18px 8px; background: rgba(238, 242, 236, .96); }
 .checkin-page .action-buttons button { min-height: 48px; border-radius: 14px; font-size: 20px; }
 .checkin-page .action-buttons .btn-reset { grid-column: 1 / -1; }
 .checkin-page .btn-save { background: #173d2b; border-bottom: 0; }
 .checkin-page .btn-export { background: #32764f; }
 .report-text { border: 1px solid #ccd7cc; border-radius: 15px; background: #f7faf6; font-size: 20px; }
 .report-actions button { border-radius: 13px; font-size: 19px; }
+
+.checkin-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.checkin-page > .action-buttons {
+  margin-top: auto;
+}
+
+/* Readable controls and progressive inspection cards on a 750-wide canvas. */
+.checkin-hero,
+.checkin-page .section { margin: 22px 24px 0; padding: 28px; border-radius: 24px; }
+.checkin-page .eyebrow,
+.checkin-page .section-kicker { font-size: 22px; margin-bottom: 9px; }
+.section-kicker-row { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.section-kicker-row .section-kicker { margin-bottom: 0; }
+.reset-link { min-height: 64px; margin: 0; padding: 0 4px 0 16px; border: 0; background: transparent; color: #7b887f; font-size: 22px; line-height: 64px; }
+.reset-link::after { border: 0; }
+.checkin-page .page-title { font-size: 40px; margin-bottom: 12px; }
+.checkin-page .page-copy { font-size: 26px; }
+.room-type-item,
+.room-tab,
+.status-btn,
+.photo-btn,
+.photo-delete { margin: 0; line-height: normal; }
+.room-type-item::after,
+.room-tab::after,
+.status-btn::after,
+.photo-btn::after,
+.photo-delete::after { border: 0; }
+.room-type-item { min-height: 112px; padding: 18px; text-align: left; }
+.room-type-label { font-size: 27px; }
+.room-type-desc { font-size: 22px; }
+.checkin-stats view { padding: 18px 6px; }
+.checkin-stats text { font-size: 22px; }
+.checkin-stats text:first-child { font-size: 32px; }
+.room-tab { min-height: 80px; display: flex; align-items: center; padding: 0 20px; font-size: 24px; }
+.inspection-item { padding: 22px; }
+.inspection-item.collapsed { padding-bottom: 18px; }
+.inspection-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.inspection-head > view { flex: 1; min-width: 0; }
+.item-expand,
+.item-collapse { min-height: 64px; margin: 0; padding: 0 16px; border: 1px solid #c7d4c8; border-radius: 12px; background: #f4f8f3; color: #347350; font-size: 21px; font-weight: 800; line-height: 64px; }
+.item-expand::after,
+.item-collapse::after { border: 0; }
+.item-collapse { width: 100%; margin-top: 16px; }
+.item-summary { display: block; margin-top: 10px; color: #617269; font-size: 22px; line-height: 1.45; }
+.item-summary.good { color: #267248; }
+.item-summary.defect { color: #a34b38; }
+.item-name { margin-bottom: 4px; font-size: 29px; }
+.item-desc { display: block; margin-bottom: 16px; color: #718077; font-size: 22px; line-height: 1.45; }
+.status-buttons { margin-bottom: 14px; }
+.status-btn { min-height: 80px; padding: 0 16px; font-size: 25px; line-height: 80px; }
+.unchecked-hint { display: block; margin-top: 4px; color: #819087; font-size: 22px; line-height: 1.45; }
+.item-notes { min-height: 120px; padding: 16px; font-size: 26px; }
+.photo-label { font-size: 23px; }
+.photo-delete { top: -14px; right: -14px; width: 72px; height: 72px; padding: 0; font-size: 34px; line-height: 72px; }
+.photo-btn { min-width: 112px; min-height: 80px; padding: 0 20px; font-size: 24px; line-height: 80px; }
+.photo-limit-hint { font-size: 22px; }
+.btn-clear-photos { min-height: 72px; padding: 0 18px; font-size: 22px; line-height: 72px; }
+.checkin-page .action-buttons { padding: 14px 24px 10px; }
+.checkin-page .action-buttons button { min-height: 84px; font-size: 25px; line-height: 84px; }
+.report-text { font-size: 26px; }
+.report-actions button { min-height: 80px; font-size: 24px; line-height: 80px; }
+.operation-notice { display: flex; align-items: center; gap: 14px; margin: 16px 24px 0; padding: 16px 18px; border: 1px solid #e1b9ac; border-radius: 16px; background: #fff5f1; }
+.operation-notice text { flex: 1; min-width: 0; overflow-wrap: anywhere; color: #8f3f31; font-size: 22px; line-height: 1.5; }
+.operation-notice-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.operation-notice button { min-height: 64px; margin: 0; padding: 0 16px; border: 0; border-radius: 12px; background: #8f3f31; color: #fff; font-size: 20px; line-height: 64px; }
+.operation-notice button::after { border: 0; }
+
+@media (max-width: 340px) {
+  .room-type-desc { font-size: 20px; }
+  .storage-tools { flex-direction: column; }
+  .btn-clear-photos { width: 100%; }
+}

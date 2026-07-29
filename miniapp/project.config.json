@@ -2,10 +2,10 @@
   "miniprogramRoot": "dist/",
   "projectname": "zu-xiao-shen-miniapp",
   "description": "租小审微信小程序版本",
-  "appid": "wx1ffa57d1c8b48905",
+  "appid": "wxa9ace892fd7b06e1",
   "setting": {
     "__usePrivacyCheck__": true,
-    "urlCheck": false,
+    "urlCheck": true,
     "es6": false,
     "enhance": false,
     "compileHotReLoad": false,

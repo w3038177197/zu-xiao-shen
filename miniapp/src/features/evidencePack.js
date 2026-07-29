@@ -1,7 +1,7 @@
-// 小程序版本 - 适配 Taro 存储 API
 import Taro from '@tarojs/taro'
+import { STORAGE_KEYS } from '../constants/appConfig.js'
 
-const STORAGE_KEY = 'evidence_pack_data'
+const LEGACY_STORAGE_KEY = 'evidence_pack_data'
 
 export const evidenceGroupMeta = {
   contract: {
@@ -38,9 +38,9 @@ export const evidenceToolTabs = [
 ]
 
 export const defaultEvidenceFormData = {
-  address: '阳光花园3栋2单元601室',
-  deposit: '3800',
-  monthlyRent: '3800',
+  address: '',
+  deposit: '',
+  monthlyRent: '',
   landlordName: '',
   landlordPhone: '',
   checkinDate: '',
@@ -60,10 +60,38 @@ function createEmptyEvidenceState() {
   return state
 }
 
+function createEmptyAttachments() {
+  const attachments = {}
+  Object.keys(evidenceGroupMeta).forEach((group) => {
+    attachments[group] = []
+  })
+  return attachments
+}
+
+function isValidAttachment(item) {
+  if (!item || typeof item !== 'object') return false
+  if (typeof item.id !== 'string' || !item.id) return false
+  // 真实附件需要 localPath；模块引用的文本类附件允许只有 textContent
+  const hasLocalPath = typeof item.localPath === 'string' && item.localPath
+  const hasTextContent = typeof item.textContent === 'string' && item.textContent
+  return Boolean(hasLocalPath || hasTextContent)
+}
+
+// 兼容旧记录：旧 state 没有 attachments 字段，补全为空数组，不破坏已有 evidence 勾选
+export function normalizeAttachments(savedAttachments) {
+  const attachments = {}
+  Object.keys(evidenceGroupMeta).forEach((group) => {
+    const list = savedAttachments?.[group]
+    attachments[group] = Array.isArray(list) ? list.filter(isValidAttachment) : []
+  })
+  return attachments
+}
+
 export function createDefaultEvidencePackState() {
   return {
     formData: { ...defaultEvidenceFormData },
     evidence: createEmptyEvidenceState(),
+    attachments: createEmptyAttachments(),
     actions: evidenceActions.map(() => false),
     communicationText: '',
   }
@@ -88,14 +116,91 @@ export function normalizeEvidencePackState(savedState) {
   return {
     formData,
     evidence,
+    attachments: normalizeAttachments(savedState?.attachments),
     actions: evidenceActions.map((_, index) => Boolean(savedState?.actions?.[index])),
     communicationText: typeof savedState?.communicationText === 'string' ? savedState.communicationText : '',
   }
 }
 
+// 新增附件到指定组，返回新 state（不修改原 state）
+export function addAttachment(state, group, attachment) {
+  if (!evidenceGroupMeta[group] || !isValidAttachment(attachment)) return state
+  const attachments = { ...state.attachments }
+  attachments[group] = [...(attachments[group] || []), attachment]
+  return { ...state, attachments }
+}
+
+// 删除指定组的某个附件，返回新 state（不修改原 state，不删除持久化文件）
+export function removeAttachment(state, group, attachmentId) {
+  const list = state.attachments?.[group]
+  if (!Array.isArray(list)) return state
+  const attachments = { ...state.attachments }
+  attachments[group] = list.filter((item) => item.id !== attachmentId)
+  return { ...state, attachments }
+}
+
+// 判断指定组是否已存在某模块引用（按来源模块 + 来源路径去重）
+export function hasModuleReference(state, group, sourceModule, sourcePath) {
+  const list = state?.attachments?.[group] || []
+  return list.some((item) =>
+    item && item.source === 'module'
+    && item.sourceModule === sourceModule
+    && item.sourcePath === sourcePath,
+  )
+}
+
+// 添加模块引用附件：按 sourceModule + sourcePath 去重，已存在则返回原 state
+export function addModuleReference(state, group, refAttachment) {
+  if (!evidenceGroupMeta[group] || !isValidAttachment(refAttachment)) return state
+  if (refAttachment.source !== 'module') return addAttachment(state, group, refAttachment)
+  if (hasModuleReference(state, group, refAttachment.sourceModule, refAttachment.sourcePath)) {
+    return state
+  }
+  return addAttachment(state, group, refAttachment)
+}
+
+// 批量导入模块引用：返回 { state, added, skipped }
+export function importModuleReferences(state, group, refAttachments) {
+  if (!Array.isArray(refAttachments) || !refAttachments.length) {
+    return { state, added: 0, skipped: 0 }
+  }
+  let next = state
+  let added = 0
+  let skipped = 0
+  refAttachments.forEach((ref) => {
+    if (!ref || ref.source !== 'module' || !isValidAttachment(ref)) {
+      skipped += 1
+      return
+    }
+    if (hasModuleReference(next, group, ref.sourceModule, ref.sourcePath)) {
+      skipped += 1
+      return
+    }
+    next = addAttachment(next, group, ref)
+    added += 1
+  })
+  return { state: next, added, skipped }
+}
+
+export function getGroupAttachments(state, group) {
+  return state?.attachments?.[group] || []
+}
+
+// 统计真实附件数量，按组和总计
+export function getAttachmentStats(state) {
+  const byGroup = {}
+  let total = 0
+  Object.keys(evidenceGroupMeta).forEach((group) => {
+    const count = (state?.attachments?.[group] || []).length
+    byGroup[group] = count
+    total += count
+  })
+  return { byGroup, total }
+}
+
 export function loadEvidencePackState() {
   try {
-    const saved = Taro.getStorageSync(STORAGE_KEY)
+    const saved = Taro.getStorageSync(STORAGE_KEYS.evidencePack) || Taro.getStorageSync(LEGACY_STORAGE_KEY)
     return saved ? normalizeEvidencePackState(JSON.parse(saved)) : createDefaultEvidencePackState()
   } catch {
     return createDefaultEvidencePackState()
@@ -104,7 +209,7 @@ export function loadEvidencePackState() {
 
 export function saveEvidencePackState(state) {
   try {
-    Taro.setStorageSync(STORAGE_KEY, JSON.stringify(state))
+    Taro.setStorageSync(STORAGE_KEYS.evidencePack, JSON.stringify(normalizeEvidencePackState(state)))
     return true
   } catch {
     return false
@@ -179,9 +284,10 @@ export function buildEvidenceCommunication(type, formData) {
 请您在完成交接核对后确认押金退还安排。谢谢。`
 }
 
-export function createEvidencePackageText({ formData, evidence, actions, communicationText }) {
+export function createEvidencePackageText({ formData, evidence, attachments, actions, communicationText }) {
   const selectedLines = []
   const missingLines = []
+  const attachmentSections = []
 
   Object.entries(evidenceGroupMeta).forEach(([group, meta]) => {
     meta.items.forEach((item, index) => {
@@ -192,6 +298,21 @@ export function createEvidencePackageText({ formData, evidence, actions, communi
         missingLines.push(line)
       }
     })
+    const groupAttachments = attachments?.[group] || []
+    if (groupAttachments.length) {
+      const realCount = groupAttachments.filter((att) => att.source !== 'module').length
+      const refCount = groupAttachments.length - realCount
+      const countLabel = refCount > 0
+        ? `${groupAttachments.length} 个附件（真实 ${realCount} · 模块引用 ${refCount}）`
+        : `${groupAttachments.length} 个真实附件`
+      attachmentSections.push(`${meta.title}（${countLabel}）`)
+      groupAttachments.forEach((att, i) => {
+        const sourceLabel = att.source === 'module'
+          ? `模块引用·${att.sourceModule || '未知'}`
+          : att.source === 'album' ? '相册' : '微信文件'
+        attachmentSections.push(`  ${i + 1}. ${att.fileName} · ${sourceLabel} · ${att.createdAt}`)
+      })
+    }
   })
 
   const actionLines = evidenceActions.map((item, index) => `${actions[index] ? '[已完成]' : '[待完成]'} ${item.title}：${item.desc}`)
@@ -210,16 +331,19 @@ export function createEvidencePackageText({ formData, evidence, actions, communi
     `退租日期：${formatEvidenceDate(formData.checkoutDate)}`,
     `交接时间：${formatEvidenceDate(formData.handoverDate)} ${formData.handoverTime || ''}`.trim(),
     '',
-    '二、已收集证据',
+    '二、真实附件清单',
+    attachmentSections.length ? attachmentSections.join('\n') : '暂未上传任何附件。',
+    '',
+    '三、已勾选证据项',
     selectedLines.length ? selectedLines.join('\n') : '暂无已勾选证据。',
     '',
-    '三、待补齐证据',
+    '四、待补齐证据项',
     missingLines.length ? missingLines.join('\n') : '证据清单已全部勾选。',
     '',
-    '四、下一步行动',
+    '五、下一步行动',
     actionLines.join('\n'),
     '',
-    '五、沟通说明',
+    '六、沟通说明',
     communicationText || '尚未生成沟通说明。',
   ].join('\n')
 }

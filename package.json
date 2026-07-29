@@ -15,7 +15,14 @@
     "test:ai": "node server/evaluate-rag.mjs",
     "test:e2e": "npm run clean && playwright test",
     "sync:miniapp-review": "node scripts/sync-miniapp-review.mjs",
-    "test:miniapp-core": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-miniapp-core.mjs"
+    "test:miniapp-core": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-miniapp-core.mjs",
+    "test:miniapp-reliability": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-miniapp-reliability.mjs",
+    "test:miniapp-ai": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-miniapp-ai.mjs",
+    "test:miniapp-usage": "node scripts/test-miniapp-usage-store.mjs",
+    "test:contract-import": "node scripts/test-contract-import.mjs",
+    "check:miniapp-deployment": "node scripts/check-miniapp-deployment.mjs",
+    "check:subsidy-policies": "node scripts/check-subsidy-policies.mjs",
+    "verify:miniapp": "npm run lint && npm run test:miniapp-core && npm run test:miniapp-reliability && npm run test:miniapp-ai && npm run test:miniapp-usage && npm run test:contract-import && npm run check:subsidy-policies && npm run build && cd miniapp && npm run build:weapp"
   },
   "dependencies": {
     "@tesseract.js-data/chi_sim": "^1.0.0",

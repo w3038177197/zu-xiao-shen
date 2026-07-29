@@ -9,6 +9,25 @@ import { fileURLToPath } from 'node:url'
 import { createWorker } from 'tesseract.js'
 import { aiEvalCases } from './data/ai-eval-cases.mjs'
 import { evaluateKnowledgeRetrieval, searchKnowledge } from './rag-engine.mjs'
+import {
+  createMiniappSessionToken,
+  exchangeWechatLoginCode,
+  getBearerToken,
+  getCloudContainerIdentity,
+  isValidMiniappSessionSecret,
+  verifyMiniappSessionToken,
+} from './miniapp-auth.mjs'
+import {
+  AI_GENERATED_NOTICE,
+  buildMiniappAiMessages,
+  buildMiniappCitations,
+  extractAiReply,
+  getMiniappAiRequestFingerprint,
+  isCasualMiniappPrompt,
+  normalizeMiniappAiRequest,
+} from './miniapp-ai.mjs'
+import { parseContractDocument } from './contract-document-parser.mjs'
+import { createMiniappUsageStore } from './miniapp-usage-store.mjs'
 
 dotenv.config()
 
@@ -18,6 +37,10 @@ const allowedOrigin = process.env.AI_PROXY_ALLOWED_ORIGIN || 'http://localhost:5
 const allowedOrigins = new Set(allowedOrigin.split(',').map((origin) => origin.trim()).filter(Boolean))
 const requireTrustedOrigin = process.env.AI_PROXY_REQUIRE_ORIGIN === 'true' || process.env.NODE_ENV === 'production'
 const accessToken = String(process.env.AI_PROXY_ACCESS_TOKEN || '').trim()
+const wxAppId = String(process.env.WX_APPID || '').trim()
+const wxAppSecret = String(process.env.WX_SECRET || '').trim()
+const miniappSessionSecret = String(process.env.MINIAPP_SESSION_SECRET || '').trim()
+const miniappSessionTtlSeconds = Math.max(300, Math.min(Number(process.env.MINIAPP_SESSION_TTL_SECONDS) || 7_200, 604_800))
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.join(__dirname, '..')
 const distDir = path.join(rootDir, 'dist')
@@ -25,21 +48,77 @@ const indexHtmlPath = path.join(distDir, 'index.html')
 const upstreamTimeoutMs = Math.max(5_000, Math.min(Number(process.env.AI_PROXY_TIMEOUT_MS) || 45_000, 120_000))
 const ocrTimeoutMs = Math.max(15_000, Math.min(Number(process.env.OCR_TIMEOUT_MS) || 90_000, 180_000))
 let ocrInFlight = false
+let contractParsesInFlight = 0
+const maxConcurrentContractParses = 2
 const rateWindowMs = 60_000
 const rateBuckets = new Map()
 const quotaBuckets = new Map()
+const miniappAiRequestCache = new Map()
 const dailyQuota = Math.max(1, Number(process.env.AI_DAILY_QUOTA || 40))
+const miniappUsageStore = createMiniappUsageStore({
+  redisUrl: process.env.UPSTASH_REDIS_REST_URL,
+  redisToken: process.env.UPSTASH_REDIS_REST_TOKEN,
+})
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
 })
 
-app.use(cors({ origin: allowedOrigin }))
-app.use(express.json({ limit: '8mb' }))
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) {
+      callback(null, true)
+      return
+    }
+    callback(new Error('CORS origin is not allowed'))
+  },
+}))
+app.use(express.json({ limit: '12mb' }))
+
+const maxUploadBytes = 8 * 1024 * 1024
+const uploadMimeTypes = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  txt: 'text/plain',
+  md: 'text/markdown',
+}
+
+function acceptJsonUpload(fieldName) {
+  return (request, response, next) => {
+    if (request.file || !request.body?.fileBase64) {
+      next()
+      return
+    }
+    const fileBase64 = String(request.body.fileBase64)
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(fileBase64) || fileBase64.length % 4 !== 0) {
+      response.status(400).json({ message: '文件内容格式无效', code: 'invalid-file' })
+      return
+    }
+    const buffer = Buffer.from(fileBase64, 'base64')
+    if (!buffer.length || buffer.length > maxUploadBytes) {
+      response.status(413).json({ message: '文件超过 8MB 限制', code: 'file-too-large' })
+      return
+    }
+    const originalname = path.basename(String(request.body.fileName || `${fieldName}.bin`)).slice(0, 200)
+    const extension = path.extname(originalname).slice(1).toLowerCase()
+    request.file = {
+      buffer,
+      originalname,
+      mimetype: uploadMimeTypes[extension] || 'application/octet-stream',
+      size: buffer.length,
+    }
+    next()
+  }
+}
 
 function rateLimit(scope, maxRequests) {
   return (request, response, next) => {
-    const key = `${scope}:${request.ip || request.socket.remoteAddress || 'unknown'}`
+    const identity = request.miniappSession?.openid || request.ip || request.socket.remoteAddress || 'unknown'
+    const key = `${scope}:${identity}`
     const now = Date.now()
     const current = rateBuckets.get(key)
     const bucket = current && now - current.startedAt < rateWindowMs
@@ -66,30 +145,72 @@ function rateLimit(scope, maxRequests) {
 }
 
 function getAccountId(request) {
+  if (request.miniappSession?.openid) return `wx:${request.miniappSession.openid}`
   return String(request.get('x-rental-safe-account') || `ip:${request.ip || request.socket.remoteAddress || 'unknown'}`).slice(0, 120)
+}
+
+function getQuotaSnapshot(accountId) {
+  const day = new Date().toISOString().slice(0, 10)
+  for (const quotaKey of quotaBuckets.keys()) {
+    if (!quotaKey.startsWith(`${day}:`)) quotaBuckets.delete(quotaKey)
+  }
+  const key = `${day}:${accountId}`
+  const used = quotaBuckets.get(key)?.used || 0
+  return { key, used, limit: dailyQuota, remaining: Math.max(0, dailyQuota - used), resetAt: `${day}T23:59:59.999Z` }
+}
+
+function toPublicQuota(quota) {
+  return {
+    used: quota.used,
+    limit: quota.limit,
+    remaining: quota.remaining,
+    resetAt: quota.resetAt,
+  }
+}
+
+function reserveQuota(accountId) {
+  const quota = getQuotaSnapshot(accountId)
+  if (quota.remaining <= 0) return { ok: false, quota }
+  quotaBuckets.set(quota.key, { used: quota.used + 1 })
+  return { ok: true, quota: getQuotaSnapshot(accountId) }
+}
+
+function rollbackQuota(accountId) {
+  const quota = getQuotaSnapshot(accountId)
+  quotaBuckets.set(quota.key, { used: Math.max(0, quota.used - 1) })
 }
 
 function quotaLimit(request, response, next) {
   const accountId = getAccountId(request)
-  const day = new Date().toISOString().slice(0, 10)
-  const key = `${day}:${accountId}`
-  for (const quotaKey of quotaBuckets.keys()) {
-    if (!quotaKey.startsWith(`${day}:`)) quotaBuckets.delete(quotaKey)
-  }
-  const current = quotaBuckets.get(key) || { used: 0 }
-  if (current.used >= dailyQuota) {
+  const reservation = reserveQuota(accountId)
+  if (!reservation.ok) {
     response.set('Retry-After', '3600')
-    response.status(429).json({ message: '当前账号今日 AI 额度已用完，请明日再试', quota: { used: current.used, limit: dailyQuota, remaining: 0 } })
+    response.status(429).json({ message: '当前账号今日 AI 额度已用完，请明日再试', quota: toPublicQuota(reservation.quota) })
     return
   }
-  current.used += 1
-  quotaBuckets.set(key, current)
   response.set('X-AI-Quota-Limit', String(dailyQuota))
-  response.set('X-AI-Quota-Remaining', String(Math.max(0, dailyQuota - current.used)))
+  response.set('X-AI-Quota-Remaining', String(reservation.quota.remaining))
+  next()
+}
+
+function authenticateMiniappSession(request, response, next) {
+  const result = verifyMiniappSessionToken(getBearerToken(request), miniappSessionSecret)
+  if (!result.ok) {
+    response.status(401).json({ message: '登录状态已失效，请重新登录', reason: result.reason })
+    return
+  }
+  request.miniappSession = result
   next()
 }
 
 function trustedApiRequest(request, response, next) {
+  const miniappSession = verifyMiniappSessionToken(getBearerToken(request), miniappSessionSecret)
+  if (miniappSession.ok) {
+    request.miniappSession = miniappSession
+    next()
+    return
+  }
+
   if (!requireTrustedOrigin && !accessToken) {
     next()
     return
@@ -189,9 +310,39 @@ async function prepareTesseractLangPath() {
   return langPath
 }
 
-async function recognizeImageOffline(buffer) {
-  const langPath = await prepareTesseractLangPath()
-  const worker = await createWorker('chi_sim+eng', 1, {
+// 轻量图片魔数校验：只接受 JPG/PNG/WEBP 真实签名，防止伪造扩展名进入 OCR worker
+export function detectImageSignature(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 20) return null
+  // JPEG: SOI/marker + EOI
+  if (
+    buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
+    && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9
+  ) return 'jpeg'
+  // PNG: signature + terminal IEND chunk
+  const pngEnd = Buffer.from([0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82])
+  if (
+    buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47
+    && buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a
+    && buffer.subarray(-pngEnd.length).equals(pngEnd)
+  ) return 'png'
+  // WEBP: RIFF size + WEBP + a supported image chunk
+  const webpChunk = buffer.subarray(12, 16).toString('ascii')
+  if (
+    buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46
+    && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50
+    && buffer.readUInt32LE(4) + 8 === buffer.length
+    && ['VP8 ', 'VP8L', 'VP8X'].includes(webpChunk)
+  ) return 'webp'
+  return null
+}
+
+export async function recognizeImageOffline(buffer, {
+  createWorkerImpl = createWorker,
+  prepareLangPath = prepareTesseractLangPath,
+  timeoutMs = ocrTimeoutMs,
+} = {}) {
+  const langPath = await prepareLangPath()
+  const worker = await createWorkerImpl('chi_sim+eng', 1, {
     langPath,
     cachePath: path.join(rootDir, '.cache', 'tesseract'),
     gzip: true,
@@ -202,7 +353,7 @@ async function recognizeImageOffline(buffer) {
     const result = await Promise.race([
       worker.recognize(buffer),
       new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('offline OCR timed out')), ocrTimeoutMs)
+        timeoutId = setTimeout(() => reject(new Error('offline OCR timed out')), timeoutMs)
       }),
     ])
     return {
@@ -246,14 +397,230 @@ function resolveProviderConfig({ provider, baseUrl, model } = {}) {
   }
 }
 
-app.get('/api/health', (_request, response) => {
+async function requestAiCompletion({ config, messages, temperature = 0.2, maxTokens = 2_200 }) {
+  if (!config.endpoint) {
+    const error = new Error('AI 服务地址尚未配置')
+    error.status = 503
+    throw error
+  }
+  if (!config.apiKey) {
+    const error = new Error('AI 服务密钥尚未配置')
+    error.status = 503
+    throw error
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), upstreamTimeoutMs)
+  try {
+    const upstreamResponse = await fetch(config.endpoint, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: config.model,
+        temperature: Math.max(0, Math.min(Number(temperature) || 0.2, 1)),
+        max_tokens: Math.max(256, Math.min(Number(maxTokens) || 2_200, 4_000)),
+        messages,
+        ...(config.provider === 'DeepSeek' ? { thinking: { type: 'disabled' } } : {}),
+      }),
+    })
+    const data = await upstreamResponse.json().catch(() => ({}))
+    if (!upstreamResponse.ok) {
+      const error = new Error(data?.error?.message || data?.message || `上游 AI 请求失败（HTTP ${upstreamResponse.status}）`)
+      error.status = upstreamResponse.status >= 400 && upstreamResponse.status < 600 ? upstreamResponse.status : 502
+      throw error
+    }
+    return data
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      const timeoutError = new Error('AI 响应超时，请稍后重试')
+      timeoutError.status = 504
+      throw timeoutError
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+function cleanupMiniappAiRequestCache(now = Date.now()) {
+  const ttl = 15 * 60 * 1_000
+  for (const [key, entry] of miniappAiRequestCache) {
+    if (now - entry.createdAt > ttl) miniappAiRequestCache.delete(key)
+  }
+  if (miniappAiRequestCache.size <= 1_000) return
+  const oldest = [...miniappAiRequestCache.entries()]
+    .sort((left, right) => left[1].createdAt - right[1].createdAt)
+    .slice(0, miniappAiRequestCache.size - 1_000)
+  oldest.forEach(([key]) => miniappAiRequestCache.delete(key))
+}
+
+app.get('/api/health', async (_request, response) => {
   const config = resolveProviderConfig()
+  const usageHealth = await miniappUsageStore.checkHealth()
   response.json({
     ok: true,
+    miniappApiVersion: 1,
     provider: config.provider,
     model: config.model,
     hasApiKey: Boolean(config.apiKey),
+    miniappAuthConfigured: Boolean(wxAppId && wxAppSecret && isValidMiniappSessionSecret(miniappSessionSecret)),
+    miniappUsageStore: miniappUsageStore.mode,
+    miniappUsagePersistent: miniappUsageStore.mode !== 'memory',
+    miniappUsageHealthy: usageHealth.ok,
+    contractDocumentParsing: true,
+    ocrMode: 'offline-tesseract',
   })
+})
+
+app.post('/api/auth/wx-login', rateLimit('wx-login', 12), async (request, response) => {
+  response.set('Cache-Control', 'no-store')
+  if (!isValidMiniappSessionSecret(miniappSessionSecret)) {
+    response.status(503).json({ message: '微信会话服务尚未配置' })
+    return
+  }
+
+  try {
+    const identity = getCloudContainerIdentity(request.headers, wxAppId)
+      || await exchangeWechatLoginCode({
+        code: request.body?.code,
+        appId: wxAppId,
+        appSecret: wxAppSecret,
+      })
+    const session = createMiniappSessionToken({ ...identity, ttlSeconds: miniappSessionTtlSeconds }, miniappSessionSecret)
+    const quota = await miniappUsageStore.getQuota(`wx:${identity.openid}`, dailyQuota)
+    response.json({
+      ok: true,
+      token: session.token,
+      expiresAt: session.expiresAt,
+      quota: toPublicQuota(quota),
+    })
+  } catch (error) {
+    response.status(error?.status || 502).json({ message: error?.message || '微信登录失败，请稍后重试' })
+  }
+})
+
+app.get('/api/miniapp/ai/quota', authenticateMiniappSession, rateLimit('miniapp-quota', 60), async (request, response) => {
+  response.set('Cache-Control', 'no-store')
+  try {
+    response.json(toPublicQuota(await miniappUsageStore.getQuota(getAccountId(request), dailyQuota)))
+  } catch (error) {
+    response.status(error?.status || 503).json({ message: error?.message || '额度服务暂时不可用' })
+  }
+})
+
+app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-chat', 20), async (request, response) => {
+  response.set('Cache-Control', 'no-store')
+  let input
+  try {
+    input = normalizeMiniappAiRequest(request.body)
+  } catch (error) {
+    response.status(error?.status || 400).json({ message: error?.message || 'AI 请求内容无效' })
+    return
+  }
+
+  cleanupMiniappAiRequestCache()
+  const accountId = getAccountId(request)
+  const cacheKey = `${accountId}:${input.requestId}`
+  const requestHash = getMiniappAiRequestFingerprint(input)
+  const cached = miniappAiRequestCache.get(cacheKey)
+  if (cached) {
+    if (cached.requestHash !== requestHash) {
+      response.status(409).json({ message: '请求标识已被其他问题使用，请重新发送', code: 'request-id-conflict' })
+      return
+    }
+    try {
+      const result = cached.result || await cached.promise
+      response.json({ ...result, replayed: true })
+    } catch (error) {
+      response.status(error?.status || 502).json({ message: error?.message || 'AI 请求失败，请稍后重试' })
+    }
+    return
+  }
+
+
+  let claim
+  try {
+    claim = await miniappUsageStore.claimRequest(accountId, input.requestId, requestHash, dailyQuota)
+  } catch (error) {
+    response.status(error?.status || 503).json({ message: error?.message || '额度服务暂时不可用' })
+    return
+  }
+  if (claim.status === 'cached') {
+    const persistedResult = claim.value?.result || claim.value
+    miniappAiRequestCache.set(cacheKey, { createdAt: Date.now(), requestHash, result: persistedResult })
+    response.json({ ...persistedResult, replayed: true })
+    return
+  }
+  if (claim.status === 'conflict') {
+    response.status(409).json({ message: '请求标识已被其他问题使用，请重新发送', code: 'request-id-conflict' })
+    return
+  }
+  if (claim.status === 'pending') {
+    response.set('Retry-After', '2')
+    response.status(425).json({ message: '相同请求正在处理中，请稍后重试', code: 'request-in-progress' })
+    return
+  }
+  if (claim.status === 'quota') {
+    response.set('Retry-After', '3600')
+    response.status(429).json({ message: '今日联网 AI 额度已用完，本地分析仍可使用', quota: toPublicQuota(claim.quota) })
+    return
+  }
+  const reservation = { quota: claim.quota }
+
+  const knowledge = isCasualMiniappPrompt(input.prompt)
+    ? []
+    : searchKnowledge(`${input.prompt} ${input.contextSummary}`, 4)
+  const messages = buildMiniappAiMessages({ ...input, knowledge })
+  const config = resolveProviderConfig()
+  const work = (async () => {
+    const data = await requestAiCompletion({ config, messages, temperature: 0.2, maxTokens: 1_800 })
+    return {
+      ok: true,
+      requestId: input.requestId,
+      reply: extractAiReply(data),
+      citations: buildMiniappCitations(knowledge),
+      aiGenerated: true,
+      notice: AI_GENERATED_NOTICE,
+      // 额度已在调用模型前原子预占。直接返回预占快照，避免模型成功后
+      // 因额度存储的第二次读取短暂失败而把有效回答误报为失败。
+      quota: toPublicQuota(reservation.quota),
+    }
+  })()
+  miniappAiRequestCache.set(cacheKey, { createdAt: Date.now(), requestHash, promise: work })
+
+  try {
+    const result = await work
+    miniappAiRequestCache.set(cacheKey, { createdAt: Date.now(), requestHash, result })
+    try {
+      await miniappUsageStore.completeRequest(accountId, input.requestId, requestHash, result)
+    } catch (cacheError) {
+      console.error('miniapp AI idempotency cache write failed', {
+        requestId: input.requestId,
+        message: cacheError?.message || 'unknown error',
+      })
+    }
+    response.json(result)
+  } catch (error) {
+    miniappAiRequestCache.delete(cacheKey)
+    try {
+      await miniappUsageStore.rollbackRequest(accountId, input.requestId, requestHash, dailyQuota)
+    } catch (rollbackError) {
+      console.error('miniapp AI quota rollback failed', {
+        requestId: input.requestId,
+        message: rollbackError?.message || 'unknown error',
+      })
+    }
+    console.error('miniapp AI request failed', {
+      requestId: input.requestId,
+      status: error?.status || 502,
+      message: error?.message || 'unknown error',
+    })
+    response.status(error?.status || 502).json({ message: error?.message || 'AI 请求失败，请稍后重试' })
+  }
 })
 
 function sendRagSearchResponse(response, { query, limit }) {
@@ -298,19 +665,28 @@ app.get('/api/rag/evaluate', trustedApiRequest, rateLimit('rag-evaluate', 10), (
   })
 })
 
-app.post('/api/ocr/image', trustedApiRequest, rateLimit('ocr', 6), upload.single('image'), async (request, response) => {
+async function handleOcrUpload(request, response) {
+  response.set('Cache-Control', 'no-store')
   if (!request.file) {
-    response.status(400).json({ message: 'image file is required' })
+    response.status(400).json({ message: '请选择需要识别的合同图片', code: 'missing-image' })
     return
   }
 
   if (!/^image\//i.test(request.file.mimetype || '')) {
-    response.status(415).json({ message: 'only image uploads are supported for OCR' })
+    response.status(415).json({ message: '仅支持 JPG、PNG 或 WEBP 合同图片', code: 'unsupported-image' })
+    return
+  }
+
+  // 真实文件签名校验，防止伪造扩展名（如把 .txt 改名 .jpg）进入 OCR worker
+  const imageSignature = detectImageSignature(request.file.buffer)
+  if (!imageSignature) {
+    response.status(415).json({ message: '图片内容无效或格式不支持，请重新选择', code: 'invalid-image-signature' })
     return
   }
 
   if (ocrInFlight) {
-    response.status(429).json({ message: 'OCR is busy, please retry after the current image finishes' })
+    response.set('Retry-After', '10')
+    response.status(429).json({ message: '图片识别服务繁忙，请稍后重试', code: 'busy' })
     return
   }
 
@@ -326,11 +702,46 @@ app.post('/api/ocr/image', trustedApiRequest, rateLimit('ocr', 6), upload.single
     })
   } catch (error) {
     response.status(500).json({
-      message: error.message || 'offline OCR failed',
+      message: error.message || '合同图片识别失败，请重试',
+      code: 'ocr-failed',
       fallback: 'vision-model',
     })
   } finally {
     ocrInFlight = false
+  }
+}
+
+// 小程序使用独立路径和短期微信会话；旧 Web 接口继续保留来源/共享令牌校验。
+app.post('/api/miniapp/ocr/image', authenticateMiniappSession, rateLimit('miniapp-ocr', 6), upload.single('image'), acceptJsonUpload('image'), handleOcrUpload)
+app.post('/api/ocr/image', trustedApiRequest, rateLimit('ocr', 6), upload.single('image'), handleOcrUpload)
+
+app.post('/api/miniapp/contract/parse', authenticateMiniappSession, rateLimit('contract-parse', 12), upload.single('document'), acceptJsonUpload('document'), async (request, response) => {
+  response.set('Cache-Control', 'no-store')
+  if (!request.file) {
+    response.status(400).json({ message: '请选择需要解析的合同文件', code: 'missing-file' })
+    return
+  }
+
+  if (contractParsesInFlight >= maxConcurrentContractParses) {
+    response.set('Retry-After', '10')
+    response.status(429).json({ message: '合同解析服务繁忙，请稍后重试', code: 'busy' })
+    return
+  }
+
+  contractParsesInFlight += 1
+  try {
+    const result = await parseContractDocument({
+      buffer: request.file.buffer,
+      fileName: request.body?.fileName || request.file.originalname,
+    })
+    response.json({ ok: true, ...result, retained: false })
+  } catch (error) {
+    response.status(error?.status || 422).json({
+      message: error?.message || '合同文件解析失败',
+      code: error?.code || 'parse-failed',
+    })
+  } finally {
+    contractParsesInFlight = Math.max(0, contractParsesInFlight - 1)
   }
 })
 
@@ -421,7 +832,7 @@ app.post('/api/ai/chat', trustedApiRequest, rateLimit('chat', 20), quotaLimit, a
 app.use((error, _request, response, next) => {
   if (error instanceof multer.MulterError) {
     response.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({
-      message: error.code === 'LIMIT_FILE_SIZE' ? 'image exceeds the 8MB upload limit' : error.message,
+      message: error.code === 'LIMIT_FILE_SIZE' ? '文件超过 8MB 上传限制' : error.message,
     })
     return
   }

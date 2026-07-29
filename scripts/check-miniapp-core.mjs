@@ -1,11 +1,22 @@
 import assert from 'node:assert/strict'
-import { demoContracts } from '../src/data/demoContracts.js'
-import {
-  analyzeContract,
-  cleanContractTextForReview,
-  getRiskSummary,
-} from '../miniapp/src/features/contractReview.js'
-import { buildLocalReply, formatMessageBlocks } from '../miniapp/src/features/aiAssistant.js'
+
+Object.assign(globalThis, {
+  ENABLE_INNER_HTML: false,
+  ENABLE_ADJACENT_HTML: false,
+  ENABLE_CLONE_NODE: false,
+  ENABLE_CONTAINS: false,
+  ENABLE_SIZE_APIS: false,
+  ENABLE_TEMPLATE_CONTENT: false,
+  ENABLE_MUTATION_OBSERVER: false,
+})
+
+const [{ demoContracts }, contractReview, aiAssistant] = await Promise.all([
+  import('../src/data/demoContracts.js'),
+  import('../miniapp/src/features/contractReview.js'),
+  import('../miniapp/src/features/aiAssistant.js'),
+])
+const { analyzeContract, cleanContractTextForReview, getRiskSummary } = contractReview
+const { buildLocalReply, formatMessageBlocks } = aiAssistant
 
 const contractText = demoContracts[0].text
 const findings = analyzeContract(cleanContractTextForReview(contractText))

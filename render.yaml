@@ -17,3 +17,17 @@ services:
         value: "false"
       - key: DEEPSEEK_API_KEY
         sync: false
+      - key: WX_APPID
+        value: wxa9ace892fd7b06e1
+      - key: WX_SECRET
+        sync: false
+      - key: MINIAPP_SESSION_SECRET
+        sync: false
+      - key: MINIAPP_SESSION_TTL_SECONDS
+        value: "7200"
+      - key: AI_DAILY_QUOTA
+        value: "20"
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false

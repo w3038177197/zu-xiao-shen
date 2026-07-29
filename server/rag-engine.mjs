@@ -41,6 +41,13 @@ function toSearchText(item) {
   )
 }
 
+function textIncludesToken(text, token) {
+  if (/^[a-z0-9-]+$/.test(token)) {
+    return text.split(/[^a-z0-9-]+/).includes(token)
+  }
+  return text.includes(token)
+}
+
 function scoreKnowledgeItem(queryTokens, item) {
   const haystack = toSearchText(item)
   const keywordSet = new Set([item.title, item.tag, item.scope, ...(item.keywords || [])].filter(Boolean).map(normalizeText))
@@ -53,10 +60,12 @@ function scoreKnowledgeItem(queryTokens, item) {
     if (keywordSet.has(token)) {
       matchedKeywords.push(token)
       nextScore += 18
-    } else if ([...keywordSet].some((keyword) => keyword.includes(token) || token.includes(keyword))) {
+    } else if ([...keywordSet].some((keyword) => /^[a-z0-9-]+$/.test(token)
+      ? keyword === token
+      : keyword.includes(token) || token.includes(keyword))) {
       matchedKeywords.push(token)
       nextScore += 10
-    } else if (haystack.includes(token)) {
+    } else if (textIncludesToken(haystack, token)) {
       matchedKeywords.push(token)
       nextScore += token.length >= 4 ? 5 : 2
     }
@@ -87,6 +96,7 @@ export function searchKnowledge(query, limit = 5) {
         matchedKeywords: result.matchedKeywords,
       }
     })
+    .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
     .slice(0, cappedLimit)
 }
