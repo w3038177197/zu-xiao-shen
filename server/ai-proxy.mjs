@@ -2,6 +2,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
 import multer from 'multer'
+import crypto from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { copyFile, mkdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -30,6 +31,41 @@ import { parseContractDocument } from './contract-document-parser.mjs'
 import { createMiniappUsageStore } from './miniapp-usage-store.mjs'
 
 dotenv.config()
+
+// 结构化脱敏日志：只输出白名单字段，禁止记录用户问题、合同正文、contextSummary、
+// 姓名、手机号、地址、openid、session token、API Key、Redis Token 等敏感数据。
+const LOG_FIELD_WHITELIST = new Set([
+  'requestId', 'route', 'statusCode', 'elapsedMs', 'model', 'provider',
+  'usage', 'replayed', 'errorCode', 'storeMode',
+])
+
+// 对 requestId 做稳定短哈希，避免原样记录 body.requestId 或 x-request-id。
+// 用户可能把身份证号、session token 等敏感数据放进 requestId，因此必须脱敏。
+function hashRequestId(requestId) {
+  if (!requestId || typeof requestId !== 'string') return null
+  const hash = crypto.createHash('sha256').update(requestId).digest('hex')
+  return `rid_${hash.slice(0, 12)}`
+}
+
+function logStructured(fields) {
+  const entry = {}
+  for (const key of LOG_FIELD_WHITELIST) {
+    if (fields[key] !== undefined && fields[key] !== null) entry[key] = fields[key]
+  }
+  // requestId 统一替换为稳定短哈希，不记录原值
+  if (entry.requestId) {
+    entry.requestId = hashRequestId(entry.requestId)
+  }
+  // 强制脱敏：usage 只保留 token 数字，不保留任何文本字段
+  if (entry.usage && typeof entry.usage === 'object') {
+    entry.usage = {
+      prompt_tokens: Number(entry.usage.prompt_tokens) || 0,
+      completion_tokens: Number(entry.usage.completion_tokens) || 0,
+      total_tokens: Number(entry.usage.total_tokens) || 0,
+    }
+  }
+  console.log(JSON.stringify(entry))
+}
 
 const app = express()
 const port = Number(process.env.PORT || process.env.AI_PROXY_PORT || 8787)
@@ -196,6 +232,13 @@ function quotaLimit(request, response, next) {
 function authenticateMiniappSession(request, response, next) {
   const result = verifyMiniappSessionToken(getBearerToken(request), miniappSessionSecret)
   if (!result.ok) {
+    logStructured({
+      requestId: request.get('x-request-id') || 'auth-fail',
+      route: request.path,
+      statusCode: 401,
+      errorCode: result.reason || 'auth-failed',
+      storeMode: miniappUsageStore.mode,
+    })
     response.status(401).json({ message: '登录状态已失效，请重新登录', reason: result.reason })
     return
   }
@@ -478,7 +521,11 @@ app.get('/api/health', async (_request, response) => {
 
 app.post('/api/auth/wx-login', rateLimit('wx-login', 12), async (request, response) => {
   response.set('Cache-Control', 'no-store')
+  const startedAt = Date.now()
+  const requestId = request.get('x-request-id') || `wxlogin-${startedAt}`
+  const route = '/api/auth/wx-login'
   if (!isValidMiniappSessionSecret(miniappSessionSecret)) {
+    logStructured({ requestId, route, statusCode: 503, elapsedMs: Date.now() - startedAt, errorCode: 'session-not-configured', storeMode: miniappUsageStore.mode })
     response.status(503).json({ message: '微信会话服务尚未配置' })
     return
   }
@@ -492,6 +539,7 @@ app.post('/api/auth/wx-login', rateLimit('wx-login', 12), async (request, respon
       })
     const session = createMiniappSessionToken({ ...identity, ttlSeconds: miniappSessionTtlSeconds }, miniappSessionSecret)
     const quota = await miniappUsageStore.getQuota(`wx:${identity.openid}`, dailyQuota)
+    logStructured({ requestId, route, statusCode: 200, elapsedMs: Date.now() - startedAt, storeMode: miniappUsageStore.mode })
     response.json({
       ok: true,
       token: session.token,
@@ -499,6 +547,7 @@ app.post('/api/auth/wx-login', rateLimit('wx-login', 12), async (request, respon
       quota: toPublicQuota(quota),
     })
   } catch (error) {
+    logStructured({ requestId, route, statusCode: error?.status || 502, elapsedMs: Date.now() - startedAt, errorCode: 'wx-login-failed', storeMode: miniappUsageStore.mode })
     response.status(error?.status || 502).json({ message: error?.message || '微信登录失败，请稍后重试' })
   }
 })
@@ -514,10 +563,19 @@ app.get('/api/miniapp/ai/quota', authenticateMiniappSession, rateLimit('miniapp-
 
 app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-chat', 20), async (request, response) => {
   response.set('Cache-Control', 'no-store')
+  const startedAt = Date.now()
   let input
   try {
     input = normalizeMiniappAiRequest(request.body)
   } catch (error) {
+    logStructured({
+      requestId: request.get('x-request-id') || 'invalid-input',
+      route: '/api/miniapp/ai/chat',
+      statusCode: error?.status || 400,
+      elapsedMs: Date.now() - startedAt,
+      errorCode: 'invalid-input',
+      storeMode: miniappUsageStore.mode,
+    })
     response.status(error?.status || 400).json({ message: error?.message || 'AI 请求内容无效' })
     return
   }
@@ -529,13 +587,40 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
   const cached = miniappAiRequestCache.get(cacheKey)
   if (cached) {
     if (cached.requestHash !== requestHash) {
+      logStructured({
+        requestId: input.requestId,
+        route: '/api/miniapp/ai/chat',
+        statusCode: 409,
+        elapsedMs: Date.now() - startedAt,
+        errorCode: 'request-id-conflict',
+        storeMode: miniappUsageStore.mode,
+      })
       response.status(409).json({ message: '请求标识已被其他问题使用，请重新发送', code: 'request-id-conflict' })
       return
     }
     try {
-      const result = cached.result || await cached.promise
+      // cached.promise 解析为 { result, upstreamUsage }；upstreamUsage 不进入重放响应
+      const resolved = cached.result ? { result: cached.result } : await cached.promise
+      const result = resolved.result || resolved
+      logStructured({
+        requestId: input.requestId,
+        route: '/api/miniapp/ai/chat',
+        statusCode: 200,
+        elapsedMs: Date.now() - startedAt,
+        replayed: true,
+        storeMode: miniappUsageStore.mode,
+      })
       response.json({ ...result, replayed: true })
     } catch (error) {
+      logStructured({
+        requestId: input.requestId,
+        route: '/api/miniapp/ai/chat',
+        statusCode: error?.status || 502,
+        elapsedMs: Date.now() - startedAt,
+        replayed: true,
+        errorCode: 'replay-failed',
+        storeMode: miniappUsageStore.mode,
+      })
       response.status(error?.status || 502).json({ message: error?.message || 'AI 请求失败，请稍后重试' })
     }
     return
@@ -546,26 +631,66 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
   try {
     claim = await miniappUsageStore.claimRequest(accountId, input.requestId, requestHash, dailyQuota)
   } catch (error) {
+    logStructured({
+      requestId: input.requestId,
+      route: '/api/miniapp/ai/chat',
+      statusCode: error?.status || 503,
+      elapsedMs: Date.now() - startedAt,
+      errorCode: 'claim-failed',
+      storeMode: miniappUsageStore.mode,
+    })
     response.status(error?.status || 503).json({ message: error?.message || '额度服务暂时不可用' })
     return
   }
   if (claim.status === 'cached') {
     const persistedResult = claim.value?.result || claim.value
     miniappAiRequestCache.set(cacheKey, { createdAt: Date.now(), requestHash, result: persistedResult })
+    logStructured({
+      requestId: input.requestId,
+      route: '/api/miniapp/ai/chat',
+      statusCode: 200,
+      elapsedMs: Date.now() - startedAt,
+      replayed: true,
+      storeMode: miniappUsageStore.mode,
+    })
     response.json({ ...persistedResult, replayed: true })
     return
   }
   if (claim.status === 'conflict') {
+    logStructured({
+      requestId: input.requestId,
+      route: '/api/miniapp/ai/chat',
+      statusCode: 409,
+      elapsedMs: Date.now() - startedAt,
+      errorCode: 'request-id-conflict',
+      storeMode: miniappUsageStore.mode,
+    })
     response.status(409).json({ message: '请求标识已被其他问题使用，请重新发送', code: 'request-id-conflict' })
     return
   }
   if (claim.status === 'pending') {
     response.set('Retry-After', '2')
+    logStructured({
+      requestId: input.requestId,
+      route: '/api/miniapp/ai/chat',
+      statusCode: 425,
+      elapsedMs: Date.now() - startedAt,
+      errorCode: 'request-in-progress',
+      storeMode: miniappUsageStore.mode,
+    })
     response.status(425).json({ message: '相同请求正在处理中，请稍后重试', code: 'request-in-progress' })
     return
   }
   if (claim.status === 'quota') {
     response.set('Retry-After', '3600')
+    logStructured({
+      requestId: input.requestId,
+      route: '/api/miniapp/ai/chat',
+      statusCode: 429,
+      elapsedMs: Date.now() - startedAt,
+      errorCode: 'quota-exhausted',
+      storeMode: miniappUsageStore.mode,
+    })
     response.status(429).json({ message: '今日联网 AI 额度已用完，本地分析仍可使用', quota: toPublicQuota(claim.quota) })
     return
   }
@@ -576,9 +701,11 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
     : searchKnowledge(`${input.prompt} ${input.contextSummary}`, 4)
   const messages = buildMiniappAiMessages({ ...input, knowledge })
   const config = resolveProviderConfig()
+  // work 返回 { result, upstreamUsage }：result 是纯净的客户端结果，不含 _upstreamUsage；
+  // upstreamUsage 只用于结构化日志，绝不进入内存缓存、Redis 幂等缓存或客户端响应。
   const work = (async () => {
-    const data = await requestAiCompletion({ config, messages, temperature: 0.2, maxTokens: 1_800 })
-    return {
+    const data = await requestAiCompletion({ config, messages, temperature: 0.2, maxTokens: 900 })
+    const result = {
       ok: true,
       requestId: input.requestId,
       reply: extractAiReply(data),
@@ -589,11 +716,12 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
       // 因额度存储的第二次读取短暂失败而把有效回答误报为失败。
       quota: toPublicQuota(reservation.quota),
     }
+    return { result, upstreamUsage: data?.usage }
   })()
   miniappAiRequestCache.set(cacheKey, { createdAt: Date.now(), requestHash, promise: work })
 
   try {
-    const result = await work
+    const { result, upstreamUsage } = await work
     miniappAiRequestCache.set(cacheKey, { createdAt: Date.now(), requestHash, result })
     try {
       await miniappUsageStore.completeRequest(accountId, input.requestId, requestHash, result)
@@ -603,6 +731,17 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
         message: cacheError?.message || 'unknown error',
       })
     }
+    logStructured({
+      requestId: input.requestId,
+      route: '/api/miniapp/ai/chat',
+      statusCode: 200,
+      elapsedMs: Date.now() - startedAt,
+      model: config.model,
+      provider: config.provider,
+      usage: upstreamUsage,
+      replayed: false,
+      storeMode: miniappUsageStore.mode,
+    })
     response.json(result)
   } catch (error) {
     miniappAiRequestCache.delete(cacheKey)
@@ -614,10 +753,16 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
         message: rollbackError?.message || 'unknown error',
       })
     }
-    console.error('miniapp AI request failed', {
+    const errorCode = error?.status === 504 ? 'upstream-timeout' : 'upstream-failed'
+    logStructured({
       requestId: input.requestId,
-      status: error?.status || 502,
-      message: error?.message || 'unknown error',
+      route: '/api/miniapp/ai/chat',
+      statusCode: error?.status || 502,
+      elapsedMs: Date.now() - startedAt,
+      model: config.model,
+      provider: config.provider,
+      errorCode,
+      storeMode: miniappUsageStore.mode,
     })
     response.status(error?.status || 502).json({ message: error?.message || 'AI 请求失败，请稍后重试' })
   }
@@ -667,12 +812,17 @@ app.get('/api/rag/evaluate', trustedApiRequest, rateLimit('rag-evaluate', 10), (
 
 async function handleOcrUpload(request, response) {
   response.set('Cache-Control', 'no-store')
+  const startedAt = Date.now()
+  const requestId = request.get('x-request-id') || `ocr-${startedAt}`
+  const route = request.path
   if (!request.file) {
+    logStructured({ requestId, route, statusCode: 400, elapsedMs: Date.now() - startedAt, errorCode: 'missing-image', storeMode: miniappUsageStore.mode })
     response.status(400).json({ message: '请选择需要识别的合同图片', code: 'missing-image' })
     return
   }
 
   if (!/^image\//i.test(request.file.mimetype || '')) {
+    logStructured({ requestId, route, statusCode: 415, elapsedMs: Date.now() - startedAt, errorCode: 'unsupported-image', storeMode: miniappUsageStore.mode })
     response.status(415).json({ message: '仅支持 JPG、PNG 或 WEBP 合同图片', code: 'unsupported-image' })
     return
   }
@@ -680,12 +830,14 @@ async function handleOcrUpload(request, response) {
   // 真实文件签名校验，防止伪造扩展名（如把 .txt 改名 .jpg）进入 OCR worker
   const imageSignature = detectImageSignature(request.file.buffer)
   if (!imageSignature) {
+    logStructured({ requestId, route, statusCode: 415, elapsedMs: Date.now() - startedAt, errorCode: 'invalid-image-signature', storeMode: miniappUsageStore.mode })
     response.status(415).json({ message: '图片内容无效或格式不支持，请重新选择', code: 'invalid-image-signature' })
     return
   }
 
   if (ocrInFlight) {
     response.set('Retry-After', '10')
+    logStructured({ requestId, route, statusCode: 429, elapsedMs: Date.now() - startedAt, errorCode: 'busy', storeMode: miniappUsageStore.mode })
     response.status(429).json({ message: '图片识别服务繁忙，请稍后重试', code: 'busy' })
     return
   }
@@ -693,6 +845,7 @@ async function handleOcrUpload(request, response) {
   ocrInFlight = true
   try {
     const result = await recognizeImageOffline(request.file.buffer)
+    logStructured({ requestId, route, statusCode: 200, elapsedMs: Date.now() - startedAt, storeMode: miniappUsageStore.mode })
     response.json({
       ok: true,
       mode: 'offline-tesseract',
@@ -701,6 +854,7 @@ async function handleOcrUpload(request, response) {
       confidence: result.confidence,
     })
   } catch (error) {
+    logStructured({ requestId, route, statusCode: 500, elapsedMs: Date.now() - startedAt, errorCode: 'ocr-failed', storeMode: miniappUsageStore.mode })
     response.status(500).json({
       message: error.message || '合同图片识别失败，请重试',
       code: 'ocr-failed',
@@ -717,13 +871,18 @@ app.post('/api/ocr/image', trustedApiRequest, rateLimit('ocr', 6), upload.single
 
 app.post('/api/miniapp/contract/parse', authenticateMiniappSession, rateLimit('contract-parse', 12), upload.single('document'), acceptJsonUpload('document'), async (request, response) => {
   response.set('Cache-Control', 'no-store')
+  const startedAt = Date.now()
+  const requestId = request.get('x-request-id') || `contract-${startedAt}`
+  const route = '/api/miniapp/contract/parse'
   if (!request.file) {
+    logStructured({ requestId, route, statusCode: 400, elapsedMs: Date.now() - startedAt, errorCode: 'missing-file', storeMode: miniappUsageStore.mode })
     response.status(400).json({ message: '请选择需要解析的合同文件', code: 'missing-file' })
     return
   }
 
   if (contractParsesInFlight >= maxConcurrentContractParses) {
     response.set('Retry-After', '10')
+    logStructured({ requestId, route, statusCode: 429, elapsedMs: Date.now() - startedAt, errorCode: 'busy', storeMode: miniappUsageStore.mode })
     response.status(429).json({ message: '合同解析服务繁忙，请稍后重试', code: 'busy' })
     return
   }
@@ -734,8 +893,10 @@ app.post('/api/miniapp/contract/parse', authenticateMiniappSession, rateLimit('c
       buffer: request.file.buffer,
       fileName: request.body?.fileName || request.file.originalname,
     })
+    logStructured({ requestId, route, statusCode: 200, elapsedMs: Date.now() - startedAt, storeMode: miniappUsageStore.mode })
     response.json({ ok: true, ...result, retained: false })
   } catch (error) {
+    logStructured({ requestId, route, statusCode: error?.status || 422, elapsedMs: Date.now() - startedAt, errorCode: error?.code || 'parse-failed', storeMode: miniappUsageStore.mode })
     response.status(error?.status || 422).json({
       message: error?.message || '合同文件解析失败',
       code: error?.code || 'parse-failed',

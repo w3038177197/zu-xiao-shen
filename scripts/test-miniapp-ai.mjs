@@ -14,6 +14,7 @@ import {
   isCasualMiniappPrompt,
   normalizeMiniappAiRequest,
   redactSensitiveText,
+  selectMiniappAiSkill,
 } from '../server/miniapp-ai.mjs'
 import {
   buildRemoteAiPayload,
@@ -224,7 +225,20 @@ check('AI 提示词：服务端固定规则且带 AI 生成提示', () => {
   assert.equal(messages[0].role, 'system')
   assert.match(messages[0].content, /不得自称律师/)
   assert.match(messages[0].content, new RegExp(AI_GENERATED_NOTICE.slice(0, 8)))
+  assert.match(messages[0].content, /默认用 2 个短自然段回答/)
+  assert.match(messages[0].content, /简单问题控制在 80 至 140 个汉字/)
+  assert.match(messages[0].content, /复杂问题不超过 260 个汉字/)
+  assert.match(messages[0].content, /不要使用 Markdown 标记/)
+  assert.match(messages[0].content, /列表最多 4 项/)
+  assert.doesNotMatch(messages[0].content, /按信息复杂度选用“结论、重点风险、建议动作、依据、下一步”/)
   assert.match(messages.at(-1).content, /住房租赁条例/)
+})
+
+check('AI 响应：清理 Markdown 星号和标题符号', () => {
+  const reply = extractAiReply({
+    choices: [{ message: { content: '**押金建议**\n* 先要明细\n# 不要口头确认' } }],
+  })
+  assert.equal(reply, '押金建议\n先要明细\n不要口头确认')
 })
 
 check('AI 寒暄：自然短回复提示且不附带无关法规', () => {
@@ -240,6 +254,72 @@ check('AI 寒暄：自然短回复提示且不附带无关法规', () => {
   }
   assert.equal(searchKnowledge('hi', 4).length, 0)
   assert.ok(searchKnowledge('押金扣款需要什么凭证', 4).length > 0)
+})
+
+check('AI 内置技能：五类租房问题和资料上下文会稳定路由', () => {
+  const cases = [
+    ['合同里的涨租条款合理吗？', '', 'lease-review'],
+    ['房东说要扣押金，但没有费用凭证', '', 'deposit-dispute'],
+    ['入住验房时水电表和瑕疵怎么留证？', '', 'checkin-evidence'],
+    ['提前退租，钥匙和费用应该怎么交接？', '', 'termination-handover'],
+    ['毕业生租房补贴要满足什么资格？', '', 'subsidy-match'],
+    ['帮我看看现在的资料', '补贴：杭州，3 条政策线索', 'subsidy-match'],
+  ]
+  for (const [prompt, context, expected] of cases) {
+    assert.equal(selectMiniappAiSkill(prompt, context)?.id, expected)
+  }
+  assert.equal(selectMiniappAiSkill('你好', '合同：60分'), null)
+})
+
+check('AI 内置技能：复合问题有固定优先级且只提供分析流程', () => {
+  assert.equal(selectMiniappAiSkill('退租时房东不退押金怎么办？')?.id, 'deposit-dispute')
+  assert.equal(selectMiniappAiSkill('退租交接时怎样拍照留证？')?.id, 'checkin-evidence')
+
+  const messages = buildMiniappAiMessages({
+    prompt: '房东不退押金怎么办？',
+    knowledge: [{ title: '押金返还', source: '住房租赁条例', text: '扣款应有合同或损失依据' }],
+  })
+  assert.match(messages[0].content, /当前使用“押金扣款争议”分析流程/)
+  assert.match(messages.at(-1).content, /住房租赁条例/)
+  assert.doesNotMatch(messages[0].content, /美国法|美利坚|外部 Skill|具体法条第/)
+
+  const subsidyMessages = buildMiniappAiMessages({ prompt: '解释我的杭州租房补贴匹配结果' })
+  assert.match(subsidyMessages[0].content, /最多 3 项关键缺口和 1 个首要动作/)
+  assert.match(subsidyMessages[0].content, /不重复页面已有的政策清单/)
+})
+
+check('AI golden cases：高风险问题保留边界并携带对应依据', () => {
+  const depositPrompt = '房东说墙面发黄要扣我全部押金'
+  const depositKnowledge = searchKnowledge(depositPrompt, 3)
+  assert.ok(depositKnowledge.some((item) => item.id === 'deposit-evidence'))
+  assert.equal(selectMiniappAiSkill(depositPrompt)?.id, 'deposit-dispute')
+  const depositMessages = buildMiniappAiMessages({ prompt: depositPrompt, knowledge: depositKnowledge })
+  assert.match(depositMessages[0].content, /不得承诺维权或补贴结果/)
+  assert.doesNotMatch(depositMessages[0].content, /必赢|一定能退|保证退/)
+  assert.match(depositMessages.at(-1).content, /押金|维修|票据/)
+
+  const subsidyPrompt = '我是本科毕业生，在杭州租房，能拿补贴吗？'
+  const subsidyMessages = buildMiniappAiMessages({
+    prompt: subsidyPrompt,
+    knowledge: searchKnowledge(subsidyPrompt, 3),
+  })
+  assert.equal(selectMiniappAiSkill(subsidyPrompt)?.id, 'subsidy-match')
+  assert.match(subsidyMessages[0].content, /不承诺最终资格/)
+  assert.match(subsidyMessages[0].content, /不得承诺维权或补贴结果/)
+
+  const landlordPrompt = '我是房东，租客逾期不搬，我能换锁吗？'
+  const landlordKnowledge = searchKnowledge(landlordPrompt, 3)
+  assert.ok(landlordKnowledge.some((item) => item.id === 'landlord-notice-before-eviction'))
+  const landlordMessages = buildMiniappAiMessages({ prompt: landlordPrompt, knowledge: landlordKnowledge })
+  assert.match(landlordMessages.at(-1).content, /换锁|断水断电|合理期限/)
+
+  const photoPrompt = '验房有 6 张照片，你能直接判断墙面损坏程度吗？'
+  const photoMessages = buildMiniappAiMessages({
+    prompt: photoPrompt,
+    contextSummary: '验房：6 张照片，只有文字瑕疵记录。',
+  })
+  assert.equal(selectMiniappAiSkill(photoPrompt)?.id, 'checkin-evidence')
+  assert.match(photoMessages[0].content, /不得声称看过或识别了照片/)
 })
 
 check('AI 来源：只返回 HTTPS 官网链接', () => {
@@ -298,6 +378,35 @@ check('小程序负载：支持逐模块选择且不会夹带未选模块', () =
   assert.match(payload.contextSummary, /到期后自动续租十二个月/)
   assert.doesNotMatch(payload.contextSummary, /厨房|水槽渗水/)
   assert.deepEqual(getAvailableRemoteContextModules(context).map((item) => item.key), ['review', 'checkin'])
+})
+
+check('补贴 AI 负载：发送脱敏后的个人情况与结构化匹配，不只发送数量', () => {
+  const context = {
+    review: { hasDraft: false },
+    checkin: { hasData: false },
+    evidence: { hasData: false },
+    subsidy: {
+      hasData: true,
+      city: '上海',
+      profile: '本科毕业，未缴社保，手机号13812345678',
+      total: 1,
+      satisfied: 0,
+      pending: 1,
+      unsatisfied: 0,
+      matches: [{
+        policy: '青年安居补贴',
+        status: 'pending',
+        score: 59,
+        criteria: [{ label: '社保', status: 'pending', missing: '需要确认连续缴纳月数' }],
+      }],
+    },
+  }
+  const payload = buildRemoteAiPayload({ prompt: '解释匹配结果', context, selectedModules: ['subsidy'] })
+  assert.match(payload.contextSummary, /本科毕业，未缴社保/)
+  assert.match(payload.contextSummary, /青年安居补贴：待确认，参考 59 分/)
+  assert.match(payload.contextSummary, /社保：待确认（需要确认连续缴纳月数）/)
+  assert.match(payload.contextSummary, /已隐藏手机号/)
+  assert.doesNotMatch(payload.contextSummary, /13812345678/)
 })
 
 check('小程序负载：资料预览在本机先脱敏且不包含路径和照片内容', () => {

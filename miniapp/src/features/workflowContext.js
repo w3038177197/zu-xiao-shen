@@ -85,15 +85,21 @@ function summarizeSubsidy(savedState) {
 
   const evaluations = subsidyPolicies
     .filter((policy) => policy.city === city)
-    .map((policy) => evaluateSubsidyMatch(policy, profile))
+    .map((policy) => ({ policy, evaluation: evaluateSubsidyMatch(policy, profile) }))
   return {
     hasData: Boolean(city || profile),
     city,
     profile,
     total: evaluations.length,
-    satisfied: evaluations.filter((item) => item.status === 'satisfied').length,
-    pending: evaluations.filter((item) => item.status === 'pending').length,
-    unsatisfied: evaluations.filter((item) => item.status === 'unsatisfied').length,
+    satisfied: evaluations.filter((item) => item.evaluation.status === 'satisfied').length,
+    pending: evaluations.filter((item) => item.evaluation.status === 'pending').length,
+    unsatisfied: evaluations.filter((item) => item.evaluation.status === 'unsatisfied').length,
+    matches: evaluations.slice(0, 5).map(({ policy, evaluation }) => ({
+      policy: policy.policy,
+      status: evaluation.status,
+      score: evaluation.score,
+      criteria: evaluation.criteria.slice(0, 8),
+    })),
   }
 }
 
@@ -136,6 +142,7 @@ export function buildWorkflowContext({
       deposit: String(evidencePackState?.formData?.deposit || '').trim(),
       groups: summarizeEvidenceGroups(evidencePackState),
       hasCommunication: Boolean(String(evidencePackState?.communicationText || '').trim()),
+      communicationText: String(evidencePackState?.communicationText || '').replace(/\s+/g, ' ').trim().slice(0, 500),
     },
     subsidy,
   }

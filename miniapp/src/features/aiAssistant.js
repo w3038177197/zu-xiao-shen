@@ -1,4 +1,4 @@
-import { aiReplySections, knowledgeBaseItems } from '../shared/knowledgeBase.js'
+import { aiReplySections } from '../shared/knowledgeBase.js'
 import { analyzeContract, cleanContractTextForReview, getRiskSummary } from './contractReview.js'
 import { getWorkflowContextLines, loadWorkflowContext } from './workflowContext.js'
 
@@ -7,43 +7,46 @@ function compactText(value, maxLength) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text
 }
 
-function pickKnowledge(prompt, limit = 3) {
-  const query = String(prompt || '').toLowerCase()
-  const rawTokens = query.match(/[一-龥]{2,}|[a-z0-9-]{2,}/gi) || []
-  const tokens = rawTokens.flatMap((token) => {
-    if (!/^[一-龥]+$/.test(token)) return [token]
-    const grams = []
-    for (let size = 2; size <= Math.min(4, token.length); size += 1) {
-      for (let index = 0; index <= token.length - size; index += 1) grams.push(token.slice(index, index + size))
-    }
-    return grams
-  })
-  const scored = knowledgeBaseItems.map((item) => {
-    const haystack = `${item.title} ${item.tag} ${item.text}`.toLowerCase()
-    const score = tokens.reduce((total, token) => total + (haystack.includes(token) ? 1 : 0), 0)
-      + ([item.title, item.tag].some((value) => query.includes(String(value).toLowerCase())) ? 8 : 0)
-    return { item, score }
-  }).sort((left, right) => right.score - left.score)
-  const matches = scored.filter(({ score }) => score > 0).slice(0, limit).map(({ item }) => item)
-  return matches.length ? matches : knowledgeBaseItems.slice(0, limit)
+function cleanAiDisplayLine(line) {
+  return String(line || '')
+    .replace(/\*\*/g, '')
+    .replace(/^\s*[-*•]\s+/, '')
+    .replace(/^\s*\d+[.)、]\s+/, '')
+    .trim()
+}
+
+function isLandlordPrompt(prompt) {
+  return /我是房东|房东视角|房东怎么|房东收租|房东催告|房东验房|房东扣款|房东解约|房东合规/.test(prompt)
 }
 
 function actionAdvice(prompt) {
-  if (/押金|扣款|保洁|退还/.test(prompt)) return '要求对方提供扣款项目、金额、现场照片、维修或保洁清单及有效票据。正常使用损耗不应直接从押金中扣除。'
-  if (/验房|照片|入住/.test(prompt)) return '优先拍摄墙面地面、门窗锁具、水电燃气表读数、卫浴渗漏、厨房设备和家具家电的全景与细节，并在当天发给房东确认。'
-  if (/补贴|毕业|社保|人才/.test(prompt)) return '先确认城市、毕业年份和学历，再准备身份证明、学历证明、劳动合同、社保记录、租赁合同和无房证明，并核对官方最新申报窗口。'
-  if (/解除|退租|违约|搬走/.test(prompt)) return '先核对解除条款和违约金，保留书面通知，协商押金、剩余租金和费用结算方式，交接当天拍照并确认。'
-  if (/合同|条款|签|涨租|维修|入户/.test(prompt)) return '逐条检查押金退还期限、租期内涨租、维修责任、出租方入户、提前解除、违约金、费用凭证和争议管辖。'
-  return '先判断问题处于签约、入住、居住中还是退租阶段，再收集合同原文、付款凭证、现场照片和书面沟通记录。'
+  if (isLandlordPrompt(prompt)) {
+    if (/催告|逾期|解约/.test(prompt)) return '先书面催告给合理期限，再依法解除并留送达证明。'
+    if (/扣款|扣押金/.test(prompt)) return '扣款需有项目、损失和票据，正常损耗不扣，建议当面核对。'
+    if (/验房/.test(prompt)) return '与租客共同验房，记录表底和瑕疵，双方签字确认。'
+    return '按合同收租开票据，代收需授权，水电费不得加价。'
+  }
+  if (/押金|扣款|保洁|退还/.test(prompt)) return '要求房东列明扣款项目、金额和票据；正常损耗不应扣。'
+  if (/验房|照片|入住/.test(prompt)) return '拍全景、瑕疵近景和水电表读数，当天发给房东确认。'
+  if (/补贴|毕业|社保|人才/.test(prompt)) return '先确认城市、学历、就业和社保，再按官网清单准备。'
+  if (/解除|退租|违约|搬走/.test(prompt)) return '核对解约和违约金条款，书面通知，确认押金和交接。'
+  if (/合同|条款|签|涨租|维修|入户/.test(prompt)) return '优先核对押金、涨租、维修、解约和费用凭证条款。'
+  return '先确认租房阶段，再准备合同、付款凭证和沟通记录。'
 }
 
 function answerConclusion(prompt) {
-  if (/押金|扣款|保洁|退还/.test(prompt)) return '先不要只接受口头扣款结论，应同时核对合同约定、实际损失和有效凭证。'
-  if (/验房|照片|入住|瑕疵/.test(prompt)) return '验房的关键不是照片数量，而是让位置、问题、时间和双方确认能够对应起来。'
-  if (/补贴|毕业|社保|人才|学历/.test(prompt)) return '本地匹配只能筛选政策线索，最终资格取决于最新官方条件和经办审核。'
-  if (/解除|退租|违约|搬走/.test(prompt)) return '先固定通知、交接和费用证据，再协商解除与押金结算，能显著减少后续争议。'
-  if (/合同|条款|签|涨租|维修|入户/.test(prompt)) return '应先找到具体条款对应的权利、义务和违约后果，再决定是否签署或要求修改。'
-  return '先明确所处租房阶段和争议事实，再用合同、凭证、照片与书面沟通交叉核对。'
+  if (isLandlordPrompt(prompt)) {
+    if (/催告|逾期|解约/.test(prompt)) return '房东合规路径：先催告、再解除，严禁换锁断水断电。'
+    if (/扣款|扣押金/.test(prompt)) return '房东扣款须有证据链，正常损耗不得扣，无凭证不得扣。'
+    if (/验房/.test(prompt)) return '房东验房核心是共同确认、签字留证，避免事后争议。'
+    return '房东收租应按合同留痕开票，不得加价或巧立名目。'
+  }
+  if (/押金|扣款|保洁|退还/.test(prompt)) return '先别接受口头扣款，应同时核对合同、实际损失和凭证。'
+  if (/验房|照片|入住|瑕疵/.test(prompt)) return '验房关键是让位置、问题、时间和双方确认对得上。'
+  if (/补贴|毕业|社保|人才|学历/.test(prompt)) return '本地匹配只是初筛，最终以官方最新条件和审核为准。'
+  if (/解除|退租|违约|搬走/.test(prompt)) return '先固定通知、交接和费用证据，再协商解除和押金结算。'
+  if (/合同|条款|签|涨租|维修|入户/.test(prompt)) return '先找到具体条款对应的权利义务和违约后果，再决定。'
+  return '先明确租房阶段和争议事实，再用合同和凭证交叉核对。'
 }
 
 function buildContextRisk(prompt, context) {
@@ -52,6 +55,18 @@ function buildContextRisk(prompt, context) {
   const contractRisk = review?.summary && topFinding
     ? `当前合同评分 ${review.summary.score}/100（${review.summary.label}），优先处理「${topFinding.title}」。`
     : ''
+  if (isLandlordPrompt(prompt)) {
+    if (/验房/.test(prompt)) {
+      return '房东视角：入住和退租都要与租客共同验房并签字，否则扣款容易被推翻。'
+    }
+    if (/扣款|扣押金/.test(prompt)) {
+      return '房东视角：扣款须有照片、维修清单和票据，正常损耗不得扣，扩大扣减有被反诉风险。'
+    }
+    if (/催告|逾期|解约/.test(prompt)) {
+      return '房东视角：未催告直接换锁收房可能承担民事甚至刑事责任，合法解约需书面通知留证。'
+    }
+    return '房东视角：合规收租、开票留痕是基础，代收需授权，加价水电费违规。'
+  }
   if (/验房|照片|入住|瑕疵/.test(prompt)) {
     if (!checkin?.hasData) return '本机还没有验房记录，暂时无法判断房屋现状或照片完整度。'
     const stats = checkin.stats
@@ -77,6 +92,15 @@ function buildContextRisk(prompt, context) {
 }
 
 function buildNextStep(prompt, context) {
+  if (isLandlordPrompt(prompt)) {
+    if (/催告|逾期|解约/.test(prompt)) {
+      return '保留催告记录、解约通知送达证明和交接清单，租客拒不腾退应通过诉讼解决。'
+    }
+    if (/扣款|扣押金/.test(prompt)) {
+      return '退租时与租客当面核对并书面确认扣款明细，避免事后争议。'
+    }
+    return '把合同条款、租客违约事实和已留证据发来，我帮你判断合规处理路径。'
+  }
   if (/验房|照片|入住|瑕疵/.test(prompt) && context.checkin?.stats?.checked < context.checkin?.stats?.total) {
     return `继续完成剩余 ${context.checkin.stats.total - context.checkin.stats.checked} 项验房，并给瑕疵同时补全景、近景和带时间的沟通记录。`
   }
@@ -108,7 +132,6 @@ export function loadAllModuleContext() {
 }
 
 export function buildLocalReply({ prompt, context, contractText, findings = [], summary = null }) {
-  const knowledge = pickKnowledge(prompt)
   const resolvedContext = context || {
     contractText: contractText || '',
     review: { findings, summary },
@@ -119,24 +142,24 @@ export function buildLocalReply({ prompt, context, contractText, findings = [], 
   const contextLines = getWorkflowContextLines(resolvedContext)
   if (/^(?:你好|您好|嗨|哈喽|hi|hello)[!！。,.，?？\s]*$/i.test(String(prompt || '').trim())) {
     return [
-      '结论：你好，我可以帮你检查合同、准备验房、整理退租证据和核对租房补贴线索。',
-      `本机资料：${contextLines.length ? contextLines.join('；') : '当前还没有已关联的租房资料。'}`,
-      '你可以这样问：合同押金条款有什么风险？入住时要拍哪些照片？房东扣保洁费怎么回复？',
-      '提醒：页面会优先使用联网 AI；服务不可用或未授权时，会自动使用本地知识库回答。',
+      '你好，我可以帮你看合同、验房、退租证据和补贴线索。',
+      contextLines.length ? `已读到本机资料：${contextLines.join('；')}。` : '目前还没有关联资料，也可以直接问。',
+      '联网不可用时会自动用本地分析。',
     ].join('\n')
   }
+  const conclusion = answerConclusion(prompt)
+  const contextRisk = buildContextRisk(prompt, resolvedContext)
+  const action = actionAdvice(prompt)
+  const nextStep = buildNextStep(prompt, resolvedContext)
   return [
-    `结论：${answerConclusion(prompt)}`,
-    `重点风险：${buildContextRisk(prompt, resolvedContext)}`,
-    `建议动作：${actionAdvice(prompt)}`,
-    `依据：${contextLines.length ? `本机资料：${contextLines.join('；')}。` : '本机暂无已关联业务资料。'}内置知识库：${knowledge.map((item) => `${item.title}（${item.source || '租小审内置知识库'}）`).join('；')}`,
-    '提醒：当前回答由本地规则与知识库生成，不是联网大模型；政策和法规请以官方最新口径为准。',
-    `下一步：${buildNextStep(prompt, resolvedContext)}`,
+    `${conclusion} ${contextRisk}`,
+    `你可以先这样处理：${action} ${nextStep}`,
+    '仅供参考，政策和法规以官方最新口径为准。',
   ].join('\n')
 }
 
 export function formatMessageBlocks(content) {
-  const lines = String(content || '').split('\n').map((line) => line.trim()).filter(Boolean)
+  const lines = String(content || '').split('\n').map(cleanAiDisplayLine).filter(Boolean)
   if (!lines.length) return [{ title: '', lines: ['暂无内容'] }]
   const sectionPattern = new RegExp(`^(${aiReplySections.join('|')})[：:]?\\s*(.*)$`)
   const blocks = []

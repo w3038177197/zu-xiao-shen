@@ -414,15 +414,25 @@ export default class CheckinInspection extends Component {
     const stats = getCheckinStats(inspectionState)
 
     return (
-      <ScrollView scrollY enableFlex scrollWithAnimation scrollIntoView={report ? 'checkin-report' : ''} className='checkin-page'>
-        <View className='checkin-hero'>
+      <ScrollView scrollY enableFlex scrollWithAnimation scrollIntoView={report ? 'checkin-report' : ''} className='page checkin-page'>
+        <View className='card hero-card'>
           <Text className='eyebrow'>入住验房</Text>
           <Text className='page-title'>入住先留证，退租少扯皮</Text>
-          <Text className='page-copy'>按房间逐项记录设施状态、瑕疵描述和现场照片，形成可追溯的入住基线。</Text>
+          <Text className='body-text'>按房间逐项记录设施状态、瑕疵描述和现场照片，形成可追溯的入住基线。照片仅保存在本机。</Text>
         </View>
-        {operationNotice ? <View className='operation-notice' aria-live='polite'><Text>{operationNotice}</Text><View className='operation-notice-actions'>{lastPhotoSource ? <Button aria-label='重试上次拍照或选图' disabled={isSaving} onClick={this.retryLastPhoto}>重试</Button> : null}<Button aria-label='关闭错误提示' onClick={() => this.setState({ operationNotice: '' })}>关闭</Button></View></View> : null}
-        <View className='section'>
-          <Text className='section-kicker'>选择房屋类型</Text>
+
+        {operationNotice ? (
+          <View className='operation-notice' aria-live='polite'>
+            <Text>{operationNotice}</Text>
+            <View className='operation-notice-actions'>
+              {lastPhotoSource ? <Button aria-label='重试上次拍照或选图' disabled={isSaving} onClick={this.retryLastPhoto}>重试</Button> : null}
+              <Button aria-label='关闭错误提示' onClick={() => this.setState({ operationNotice: '' })}>关闭</Button>
+            </View>
+          </View>
+        ) : null}
+
+        <View className='card'>
+          <Text className='section-title'>选择房屋类型</Text>
           <View className='room-type-grid'>
             {checkinRoomTypes.map((item) => (
               <Button key={item.value} className={`room-type-item ${roomType === item.value ? 'active' : ''}`} onClick={() => this.setRoomType(item.value)}>
@@ -432,9 +442,9 @@ export default class CheckinInspection extends Component {
             ))}
           </View>
 
-          <View className='section-kicker-row'>
-            <Text className='section-kicker'>本次验房进度</Text>
-            <Button className='reset-link' onClick={this.handleReset}>重置记录</Button>
+          <View className='card-header section-kicker-row'>
+            <Text className='section-title'>本次验房进度</Text>
+            <Button className='btn-ghost reset-link' onClick={this.handleReset}>重置记录</Button>
           </View>
           <View className='checkin-stats'>
             <View><Text>{stats.percent}%</Text><Text>完成度</Text></View>
@@ -447,7 +457,7 @@ export default class CheckinInspection extends Component {
               <Text className={`storage-hint ${stats.photos > 50 ? 'warning' : ''}`}>
                 已保存 {stats.photos} 张验房照片，建议交接完成后清理本地空间
               </Text>
-              <Button className='btn-clear-photos' onClick={this.handleCleanupPhotos}>
+              <Button className='btn-secondary btn-clear-photos' onClick={this.handleCleanupPhotos}>
                 只清照片
               </Button>
             </View>
@@ -473,107 +483,117 @@ export default class CheckinInspection extends Component {
               return (
                 <View key={item.key} className={`inspection-item ${expanded ? '' : 'collapsed'}`}>
                   <View className='inspection-head'>
-                    <View><Text className='item-name'>{item.label}</Text><Text className='item-desc'>{item.desc}</Text></View>
-                    {!expanded ? <Button className='item-expand' onClick={() => this.setState({ expandedItemKey: itemKey })}>补充记录</Button> : null}
+                    <View>
+                      <Text className='card-title item-name'>{item.label}</Text>
+                      <Text className='caption item-desc'>{item.desc}</Text>
+                    </View>
+                    {!expanded ? <Button className='btn-secondary item-expand' onClick={() => this.setState({ expandedItemKey: itemKey })}>补充记录</Button> : null}
                   </View>
 
-                  {!expanded ? <Text className={`item-summary ${record.status}`}>{record.status === 'good' ? '良好' : '瑕疵'} · {(record.photos || []).length} 张照片{record.note ? ' · 已备注' : ''}</Text> : <>
+                  {!expanded ? (
+                    <Text className={`item-summary ${record.status}`}>{record.status === 'good' ? '良好' : '瑕疵'} · {(record.photos || []).length} 张照片{record.note ? ' · 已备注' : ''}</Text>
+                  ) : (
+                    <>
+                      <View className='status-buttons'>
+                        <Button
+                          className={`status-btn ${record.status === 'good' ? 'active good' : ''}`}
+                          onClick={() => this.handleStatusChange(room.key, item.key, 'good')}
+                        >
+                          良好
+                        </Button>
+                        <Button
+                          className={`status-btn ${record.status === 'defect' ? 'active poor' : ''}`}
+                          onClick={() => this.handleStatusChange(room.key, item.key, 'defect')}
+                        >
+                          瑕疵
+                        </Button>
+                      </View>
 
-                  <View className='status-buttons'>
-                    <Button
-                      className={`status-btn ${record.status === 'good' ? 'active good' : ''}`}
-                      onClick={() => this.handleStatusChange(room.key, item.key, 'good')}
-                    >
-                      良好
-                    </Button>
-                    <Button
-                      className={`status-btn ${record.status === 'defect' ? 'active poor' : ''}`}
-                      onClick={() => this.handleStatusChange(room.key, item.key, 'defect')}
-                    >
-                      瑕疵
-                    </Button>
-                  </View>
+                      {record.status === 'defect' && (
+                        <Textarea
+                          className='item-notes'
+                          aria-label={`${room.label}${item.label}瑕疵描述`}
+                          name={`${room.key}-${item.key}-defect`}
+                          adjustPosition
+                          cursorSpacing={20}
+                          placeholder='描述瑕疵情况…'
+                          value={record.defect}
+                          onInput={(e) => this.handleDefectChange(room.key, item.key, e.detail.value)}
+                          maxlength={200}
+                        />
+                      )}
 
-                  {record.status === 'defect' && (
-                    <Textarea
-                      className='item-notes'
-                      aria-label={`${room.label}${item.label}瑕疵描述`}
-                      name={`${room.key}-${item.key}-defect`}
-                      adjustPosition
-                      cursorSpacing={20}
-                      placeholder='描述瑕疵情况…'
-                      value={record.defect}
-                      onInput={(e) => this.handleDefectChange(room.key, item.key, e.detail.value)}
-                      maxlength={200}
-                    />
+                      {record.status !== 'unchecked' ? (
+                        <>
+                          <Textarea
+                            className='item-notes'
+                            aria-label={`${room.label}${item.label}备注`}
+                            name={`${room.key}-${item.key}-note`}
+                            adjustPosition
+                            cursorSpacing={20}
+                            placeholder='备注说明（可选）…'
+                            value={record.note}
+                            onInput={(e) => this.handleNotesChange(room.key, item.key, e.detail.value)}
+                            maxlength={200}
+                          />
+
+                          <View className='photo-section'>
+                            <Text className='photo-label'>照片记录（{(record.photos || []).length}/{CHECKIN_MAX_PHOTOS_PER_ITEM}）</Text>
+                            <View className='photo-list'>
+                              {(record.photos || []).map((photo, photoIndex) => (
+                                <View key={photoIndex} className='photo-item'>
+                                  <Button className='photo-preview' aria-label={`预览第 ${photoIndex + 1} 张照片`} onClick={() => this.handlePreviewPhoto(record.photos, photoIndex)}>
+                                    <Image src={photo} className='photo-image' mode='aspectFill' lazyLoad />
+                                  </Button>
+                                  <Button
+                                    className='photo-delete'
+                                    aria-label={`删除第 ${photoIndex + 1} 张照片`}
+                                    onClick={() => this.handleDeletePhoto(room.key, item.key, photoIndex)}
+                                  >
+                                    ×
+                                  </Button>
+                                </View>
+                              ))}
+                              {(record.photos || []).length < CHECKIN_MAX_PHOTOS_PER_ITEM ? (
+                                <View className='photo-actions'>
+                                  <Button className='btn-secondary photo-btn' onClick={() => this.handleTakePhoto(room.key, item.key)}>拍照</Button>
+                                  <Button className='btn-secondary photo-btn' onClick={() => this.handleChoosePhoto(room.key, item.key)}>相册</Button>
+                                </View>
+                              ) : <Text className='photo-limit-hint'>已达到单项照片上限</Text>}
+                            </View>
+                          </View>
+                        </>
+                      ) : <Text className='unchecked-hint'>先选择“良好”或“瑕疵”，再补充备注和照片</Text>}
+                      {record.status !== 'unchecked' ? <Button className='btn-secondary item-collapse' onClick={() => this.setState({ expandedItemKey: null })}>完成并收起</Button> : null}
+                    </>
                   )}
-
-                  {record.status !== 'unchecked' ? <>
-                    <Textarea
-                      className='item-notes'
-                      aria-label={`${room.label}${item.label}备注`}
-                      name={`${room.key}-${item.key}-note`}
-                      adjustPosition
-                      cursorSpacing={20}
-                      placeholder='备注说明（可选）…'
-                      value={record.note}
-                      onInput={(e) => this.handleNotesChange(room.key, item.key, e.detail.value)}
-                      maxlength={200}
-                    />
-
-                    <View className='photo-section'>
-                    <Text className='photo-label'>照片记录（{(record.photos || []).length}/{CHECKIN_MAX_PHOTOS_PER_ITEM}）</Text>
-                    <View className='photo-list'>
-                      {(record.photos || []).map((photo, photoIndex) => (
-                        <View key={photoIndex} className='photo-item'>
-                          <Button className='photo-preview' aria-label={`预览第 ${photoIndex + 1} 张照片`} onClick={() => this.handlePreviewPhoto(record.photos, photoIndex)}>
-                            <Image src={photo} className='photo-image' mode='aspectFill' lazyLoad />
-                          </Button>
-                          <Button
-                            className='photo-delete'
-                            aria-label={`删除第 ${photoIndex + 1} 张照片`}
-                            onClick={() => this.handleDeletePhoto(room.key, item.key, photoIndex)}
-                          >
-                            ×
-                          </Button>
-                        </View>
-                      ))}
-                      {(record.photos || []).length < CHECKIN_MAX_PHOTOS_PER_ITEM ? (
-                        <View className='photo-actions'>
-                          <Button className='photo-btn' onClick={() => this.handleTakePhoto(room.key, item.key)}>拍照</Button>
-                          <Button className='photo-btn' onClick={() => this.handleChoosePhoto(room.key, item.key)}>相册</Button>
-                        </View>
-                      ) : <Text className='photo-limit-hint'>已达到单项照片上限</Text>}
-                    </View>
-                    </View>
-                  </> : <Text className='unchecked-hint'>先选择“良好”或“瑕疵”，再补充备注和照片</Text>}
-                  {record.status !== 'unchecked' ? <Button className='item-collapse' onClick={() => this.setState({ expandedItemKey: null })}>完成并收起</Button> : null}
-                  </>}
                 </View>
               )
             })}
           </View>
         </View>
 
-        <View className='action-buttons'>
-          <Button className='btn-save' onClick={this.saveData} disabled={isSaving}>
+        <View className='sticky-actions'>
+          <Button className='btn-secondary' onClick={this.saveData} disabled={isSaving}>
             {isSaving ? '保存中…' : '保存'}
           </Button>
-          <Button className='btn-export' onClick={this.handleGenerateReport}>
+          <Button className='btn-primary' onClick={this.handleGenerateReport}>
             生成报告
           </Button>
         </View>
 
-        {report ? <View id='checkin-report' className='section report-section'>
-          <Text className='section-kicker'>验房报告</Text>
-          <Textarea className='report-text' aria-label='验房报告' value={report} maxlength={-1} disabled />
-          <View className='report-actions'>
-            <Button className='btn-save' onClick={this.handleExportTxt}>导出报告 TXT</Button>
-            <Button className='btn-save' onClick={this.handleExport}>复制完整报告</Button>
-            <Button className='btn-export' onClick={this.handleCopyScript}>复制房东话术</Button>
+        {report ? (
+          <View id='checkin-report' className='card report-section'>
+            <Text className='section-title'>验房报告</Text>
+            <Textarea className='report-text' aria-label='验房报告' value={report} maxlength={-1} disabled />
+            <View className='report-actions'>
+              <Button className='btn-secondary' onClick={this.handleExportTxt}>导出报告 TXT</Button>
+              <Button className='btn-secondary' onClick={this.handleExport}>复制完整报告</Button>
+              <Button className='btn-secondary' onClick={this.handleCopyScript}>复制房东话术</Button>
+            </View>
+            <Button className='ai-task-btn' disabled={!stats.checked} onClick={this.handleAiCheck}>{stats.checked ? '让 AI 解读验房记录' : '暂无验房记录可解读'}</Button>
           </View>
-          <Button className='ai-task-btn' disabled={!stats.checked} onClick={this.handleAiCheck}>{stats.checked ? '让 AI 解读验房记录' : '暂无验房记录可解读'}</Button>
-        </View> : null}
+        ) : null}
       </ScrollView>
     )
   }

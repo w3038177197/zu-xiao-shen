@@ -12,11 +12,13 @@ import { copyText } from '../../utils/copyText'
 import { consumeAiTaskHandoff } from '../../utils/aiTaskHandoff'
 import {
   clearMiniappSession,
+  confirmRemoteConsent,
   fetchRemoteAiQuota,
   fetchRemoteAiServiceHealth,
   getRemoteAiError,
   getRemoteAiServiceState,
   getStoredRemoteAiQuota,
+  hasRemoteConsent,
   startRemoteAiRequest,
 } from '../../utils/remoteAiRequest'
 import './index.css'
@@ -29,7 +31,7 @@ const quickPrompts = [
 ]
 const welcome = {
   role: 'assistant',
-  content: '你好，我是租小审。把合同条款、押金扣款或验房问题发给我，我会优先使用联网 AI；服务不可用时自动切换本地分析，并结合你允许使用的资料给出结论、依据和下一步。',
+  content: '你好，我是租小审。可以问我合同、验房、押金、退租证据和补贴问题。\n我会优先联网回答；不可用时自动切换本地分析。',
   meta: '租房助手',
 }
 
@@ -40,32 +42,6 @@ function loadChat() {
   } catch {
     return [welcome]
   }
-}
-
-function hasRemoteConsent() {
-  try {
-    return Taro.getStorageSync(STORAGE_KEYS.aiRemoteConsent) === true
-  } catch {
-    return false
-  }
-}
-
-async function confirmRemoteConsent() {
-  if (hasRemoteConsent()) return true
-  const result = await Taro.showModal({
-    title: '启用联网 AI',
-    content: '联网模式会把本次问题发送至租小审服务端和模型服务商。默认不携带本机资料；你可以逐项选择合同风险、验房瑕疵、证据清单或补贴结果，发送前还能预览。合同全文、照片内容和附件文件不会随 AI 问答发送。是否继续？',
-    confirmText: '同意启用',
-    cancelText: '继续本地',
-  })
-  if (!result.confirm) return false
-  try {
-    Taro.setStorageSync(STORAGE_KEYS.aiRemoteConsent, true)
-  } catch {
-    Taro.showToast({ title: '无法保存联网授权，请清理本地空间后重试', icon: 'none' })
-    return false
-  }
-  return true
 }
 
 export default function AiAssistant() {
@@ -82,6 +58,7 @@ export default function AiAssistant() {
   const [serviceReady, setServiceReady] = useState(null)
   const [showContextOptions, setShowContextOptions] = useState(false)
   const pendingRef = useRef(null)
+  const sendPreparingRef = useRef(false)
 
   useEffect(() => {
     try {
@@ -113,7 +90,7 @@ export default function AiAssistant() {
         return null
       }
       setServiceReady(true)
-      return fetchRemoteAiQuota()
+      return hasRemoteConsent() ? fetchRemoteAiQuota() : null
     }).then((nextQuota) => {
       if (!nextQuota) return
       if (!active) return
@@ -209,37 +186,42 @@ export default function AiAssistant() {
 
   const send = async (value = draft) => {
     const prompt = value.trim()
-    if (!prompt || isSending) return
-    const nextContext = loadAllModuleContext()
-    setContext(nextContext)
-    setDraft('')
-    setLastFailed(null)
-
-    if (!REMOTE_AI_CONFIG.enabled) {
-      const reply = buildLocalReply({ prompt, context: nextContext })
-      setMessages((current) => [...current, { role: 'user', content: prompt }, { role: 'assistant', content: reply, meta: '本地降级' }])
-      setStatusHint('联网 AI 未启用，本次已使用本地回答')
-      return
-    }
-
+    if (!prompt || isSending || sendPreparingRef.current) return
+    sendPreparingRef.current = true
     try {
-      if (!await confirmRemoteConsent()) {
+      const nextContext = loadAllModuleContext()
+      setContext(nextContext)
+      setDraft('')
+      setLastFailed(null)
+
+      if (!REMOTE_AI_CONFIG.enabled) {
         const reply = buildLocalReply({ prompt, context: nextContext })
-        setMessages((current) => [...current, { role: 'user', content: prompt }, { role: 'assistant', content: reply, meta: '本地分析' }])
-        setStatusHint('未启用联网 AI，本次已使用本地回答')
+        setMessages((current) => [...current, { role: 'user', content: prompt }, { role: 'assistant', content: reply, meta: '本地降级' }])
+        setStatusHint('联网 AI 未启用，本次已使用本地回答')
         return
       }
-      setRemoteConsent(true)
-    } catch {
-      const reply = buildLocalReply({ prompt, context: nextContext })
-      setMessages((current) => [...current, { role: 'user', content: prompt }, { role: 'assistant', content: reply, meta: '本地降级' }])
-      setStatusHint('联网授权未完成，本次已使用本地回答')
-      return
-    }
 
-    const payload = buildRemoteAiPayload({ prompt, messages, context: nextContext, selectedModules: selectedContextModules })
-    setMessages((current) => [...current, { role: 'user', content: prompt }])
-    await runRemote({ payload, prompt, currentContext: nextContext, addFallback: true })
+      try {
+        if (!await confirmRemoteConsent()) {
+          const reply = buildLocalReply({ prompt, context: nextContext })
+          setMessages((current) => [...current, { role: 'user', content: prompt }, { role: 'assistant', content: reply, meta: '本地分析' }])
+          setStatusHint('未启用联网 AI，本次已使用本地回答')
+          return
+        }
+        setRemoteConsent(true)
+      } catch {
+        const reply = buildLocalReply({ prompt, context: nextContext })
+        setMessages((current) => [...current, { role: 'user', content: prompt }, { role: 'assistant', content: reply, meta: '本地降级' }])
+        setStatusHint('联网授权未完成，本次已使用本地回答')
+        return
+      }
+
+      const payload = buildRemoteAiPayload({ prompt, messages, context: nextContext, selectedModules: selectedContextModules })
+      setMessages((current) => [...current, { role: 'user', content: prompt }])
+      await runRemote({ payload, prompt, currentContext: nextContext, addFallback: true })
+    } finally {
+      sendPreparingRef.current = false
+    }
   }
 
   const revokeRemote = () => {

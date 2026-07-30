@@ -85,57 +85,72 @@ export async function removePersistedFile(localPath) {
   }
 }
 
-export function pickImageFromAlbum() {
+export function pickImagesFromAlbum(count = 9) {
   return new Promise((resolve, reject) => {
     Taro.chooseImage({
-      count: 1,
+      count: Math.max(1, Math.min(Number(count) || 9, 9)),
       sourceType: ['album'],
       sizeType: ['compressed'],
       success: ({ tempFilePaths = [], tempFiles = [] }) => {
-        const path = tempFilePaths[0]
-        if (!path) {
+        const files = tempFilePaths.map((path, index) => {
+          const pathName = String(path).split('/').pop() || ''
+          return {
+            tempFilePath: path,
+            fileName: IMAGE_EXTENSIONS.includes(extOf(pathName)) ? pathName : `相册图片${index + 1}.jpg`,
+            size: Number(tempFiles[index]?.size) || 0,
+          }
+        }).filter((item) => item.tempFilePath)
+        if (!files.length) {
           reject(new Error('未选择图片'))
           return
         }
-        const pathName = String(path).split('/').pop() || ''
-        resolve({
-          tempFilePath: path,
-          fileName: IMAGE_EXTENSIONS.includes(extOf(pathName)) ? pathName : '相册图片.jpg',
-          size: Number(tempFiles[0]?.size) || 0,
-        })
+        resolve(files)
       },
       fail: (error) => reject(error),
     })
   })
 }
 
-export function pickFileFromChat() {
+export async function pickImageFromAlbum() {
+  const files = await pickImagesFromAlbum(1)
+  return files[0]
+}
+
+export function pickFilesFromChat(count = 9) {
   return new Promise((resolve, reject) => {
     Taro.chooseMessageFile({
-      count: 1,
+      count: Math.max(1, Math.min(Number(count) || 9, 9)),
       type: 'file',
       extension: ACCEPTED_EXTENSIONS,
       success: ({ tempFiles = [] }) => {
-        const file = tempFiles[0]
-        if (!file) {
+        if (!tempFiles.length) {
           reject(new Error('未选择文件'))
           return
         }
-        const fileName = file.name || '附件'
-        const extension = extOf(fileName)
-        if (!extension || !ACCEPTED_EXTENSIONS.includes(extension)) {
-          reject(new Error('暂不支持此文件，请选择图片、PDF、Word 或 TXT'))
-          return
+        const files = []
+        for (const file of tempFiles) {
+          const fileName = file.name || '附件'
+          const extension = extOf(fileName)
+          if (!extension || !ACCEPTED_EXTENSIONS.includes(extension)) {
+            reject(new Error('暂不支持此文件，请选择图片、PDF、Word 或 TXT'))
+            return
+          }
+          if (Number(file.size) > ATTACHMENT_MAX_BYTES) {
+            reject(new Error('文件超过 10MB，请选择更小的文件'))
+            return
+          }
+          files.push({ tempFilePath: file.path, fileName, size: Number(file.size) || 0 })
         }
-        if (Number(file.size) > ATTACHMENT_MAX_BYTES) {
-          reject(new Error('文件超过 10MB，请选择更小的文件'))
-          return
-        }
-        resolve({ tempFilePath: file.path, fileName, size: Number(file.size) || 0 })
+        resolve(files)
       },
       fail: (error) => reject(error),
     })
   })
+}
+
+export async function pickFileFromChat() {
+  const files = await pickFilesFromChat(1)
+  return files[0]
 }
 
 export function previewImageAttachment(attachment, allImageAttachments = []) {

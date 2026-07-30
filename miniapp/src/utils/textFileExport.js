@@ -5,30 +5,32 @@ import { getMiniappErrorMessage } from './privacyAuth.js'
 const ILLEGAL_CHARS = /[\\/:*?"<>|]/g
 const MAX_FILENAME_LENGTH = 80
 const TXT_EXT = '.txt'
+const JSON_EXT = '.json'
 
-// 清理文件名非法字符并限制长度，保证结果始终以 .txt 结尾
-export function sanitizeFileName(name) {
+// 清理文件名非法字符并限制长度，默认导出 .txt；备份可指定 .json
+export function sanitizeFileName(name, extension = TXT_EXT) {
+  const safeExt = extension === JSON_EXT ? JSON_EXT : TXT_EXT
   const cleaned = String(name || '').replace(ILLEGAL_CHARS, '_').trim()
   let safe = cleaned || '导出文件'
-  // 去掉已存在的 .txt 扩展名，后面统一补
-  if (safe.toLowerCase().endsWith(TXT_EXT)) {
-    safe = safe.slice(0, -TXT_EXT.length)
+  // 去掉已存在的目标扩展名，后面统一补
+  if (safe.toLowerCase().endsWith(safeExt)) {
+    safe = safe.slice(0, -safeExt.length)
   }
-  if (safe.length + TXT_EXT.length > MAX_FILENAME_LENGTH) {
-    safe = safe.slice(0, MAX_FILENAME_LENGTH - TXT_EXT.length)
+  if (safe.length + safeExt.length > MAX_FILENAME_LENGTH) {
+    safe = safe.slice(0, MAX_FILENAME_LENGTH - safeExt.length)
   }
-  return safe + TXT_EXT
+  return safe + safeExt
 }
 
 // 统一 TXT 文件导出：写入 -> 微信分享
 // 返回 { ok: true, filePath } 或 { ok: false, reason, filePath?, error? }
-export async function exportTextToFile(fileName, content) {
+export async function exportTextToFile(fileName, content, { extension = TXT_EXT } = {}) {
   if (content == null || String(content).trim() === '') {
     Taro.showToast({ title: '内容为空，无法导出', icon: 'none' })
     return { ok: false, reason: 'empty-content' }
   }
 
-  const safeName = sanitizeFileName(fileName)
+  const safeName = sanitizeFileName(fileName, extension)
   const filePath = `${Taro.env.USER_DATA_PATH}/${safeName}`
   const fs = Taro.getFileSystemManager()
 

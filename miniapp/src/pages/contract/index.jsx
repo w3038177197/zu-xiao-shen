@@ -427,9 +427,9 @@ export default class ContractReview extends Component {
     const index = Math.max(0, options.findIndex((item) => item.value === this.state.profile[key]))
     return (
       <View className='profile-field' key={key}>
-        <Text>{label}</Text>
+        <Text className='field-label'>{label}</Text>
         <Picker aria-label={label} range={options.map((item) => item.label)} value={index} onChange={(event) => this.updateProfile(key, options[Number(event.detail.value)].value)}>
-          <View className='picker-value'>{options[index]?.label}<Text>⌄</Text></View>
+          <View className='picker-value'>{options[index]?.label}<Text className='chevron'>⌄</Text></View>
         </Picker>
       </View>
     )
@@ -440,33 +440,65 @@ export default class ContractReview extends Component {
     const lowCount = Math.max(0, findings.length - (summary?.highCount || 0) - (summary?.mediumCount || 0))
 
     return (
-      <ScrollView scrollY enableFlex className='contract-page'>
-        <View className='review-hero'>
+      <ScrollView scrollY enableFlex className='page contract-page'>
+        <View className='card hero-card'>
           <Text className='eyebrow'>合同审查</Text>
           <Text className='page-title'>先看懂合同，再决定怎么签</Text>
-          <Text className='page-copy'>标出押金、涨租、维修、入户和违约责任，把风险翻译成可直接沟通的修改建议。</Text>
-          <View className='privacy-row'><View className='privacy-indicator'>✓</View><Text>审查在本机完成；PDF、DOCX 与图片仅在你确认后上传提取文字</Text></View>
+          <Text className='body-text'>标出押金、涨租、维修、入户和违约责任，把风险翻译成可直接沟通的修改建议。</Text>
+          <View className='privacy-note'>
+            <View className='privacy-indicator'>✓</View>
+            <Text>审查在本机完成；PDF、DOCX 与图片仅在你确认后上传提取文字</Text>
+          </View>
         </View>
 
-        <View className='section input-section'>
-          <View className='section-head'><View><Text className='eyebrow'>审查材料</Text><Text className='section-title'>合同正文</Text></View><Text className='char-count'>{contractText.length.toLocaleString()} 字</Text></View>
-          <Textarea className='contract-input' aria-label='合同正文' name='contractText' adjustPosition cursorSpacing={20} placeholder='粘贴正文，或导入 TXT、MD、DOCX、PDF 与合同照片…' value={contractText} onInput={(event) => this.updateContract(event.detail.value)} maxlength={-1} />
-          {operationNotice ? <View className='operation-notice' aria-live='polite'><Text>{operationNotice}</Text><View className='operation-notice-actions'>{lastImportSource ? <Button aria-label='重试上次导入' disabled={isImporting} onClick={this.retryLastImport}>重试</Button> : null}<Button aria-label='关闭错误提示' onClick={() => this.setState({ operationNotice: '' })}>关闭</Button></View></View> : null}
+        <View className='card input-card'>
+          <View className='card-header'>
+            <View>
+              <Text className='eyebrow'>审查材料</Text>
+              <Text className='section-title'>合同正文</Text>
+            </View>
+            <Text className='char-count'>{contractText.length.toLocaleString()} 字</Text>
+          </View>
+          <Textarea
+            className='contract-input'
+            aria-label='合同正文'
+            name='contractText'
+            adjustPosition
+            cursorSpacing={20}
+            placeholder='粘贴正文，或导入 TXT、MD、DOCX、PDF 与合同照片…'
+            value={contractText}
+            onInput={(event) => this.updateContract(event.detail.value)}
+            maxlength={-1}
+          />
+          {operationNotice ? (
+            <View className='operation-notice' aria-live='polite'>
+              <Text>{operationNotice}</Text>
+              <View className='operation-notice-actions'>
+                {lastImportSource ? <Button aria-label='重试上次导入' disabled={isImporting} onClick={this.retryLastImport}>重试</Button> : null}
+                <Button aria-label='关闭错误提示' onClick={() => this.setState({ operationNotice: '' })}>关闭</Button>
+              </View>
+            </View>
+          ) : null}
           <View className='secondary-actions'>
-            <Button disabled={isImporting} onClick={this.importFromPhone}>手机粘贴</Button>
-            <Button disabled={isImporting} onClick={this.chooseWechatFile}>微信文件</Button>
-            <Button disabled={isImporting} onClick={() => this.importContractImage('camera')}>拍照识别</Button>
-            <Button disabled={isImporting} onClick={() => this.importContractImage('album')}>相册识别</Button>
+            <Button className='btn-secondary' disabled={isImporting} onClick={this.importFromPhone}>手机粘贴</Button>
+            <Button className='btn-secondary' disabled={isImporting} onClick={this.chooseWechatFile}>微信文件</Button>
+            <Button className='btn-secondary' disabled={isImporting} onClick={() => this.importContractImage('camera')}>拍照识别</Button>
+            <Button className='btn-secondary' disabled={isImporting} onClick={() => this.importContractImage('album')}>相册识别</Button>
             <Picker className='demo-picker' aria-label='选择演示合同' range={demoContracts.map((item) => item.title)} onChange={(event) => this.loadDemo(Number(event.detail.value))}>
-              <Button className='demo-picker-button'>载入演示合同</Button>
+              <Button className='btn-secondary demo-picker-button'>载入演示合同</Button>
             </Picker>
           </View>
-          {importProgress ? <View className='import-progress'>
-            <View className='import-progress-head'><Text>{importProgress.fileName}</Text><Text>{importProgress.progress || '连接中'}{importProgress.progress ? '%' : ''}</Text></View>
-            <View className='import-progress-track'><View className='import-progress-fill' style={{ width: `${importProgress.progress || 8}%` }} /></View>
-            <Button className='import-cancel' onClick={this.cancelImport}>取消解析</Button>
-          </View> : null}
-          <Text className='import-help'>TXT/MD 在本机读取；微信里的 DOCX/PDF 可确认后上传解析。手机文件可在 WPS/文件 App 复制正文，或把文件发送到微信后选择。合同照片可直接拍摄或从相册选择。</Text>
+          {importProgress ? (
+            <View className='import-progress'>
+              <View className='import-progress-head'>
+                <Text>{importProgress.fileName}</Text>
+                <Text>{importProgress.progress || '连接中'}{importProgress.progress ? '%' : ''}</Text>
+              </View>
+              <View className='import-progress-track'><View className='import-progress-fill' style={{ width: `${importProgress.progress || 8}%` }} /></View>
+              <Button className='btn-danger import-cancel' onClick={this.cancelImport}>取消解析</Button>
+            </View>
+          ) : null}
+          <Text className='caption import-help'>TXT/MD 在本机读取；微信里的 DOCX/PDF 可确认后上传解析。手机文件可在 WPS/文件 App 复制正文，或把文件发送到微信后选择。合同照片可直接拍摄或从相册选择。</Text>
           <View className='profile-grid'>
             {this.renderProfilePicker('合同类型', contractTypeOptions, 'contractType')}
             {this.renderProfilePicker('审查角色', partyRoleOptions, 'partyRole')}
@@ -474,75 +506,170 @@ export default class ContractReview extends Component {
           </View>
         </View>
 
-        <View className='action-buttons'>
-          <Button className='btn-analyze' onClick={this.handleAnalyze} disabled={isAnalyzing || !contractText.trim()}>{isAnalyzing ? '审查中…' : '开始本地审查'}</Button>
-          {(findings.length > 0 || contractText) ? <Button className='btn-reset' onClick={this.handleReset}>重置</Button> : null}
+        <View className='sticky-actions'>
+          <Button className='btn-primary' onClick={this.handleAnalyze} disabled={isAnalyzing || !contractText.trim()}>{isAnalyzing ? '审查中…' : '开始本地审查'}</Button>
+          {(findings.length > 0 || contractText) ? <Button className='btn-secondary' onClick={this.handleReset}>重置</Button> : null}
         </View>
 
         {summary ? (
-          <View className='result-section'>
-            <Text className='eyebrow'>风险总览</Text><Text className='section-title'>审查结果</Text>
-            <View className={`summary-card ${summary.tone}`}><View><Text className='risk-score'>{summary.score}</Text><Text className='risk-label'>风险评分</Text></View><View className='summary-copy'><Text className='risk-level'>{summary.label}</Text><Text className='risk-description'>{summary.advice}</Text></View></View>
-            <View className='stats-row'><View className='stat-item'><Text>{findings.length}</Text><Text>风险点</Text></View><View className='stat-item high'><Text>{summary.highCount}</Text><Text>高风险</Text></View><View className='stat-item medium'><Text>{summary.mediumCount}</Text><Text>中风险</Text></View><View className='stat-item'><Text>{lowCount}</Text><Text>低风险</Text></View></View>
-            {dimensions.length ? <View className='dimension-list'>{dimensions.map((item) => <View className='dimension-item' key={item.key}><View className='dimension-head'><Text>{item.label}</Text><Text className={`dimension-score ${item.tone}`}>{item.score}</Text></View><View className='dimension-bar'><View className={`dimension-fill ${item.tone}`} style={{ width: `${Math.min(100, item.score)}%` }} /></View></View>)}</View> : null}
+          <View className='card result-card'>
+            <Text className='eyebrow'>风险总览</Text>
+            <Text className='section-title'>审查结果</Text>
+            <View className={`summary-card ${summary.tone}`}>
+              <View>
+                <Text className='risk-score'>{summary.score}</Text>
+                <Text className='risk-label'>风险评分</Text>
+              </View>
+              <View className='summary-copy'>
+                <Text className='risk-level'>{summary.label}</Text>
+                <Text className='risk-description'>{summary.advice}</Text>
+              </View>
+            </View>
+            <View className='stats-row'>
+              <View className='stat-item'><Text>{findings.length}</Text><Text>风险点</Text></View>
+              <View className='stat-item high'><Text>{summary.highCount}</Text><Text>高风险</Text></View>
+              <View className='stat-item medium'><Text>{summary.mediumCount}</Text><Text>中风险</Text></View>
+              <View className='stat-item'><Text>{lowCount}</Text><Text>低风险</Text></View>
+            </View>
+            {dimensions.length ? (
+              <View className='dimension-list'>
+                {dimensions.map((item) => (
+                  <View className='dimension-item' key={item.key}>
+                    <View className='dimension-head'>
+                      <Text>{item.label}</Text>
+                      <Text className={`dimension-score ${item.tone}`}>{item.score}</Text>
+                    </View>
+                    <View className='dimension-bar'><View className={`dimension-fill ${item.tone}`} style={{ width: `${Math.min(100, item.score)}%` }} /></View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             <View className='report-export-row'>
-              <Button className='btn-report' onClick={this.exportReportTxt}>导出审查报告 TXT</Button>
-              <Button className='btn-report' onClick={this.copyReport}>复制审查报告</Button>
+              <Button className='btn-secondary' onClick={this.exportReportTxt}>导出审查报告 TXT</Button>
+              <Button className='btn-secondary' onClick={this.copyReport}>复制审查报告</Button>
             </View>
             <Button className='ai-task-btn' onClick={this.handleAiReview}>让 AI 解读审查结果</Button>
           </View>
         ) : null}
 
         {findings.length ? (
-          <View className='findings-section'>
-            <View className='section-head'><View><Text className='eyebrow'>逐条建议</Text><Text className='section-title'>修改与沟通方案</Text></View><Button className='btn-adopt-all' onClick={this.handleAdoptAll}>全部采纳</Button></View>
+          <View className='card findings-card'>
+            <View className='card-header'>
+              <View>
+                <Text className='eyebrow'>逐条建议</Text>
+                <Text className='section-title'>修改与沟通方案</Text>
+              </View>
+              <Button className='btn-secondary btn-adopt-all' onClick={this.handleAdoptAll}>全部采纳</Button>
+            </View>
             {findings.map((finding, index) => {
               const expanded = expandedIndex === index
               const adopted = adoptedItems.some((item) => item.id === finding.id)
-              return <View key={finding.id || index} className={`finding-card finding-${finding.level}`}>
-                <Button className='finding-header' aria-expanded={expanded} onClick={() => this.setState({ expandedIndex: expanded ? -1 : index })}><View><Text className='finding-number'>{String(index + 1).padStart(2, '0')}</Text><Text className='finding-title'>{finding.title}</Text></View><View className='finding-meta'><Text className={`finding-badge badge-${finding.level}`}>{levelText(finding.level)}</Text><Text className='finding-chevron'>{expanded ? '⌃' : '⌄'}</Text></View></Button>
-                {expanded ? <View className='finding-details'>
-                  <View className='finding-content'><Text className='finding-label'>为什么有风险</Text><Text className='finding-text'>{finding.explain || finding.description}</Text></View>
-                  {finding.evidence ? <View className='finding-content'><Text className='finding-label'>合同原文</Text><Text className='finding-text evidence'>{finding.evidence}</Text></View> : null}
-                  {finding.suggestion ? <View className='finding-content'><Text className='finding-label'>修改建议</Text><Text className='finding-text suggestion'>{finding.suggestion}</Text></View> : null}
-                  {finding.replacement ? <View className='finding-content'><Text className='finding-label'>建议条款</Text><Text className='finding-text replacement'>{finding.replacement}</Text></View> : null}
-                  {finding.negotiation ? <View className='finding-content'><Text className='finding-label'>沟通话术</Text><Text className='finding-text'>{finding.negotiation}</Text></View> : null}
-                  <View className='finding-actions'>
-                    {finding.replacement ? <Button className='btn-adopt' disabled={adopted} onClick={() => this.handleAdopt(finding)}>{adopted ? '已采纳' : '采纳并改写'}</Button> : null}
-                    {finding.negotiation ? <Button className='btn-copy-talk' onClick={() => this.copyText(finding.negotiation, '话术已复制')}>复制话术</Button> : null}
-                  </View>
-                </View> : null}
-              </View>
+              return (
+                <View key={finding.id || index} className={`finding-card risk-${finding.level}`}>
+                  <Button className='finding-header' aria-expanded={expanded} onClick={() => this.setState({ expandedIndex: expanded ? -1 : index })}>
+                    <View>
+                      <Text className='finding-number'>{String(index + 1).padStart(2, '0')}</Text>
+                      <Text className='finding-title'>{finding.title}</Text>
+                    </View>
+                    <View className='finding-meta'>
+                      <Text className={`status-badge status-badge-${finding.level === 'high' ? 'error' : finding.level === 'medium' ? 'warning' : 'done'}`}>{levelText(finding.level)}</Text>
+                      <Text className='chevron'>{expanded ? '⌃' : '⌄'}</Text>
+                    </View>
+                  </Button>
+                  {expanded ? (
+                    <View className='finding-details'>
+                      <View className='finding-content'>
+                        <Text className='finding-label'>为什么有风险</Text>
+                        <Text className='body-text'>{finding.explain || finding.description}</Text>
+                      </View>
+                      {finding.evidence ? (
+                        <View className='finding-content'>
+                          <Text className='finding-label'>合同原文</Text>
+                          <Text className='body-text evidence-text'>{finding.evidence}</Text>
+                        </View>
+                      ) : null}
+                      {finding.suggestion ? (
+                        <View className='finding-content'>
+                          <Text className='finding-label'>修改建议</Text>
+                          <Text className='body-text suggestion-text'>{finding.suggestion}</Text>
+                        </View>
+                      ) : null}
+                      {finding.replacement ? (
+                        <View className='finding-content'>
+                          <Text className='finding-label'>建议条款</Text>
+                          <Text className='body-text replacement-text'>{finding.replacement}</Text>
+                        </View>
+                      ) : null}
+                      {finding.negotiation ? (
+                        <View className='finding-content'>
+                          <Text className='finding-label'>沟通话术</Text>
+                          <Text className='body-text'>{finding.negotiation}</Text>
+                        </View>
+                      ) : null}
+                      <View className='finding-actions'>
+                        {finding.replacement ? <Button className='btn-primary' disabled={adopted} onClick={() => this.handleAdopt(finding)}>{adopted ? '已采纳' : '采纳并改写'}</Button> : null}
+                        {finding.negotiation ? <Button className='btn-secondary' onClick={() => this.copyText(finding.negotiation, '话术已复制')}>复制话术</Button> : null}
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              )
             })}
           </View>
         ) : null}
 
-        {adoptedItems.length ? <View className='revised-section'>
-          <Text className='eyebrow'>修订成果</Text><Text className='section-title'>修订版合同草案</Text>
-          <Text className='revised-note'>已采纳 {adoptedItems.length} 条修改建议，建议发给房东或中介确认。</Text>
-          <View className='adopted-list'>{adoptedItems.map((item) => <Text key={item.id}>✓ {item.title}</Text>)}</View>
-          <Textarea className='revised-draft' aria-label='修订版合同草案' value={revisedDraft} maxlength={-1} disabled />
-          <View className='revised-actions'><Button className='btn-adopt' onClick={() => this.copyText(revisedDraft, '修订稿已复制')}>复制修订稿</Button><Button className='btn-write-back' onClick={this.handleWriteBack}>写回编辑区</Button></View>
-        </View> : null}
-
-        {summary && !findings.length ? <View className='empty-result'><Text>未发现明显风险条款</Text><Text>仍建议人工复核押金、维修、解除和费用条款。</Text></View> : null}
-
-        {history.length ? <View className='history-section'>
-          <Button className='section-head history-head' aria-expanded={showHistory} onClick={() => this.setState({ showHistory: !showHistory })}><View><Text className='eyebrow'>审查记录</Text><Text className='section-title'>最近 {history.length} 次审查</Text></View><Text className='history-toggle'>{showHistory ? '收起 ⌃' : '展开 ⌄'}</Text></Button>
-          {showHistory ? <View>{history.map((entry, index) => (
-            <View className='history-item' key={entry.id || `${entry.time}-${index}`}>
-              <View className='history-info'>
-                <Text className='history-time'>{entry.time}</Text>
-                <Text className='history-meta'>{entry.count} 个风险点 · {entry.score} 分</Text>
-                {!entry.snapshot ? <Text className='history-legacy'>无快照</Text> : null}
-              </View>
-              <View className='history-actions'>
-                <Button className='btn-restore' disabled={!entry.snapshot} onClick={() => this.restoreHistory(entry)}>恢复</Button>
-                <Button className='btn-delete-history' onClick={() => this.deleteHistoryItem(entry.id)}>删除</Button>
-              </View>
+        {adoptedItems.length ? (
+          <View className='card revised-card'>
+            <Text className='eyebrow'>修订成果</Text>
+            <Text className='section-title'>修订版合同草案</Text>
+            <Text className='body-text revised-note'>已采纳 {adoptedItems.length} 条修改建议，建议发给房东或中介确认。</Text>
+            <View className='adopted-list'>
+              {adoptedItems.map((item) => <Text key={item.id} className='adopted-item'>✓ {item.title}</Text>)}
             </View>
-          ))}<Button className='btn-clear-history' onClick={this.clearHistory}>清空记录</Button></View> : null}
-        </View> : null}
+            <Textarea className='contract-input revised-draft' aria-label='修订版合同草案' value={revisedDraft} maxlength={-1} disabled />
+            <View className='revised-actions'>
+              <Button className='btn-secondary' onClick={() => this.copyText(revisedDraft, '修订稿已复制')}>复制修订稿</Button>
+              <Button className='btn-primary' onClick={this.handleWriteBack}>写回编辑区</Button>
+            </View>
+          </View>
+        ) : null}
+
+        {summary && !findings.length ? (
+          <View className='card empty-result'>
+            <Text className='empty-title'>未发现明显风险条款</Text>
+            <Text className='body-text'>仍建议人工复核押金、维修、解除和费用条款。</Text>
+          </View>
+        ) : null}
+
+        {history.length ? (
+          <View className='card history-card'>
+            <Button className='card-header history-head' aria-expanded={showHistory} onClick={() => this.setState({ showHistory: !showHistory })}>
+              <View>
+                <Text className='eyebrow'>审查记录</Text>
+                <Text className='section-title'>最近 {history.length} 次审查</Text>
+              </View>
+              <Text className='btn-ghost history-toggle'>{showHistory ? '收起 ⌃' : '展开 ⌄'}</Text>
+            </Button>
+            {showHistory ? (
+              <View>
+                {history.map((entry, index) => (
+                  <View className='history-item' key={entry.id || `${entry.time}-${index}`}>
+                    <View className='history-info'>
+                      <Text className='caption history-time'>{entry.time}</Text>
+                      <Text className='body-text history-meta'>{entry.count} 个风险点 · {entry.score} 分</Text>
+                      {!entry.snapshot ? <Text className='status-badge status-badge-warning history-legacy'>无快照</Text> : null}
+                    </View>
+                    <View className='history-actions'>
+                      <Button className='btn-primary' disabled={!entry.snapshot} onClick={() => this.restoreHistory(entry)}>恢复</Button>
+                      <Button className='btn-danger' onClick={() => this.deleteHistoryItem(entry.id)}>删除</Button>
+                    </View>
+                  </View>
+                ))}
+                <Button className='btn-danger btn-clear-history' onClick={this.clearHistory}>清空记录</Button>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         <Text className='legal-note'>免责声明：风险提示仅供租房风险自查参考，不构成法律意见或维权结果承诺。</Text>
       </ScrollView>

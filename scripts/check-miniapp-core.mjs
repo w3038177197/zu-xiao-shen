@@ -25,8 +25,10 @@ const reply = buildLocalReply({ prompt: '押金不退怎么办？', contractText
 
 assert.ok(findings.length > 0, '演示合同应命中风险')
 assert.ok(Number.isFinite(summary.score), '风险评分应为数字')
-assert.match(reply, /结论：/)
 assert.match(reply, /当前合同评分/)
-assert.ok(formatMessageBlocks(reply).length >= 4, 'AI 回复应按栏目拆分')
+assert.match(reply, /你可以先这样处理/)
+assert.doesNotMatch(reply, /^(?:结论|重点风险|建议动作|依据|下一步)：/m)
+assert.ok(formatMessageBlocks(reply).flatMap((block) => block.lines).length >= 3, 'AI 回复应包含自然分段')
+assert.ok(reply.length <= 500, '本地 AI 回复应保持简短')
 
 console.log(`Miniapp core check passed: ${findings.length} findings, score ${summary.score}`)

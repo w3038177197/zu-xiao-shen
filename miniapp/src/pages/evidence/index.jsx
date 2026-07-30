@@ -32,8 +32,8 @@ import { openAiTask } from '../../utils/aiTaskHandoff'
 import {
   persistAttachment,
   removePersistedFile,
-  pickImageFromAlbum,
-  pickFileFromChat,
+  pickImagesFromAlbum,
+  pickFilesFromChat,
   previewImageAttachment,
   openFileAttachment,
   formatSize,
@@ -139,9 +139,11 @@ export default class EvidencePack extends Component {
     if (this.state.isAttaching) return
     this.setState({ isAttaching: true })
     try {
-      const { tempFilePath, fileName, size } = await pickImageFromAlbum()
-      const attachment = await persistAttachment(tempFilePath, 'album', fileName, size)
-      await this.commitAttachment(group, attachment)
+      const files = await pickImagesFromAlbum(9)
+      const attachments = await Promise.all(files.map(({ tempFilePath, fileName, size }) => (
+        persistAttachment(tempFilePath, 'album', fileName, size)
+      )))
+      await this.commitAttachments(group, attachments)
     } catch (error) {
       const detail = getCapabilityFailure(error, 'album')
       if (!detail.cancelled) {
@@ -161,13 +163,15 @@ export default class EvidencePack extends Component {
     if (this.state.isAttaching) return
     this.setState({ isAttaching: true })
     try {
-      const { tempFilePath, fileName, size } = await pickFileFromChat()
-      const attachment = await persistAttachment(tempFilePath, 'chat', fileName, size)
-      await this.commitAttachment(group, attachment)
+      const files = await pickFilesFromChat(9)
+      const attachments = await Promise.all(files.map(({ tempFilePath, fileName, size }) => (
+        persistAttachment(tempFilePath, 'chat', fileName, size)
+      )))
+      await this.commitAttachments(group, attachments)
     } catch (error) {
       const detail = getCapabilityFailure(error, 'chatFile')
       if (!detail.cancelled) {
-        this.setState({ operationNotice: detail.reason === 'api-failed' && error?.message ? `${error.message}。请重新选择微信文件。` : '微信文件添加失败，请确认文件仍可访问后重试。' })
+        this.setState({ operationNotice: detail.reason === 'api-failed' && error?.message ? `${error.message}。请重新选择微信文件或最近文件。` : '文件添加失败：小程序只能从微信聊天、文件传输助手或最近文件中选择，请先把本机文件分享到微信后再选。' })
         if (detail.reason === 'api-failed' && error?.message) {
           Taro.showToast({ title: error.message, icon: 'none' })
         } else {
@@ -181,21 +185,28 @@ export default class EvidencePack extends Component {
 
   // 添加附件后立即同步保存：失败则回滚 state 并清理已持久化的文件
   commitAttachment = async (group, attachment) => {
+    await this.commitAttachments(group, [attachment])
+  }
+
+  // 批量添加附件只保存一次；Storage 失败时清理本次新增文件
+  commitAttachments = async (group, attachments) => {
+    const validAttachments = Array.isArray(attachments) ? attachments.filter(Boolean) : []
+    if (!validAttachments.length) return
     const prev = this.state.packState
-    const next = addAttachment(prev, group, attachment)
+    const next = validAttachments.reduce((state, attachment) => addAttachment(state, group, attachment), prev)
     this.setState({ packState: next })
     this.autoSaver.cancel()
     const saved = saveEvidencePackState(next)
     if (!saved) {
       // 回滚到添加前的 state，并清理刚保存到小程序文件系统的附件
       this.setState({ packState: prev })
-      await removePersistedFile(attachment.localPath)
+      await Promise.all(validAttachments.map((attachment) => removePersistedFile(attachment.localPath)))
       this.setState({ operationNotice: '附件保存失败：本地空间不足。请到首页清理无用文件后重试。' })
       Taro.showToast({ title: '附件保存失败，请清理空间后重试', icon: 'none' })
       return
     }
     this.setState({ operationNotice: '' })
-    Taro.showToast({ title: '附件已添加', icon: 'success' })
+    Taro.showToast({ title: validAttachments.length > 1 ? `已添加 ${validAttachments.length} 个附件` : '附件已添加', icon: 'success' })
   }
 
   handlePreviewAttachment = (attachment, group) => {
@@ -518,12 +529,12 @@ export default class EvidencePack extends Component {
 
     return (
       <ScrollView scrollY enableFlex className='evidence-page'>
-        <View className='evidence-hero'>
+        <View className='card evidence-hero'>
           <Text className='eyebrow'>退租证据包</Text>
           <Text className='page-title'>退租证据整理成包</Text>
-          <Text className='page-copy'>把合同、押金凭证、交接照片、费用票据和沟通记录串成一条证据链。</Text>
+          <Text className='body-text'>把合同、押金凭证、交接照片、费用票据和沟通记录串成一条证据链。</Text>
         </View>
-        <View className='progress-section'>
+        <View className='card progress-section'>
           <View className='progress-head'><Text className='progress-title'>证据收集进度</Text><Button className='reset-link' onClick={this.handleReset}>重置记录</Button></View>
           <Text className='progress-text'>
             已添加 {progress.totalAttachments} 个真实附件，覆盖 {progress.collectedGroups}/{progress.totalGroups} 类
@@ -535,7 +546,7 @@ export default class EvidencePack extends Component {
         {operationNotice ? <View className='operation-notice' aria-live='polite'><Text>{operationNotice}</Text><Button aria-label='关闭错误提示' onClick={() => this.setState({ operationNotice: '' })}>关闭</Button></View> : null}
 
         {activeStep === 'basic' ? <>
-        <View className='section'>
+        <View className='card section'>
           <Text className='section-title'>基本信息</Text>
 
           <View className='form-item'>
@@ -582,7 +593,7 @@ export default class EvidencePack extends Component {
         </> : null}
 
         {activeStep === 'attachments' ? <>
-        <View className='section'>
+        <View className='card section'>
           <View className='section-head'>
             <View><Text className='eyebrow'>证据清单</Text><Text className='section-title'>证据与附件</Text></View>
             <Text className='group-attachment-count'>{activeGroupAttachments.length} 个附件</Text>
@@ -640,8 +651,9 @@ export default class EvidencePack extends Component {
             )}
             <View className='attachment-add-row'>
               <Button className='btn-add-album' disabled={isAttaching || isImporting} onClick={() => this.handleAddFromAlbum(activeGroupKey)}>{isAttaching ? '处理中…' : '从相册添加图片'}</Button>
-              <Button className='btn-add-chat' disabled={isAttaching || isImporting} onClick={() => this.handleAddFromChat(activeGroupKey)}>{isAttaching ? '处理中…' : '从微信选择文件'}</Button>
+              <Button className='btn-add-chat' disabled={isAttaching || isImporting} onClick={() => this.handleAddFromChat(activeGroupKey)}>{isAttaching ? '处理中…' : '选择文件/最近文件'}</Button>
             </View>
+            <Text className='file-picker-hint'>手机本地文档需先分享到微信、文件传输助手或最近文件，再从这里选择；一次最多 9 个。</Text>
             {activeGroupKey === 'photos' ? (
               <View className='import-row'>
                 <Button className='btn-import' disabled={isImporting} onClick={this.handleImportCheckinPhotos}>{isImporting ? '导入中…' : '导入验房照片'}</Button>
@@ -660,7 +672,7 @@ export default class EvidencePack extends Component {
         </> : null}
 
         {activeStep === 'output' ? <>
-        <View className='section'>
+        <View className='card section'>
           <Text className='section-title'>下一步行动</Text>
           {evidenceActions.map((action, index) => (
             <Button key={index} className='action-item' aria-checked={actions[index]} onClick={() => this.handleActionToggle(index)}>
@@ -675,7 +687,7 @@ export default class EvidencePack extends Component {
           ))}
         </View>
 
-        <View className='section'>
+        <View className='card section'>
           <Text className='section-title'>沟通说明</Text>
           <View className='tab-row'>
             {evidenceToolTabs.map((tab) => (
@@ -689,12 +701,12 @@ export default class EvidencePack extends Component {
             ))}
           </View>
           <Button className='btn-generate' onClick={this.handleGenerateCommunication}>
-            生成沟通说明
+            生成简短沟通说明
           </Button>
           {communicationText ? (
             <Textarea className='communication-text' aria-label='沟通说明' adjustPosition cursorSpacing={20} value={communicationText} maxlength={2000} onInput={(e) => this.handleCommunicationChange(e.detail.value)} />
           ) : null}
-          <Button className='ai-task-btn' disabled={!hasAiContext} onClick={this.handleAiEvidenceCheck}>{hasAiContext ? '让 AI 检查证据缺口' : '暂无证据资料可检查'}</Button>
+            <Button className='ai-task-btn' disabled={!hasAiContext} onClick={this.handleAiEvidenceCheck}>{hasAiContext ? '让 AI 润色说明并查缺口' : '暂无证据资料可检查'}</Button>
         </View>
 
         <View className='action-buttons'>

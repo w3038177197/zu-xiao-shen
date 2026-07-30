@@ -9,9 +9,9 @@ export default defineAppConfig({
     'pages/subsidy/index'
   ],
   tabBar: {
-    color: '#5f6a62',
-    selectedColor: '#078d50',
-    backgroundColor: '#fffdf8',
+    color: '#5c6a60',
+    selectedColor: '#1a4d3a',
+    backgroundColor: '#ffffff',
     borderStyle: 'black',
     list: [
       { pagePath: 'pages/index/index', text: '首页', iconPath: 'assets/tabs/home.png', selectedIconPath: 'assets/tabs/home-active.png' },
@@ -23,8 +23,8 @@ export default defineAppConfig({
   },
   window: {
     backgroundTextStyle: 'light',
-    backgroundColor: '#eef2ec',
-    navigationBarBackgroundColor: '#eef2ec',
+    backgroundColor: '#f6f7f6',
+    navigationBarBackgroundColor: '#f6f7f6',
     navigationBarTitleText: '租小审',
     navigationBarTextStyle: 'black'
   }

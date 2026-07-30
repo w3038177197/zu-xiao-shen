@@ -8,6 +8,32 @@ const SERVICE_FAILURE_THRESHOLD = 3
 const SERVICE_COOLDOWN_MS = 30_000
 let serviceState = { consecutiveFailures: 0, retryAt: 0, lastCode: '' }
 
+export function hasRemoteConsent() {
+  try {
+    return Taro.getStorageSync(STORAGE_KEYS.aiRemoteConsent) === true
+  } catch {
+    return false
+  }
+}
+
+export async function confirmRemoteConsent() {
+  if (hasRemoteConsent()) return true
+  const result = await Taro.showModal({
+    title: '启用联网 AI',
+    content: '联网模式会把本次问题，以及你在当前页面选择或生成的资料摘要，发送至租小审服务端和模型服务商。合同全文、照片内容和附件文件不会随 AI 问答发送。是否继续？',
+    confirmText: '同意启用',
+    cancelText: '继续本地',
+  })
+  if (!result.confirm) return false
+  try {
+    Taro.setStorageSync(STORAGE_KEYS.aiRemoteConsent, true)
+  } catch {
+    Taro.showToast({ title: '无法保存联网授权，请清理本地空间后重试', icon: 'none' })
+    return false
+  }
+  return true
+}
+
 function createRemoteError(message, code, extra = {}) {
   const error = new Error(message)
   error.code = code

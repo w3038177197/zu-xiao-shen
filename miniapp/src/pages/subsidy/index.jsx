@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Picker, ScrollView, Text, Textarea, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import {
@@ -8,8 +8,11 @@ import {
   subsidyPolicies,
   subsidyMatchStatusLabel,
 } from '../../shared/subsidyPolicies.js'
+import { buildLocalReply, formatMessageBlocks, loadAllModuleContext } from '../../features/aiAssistant'
+import { AI_TASK_PRESETS, buildRemoteAiPayload } from '../../features/remoteAi'
+import { REMOTE_AI_CONFIG } from '../../constants/appConfig'
 import { copyText } from '../../utils/copyText'
-import { openAiTask } from '../../utils/aiTaskHandoff'
+import { confirmRemoteConsent, getRemoteAiError, startRemoteAiRequest } from '../../utils/remoteAiRequest'
 import './index.css'
 
 const STORAGE_KEY = 'zu-xiao-shen-subsidy-matcher'
@@ -41,6 +44,12 @@ export default function SubsidyMatcher() {
   const [initial] = useState(getInitialState)
   const [city, setCity] = useState(initial.city)
   const [profile, setProfile] = useState(initial.profile)
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false)
+  const [aiAnalysis, setAiAnalysis] = useState(null)
+  const [aiError, setAiError] = useState(null)
+  const [isAiExpanded, setIsAiExpanded] = useState(false)
+  const pendingAiRef = useRef(null)
+  const aiRunRef = useRef(0)
   const hasProfile = Boolean(profile.trim())
   const matches = useMemo(() => subsidyPolicies
     .filter((item) => item.city === city)
@@ -73,6 +82,21 @@ export default function SubsidyMatcher() {
     }
   }, [city, profile])
 
+  useEffect(() => () => {
+    aiRunRef.current += 1
+    pendingAiRef.current?.cancel()
+  }, [])
+
+  useEffect(() => {
+    aiRunRef.current += 1
+    pendingAiRef.current?.cancel()
+    pendingAiRef.current = null
+    setIsAiAnalyzing(false)
+    setAiAnalysis(null)
+    setAiError(null)
+    setIsAiExpanded(false)
+  }, [city, profile])
+
   const copyOfficialUrl = (policy) => {
     const url = String(policy.applyUrl || policy.sourceUrl || '').trim()
     if (!/^https:\/\//i.test(url)) {
@@ -82,24 +106,73 @@ export default function SubsidyMatcher() {
     copyText(url, '官网链接已复制')
   }
 
-  const explainWithAi = () => {
+  const explainWithAi = async (force = false) => {
+    if (isAiAnalyzing) return
     try {
       Taro.setStorageSync(STORAGE_KEY, { city, profile })
-      openAiTask('subsidy')
     } catch {
       Taro.showToast({ title: '资料保存失败，请清理空间后重试', icon: 'none' })
+      return
+    }
+
+    const prompt = AI_TASK_PRESETS.subsidy.prompt
+    const context = loadAllModuleContext()
+    const runId = ++aiRunRef.current
+    const showLocalAnalysis = (meta) => {
+      if (runId !== aiRunRef.current) return
+      setAiAnalysis({
+        reply: buildLocalReply({ prompt, context }),
+        meta,
+        citations: [],
+      })
+    }
+
+    setIsAiAnalyzing(true)
+    setAiError(null)
+    setIsAiExpanded(false)
+    if (!REMOTE_AI_CONFIG.enabled) {
+      showLocalAnalysis('本地分析')
+      setIsAiAnalyzing(false)
+      return
+    }
+
+    try {
+      if (!await confirmRemoteConsent()) {
+        showLocalAnalysis('本地分析')
+        return
+      }
+      if (runId !== aiRunRef.current) return
+      const payload = buildRemoteAiPayload({ prompt, context, selectedModules: ['subsidy'] })
+      const request = startRemoteAiRequest(payload, { force })
+      pendingAiRef.current = request
+      const result = await request.promise
+      if (runId !== aiRunRef.current) return
+      setAiAnalysis({ reply: result.reply, meta: 'AI生成 · 联网', citations: result.citations })
+    } catch (error) {
+      const detail = getRemoteAiError(error)
+      if (detail.cancelled || runId !== aiRunRef.current) return
+      showLocalAnalysis('本地降级')
+      setAiError({
+        message: detail.code === 'quota' ? '今日联网额度已用完，已显示本地分析' : `${detail.message}，已显示本地分析`,
+        retryable: detail.retryable,
+      })
+    } finally {
+      if (runId === aiRunRef.current) {
+        pendingAiRef.current = null
+        setIsAiAnalyzing(false)
+      }
     }
   }
 
   return (
     <ScrollView className='subsidy-page' scrollY>
-      <View className='subsidy-hero'>
-        <View><Text className='eyebrow'>补贴匹配</Text><Text className='page-title'>毕业生租房补贴线索匹配</Text><Text className='page-copy'>按城市和个人情况逐项判断满足 / 待确认 / 不满足，给出缺失条件。政策强时效，申请前请再次核对。</Text></View>
+      <View className='card subsidy-hero'>
+        <View><Text className='eyebrow'>补贴匹配</Text><Text className='page-title'>毕业生租房补贴线索匹配</Text><Text className='body-text'>按城市和个人情况逐项判断满足 / 待确认 / 不满足，给出缺失条件。政策强时效，申请前请再次核对。</Text></View>
         <View className='score-box'><Text>{hasProfile ? `${topScore} 分` : '待填写'}</Text><Text>{hasProfile ? '线索参考分' : '个人情况'}</Text><Text>{city} · {matches.length} 条</Text></View>
       </View>
 
-      <View className='panel'>
-        <Text className='panel-title'>填写基础情况</Text>
+      <View className='card panel'>
+        <Text className='section-title'>填写基础情况</Text>
         <Text className='field-label'>城市</Text>
         <Picker aria-label='选择补贴城市' range={subsidyCities} value={Math.max(0, subsidyCities.indexOf(city))} onChange={(event) => setCity(subsidyCities[Number(event.detail.value)])}>
           <View className='picker-field'>{city}<Text>⌄</Text></View>
@@ -115,11 +188,34 @@ export default function SubsidyMatcher() {
             <Text className={`match-pill ${STATUS_TONE.unsatisfied}`}>不满足 {matches.length - satisfiedCount - pendingCount}</Text>
           </View>
         ) : null}
-        {hasProfile ? <Button className='ai-task-btn' onClick={explainWithAi}>让 AI 解释匹配结果</Button> : null}
+        {hasProfile ? <Button className='ai-task-btn' disabled={isAiAnalyzing} onClick={() => explainWithAi()}>{isAiAnalyzing ? '正在分析匹配结果…' : '让 AI 解释匹配结果'}</Button> : null}
+        {isAiAnalyzing || aiAnalysis ? (
+          <View className='inline-ai-panel'>
+            <View className='inline-ai-head'><Text>AI 匹配解释</Text><Text>{isAiAnalyzing ? '分析中' : aiAnalysis?.meta}</Text></View>
+            {isAiAnalyzing ? <Text className='inline-ai-loading'>正在结合当前资料生成解释…</Text> : null}
+            {aiAnalysis ? (
+              <View className={`inline-ai-content ${!isAiExpanded && aiAnalysis.reply.length > 280 ? 'is-collapsed' : ''}`}>
+                {formatMessageBlocks(aiAnalysis.reply).map((block, index) => (
+                  <View className='inline-ai-block' key={`${block.title}-${index}`}>
+                    {block.title ? <Text className='inline-ai-title'>{block.title}</Text> : null}
+                    {block.lines.map((line, lineIndex) => <Text className='inline-ai-text' userSelect key={`${index}-${lineIndex}`}>{line}</Text>)}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {aiAnalysis?.reply?.length > 280 ? (
+              <Button className='inline-ai-toggle' aria-label={isAiExpanded ? '收起完整分析' : '查看完整分析'} onClick={() => setIsAiExpanded((value) => !value)}>
+                {isAiExpanded ? '收起完整分析' : '查看完整分析'}
+              </Button>
+            ) : null}
+            {aiError ? <View className='inline-ai-error'><Text>{aiError.message}</Text>{aiError.retryable ? <Button disabled={isAiAnalyzing} onClick={() => explainWithAi(true)}>重试联网</Button> : null}</View> : null}
+            {aiAnalysis?.citations?.length ? <Text className='inline-ai-notice'>政策资格和申报时间仍以本页官方链接及经办部门最新口径为准。</Text> : null}
+          </View>
+        ) : null}
       </View>
 
-      <View className='panel'>
-        <View className='result-head'><View><Text className='eyebrow'>官方政策</Text><Text className='panel-title'>{city}政策线索</Text></View><Text className='count'>{matches.length} 条</Text></View>
+      <View className='card panel'>
+        <View className='result-head'><View><Text className='eyebrow'>官方政策</Text><Text className='section-title'>{city}政策线索</Text></View><Text className='count'>{matches.length} 条</Text></View>
         {!matches.length ? <Text className='no-match-hint'>当前城市暂无收录线索，请前往当地人社、住建或政务服务官网查询。</Text> : null}
         {matches.map((policy) => (
           <View className='policy-card' key={`${policy.city}-${policy.policy}`}>

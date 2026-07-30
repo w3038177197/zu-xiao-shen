@@ -2,9 +2,8 @@ page {
   font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica,
     Segoe UI, Arial, Roboto, 'PingFang SC', 'miui', 'Hiragino Sans GB',
     'Microsoft Yahei', sans-serif;
-  background: #eef2ec;
-  color: #193327;
-  /* 28rpx ≈ 14 CSS px on a 750-wide Taro design canvas. */
+  background: #f6f7f6;
+  color: #1a211c;
   font-size: 28px;
   -webkit-font-smoothing: antialiased;
 }
@@ -16,25 +15,336 @@ view, text, button, input, textarea, picker, scroll-view {
 button {
   padding: 0;
   touch-action: manipulation;
-  -webkit-tap-highlight-color: rgba(18, 75, 50, 0.12);
+  -webkit-tap-highlight-color: rgba(26, 77, 58, 0.08);
 }
 
+button::after {
+  border: 0;
+}
+
+/* 通用页面容器 */
+.page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  background: #f6f7f6;
+  color: #1a211c;
+}
+
+/* 卡片 */
+.card {
+  margin: 20px 24px 0;
+  padding: 24px;
+  border: 1px solid #e1e6e2;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.card:first-child {
+  margin-top: 24px;
+}
+
+/* 标题层级 */
+.page-title {
+  display: block;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #1a211c;
+}
+
+.section-title {
+  display: block;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #1a211c;
+}
+
+.card-title {
+  display: block;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #1a211c;
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #1a4d3a;
+}
+
+.body-text {
+  display: block;
+  font-size: 28px;
+  line-height: 1.55;
+  color: #5c6a60;
+}
+
+.caption {
+  display: block;
+  font-size: 24px;
+  line-height: 1.5;
+  color: #66746b;
+}
+
+/* 按钮 */
+.btn-primary {
+  width: 100%;
+  min-height: 88px;
+  margin: 0;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 8px;
+  background: #1a4d3a;
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 88px;
+  text-align: center;
+}
+
+.btn-primary[disabled] {
+  background: #dbe3de;
+  color: #8a968d;
+}
+
+.btn-primary::after {
+  border: 0;
+}
+
+.btn-secondary {
+  width: 100%;
+  min-height: 88px;
+  margin: 0;
+  padding: 0 24px;
+  border: 1px solid #1a4d3a;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1a4d3a;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 86px;
+  text-align: center;
+}
+
+.btn-secondary[disabled] {
+  border-color: #dbe3de;
+  color: #9ca8a0;
+}
+
+.btn-secondary::after {
+  border: 0;
+}
+
+.btn-ghost {
+  min-height: 64px;
+  margin: 0;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: #1a4d3a;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 64px;
+}
+
+.btn-ghost::after {
+  border: 0;
+}
+
+.btn-danger {
+  width: 100%;
+  min-height: 88px;
+  margin: 0;
+  padding: 0 24px;
+  border: 1px solid #e8d0cb;
+  border-radius: 8px;
+  background: #fdf3f1;
+  color: #a53f32;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 86px;
+  text-align: center;
+}
+
+.btn-danger::after {
+  border: 0;
+}
+
+/* 输入框 */
+.input {
+  width: 100%;
+  min-height: 88px;
+  padding: 20px 24px;
+  border: 1px solid #e1e6e2;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1a211c;
+  font-size: 28px;
+  line-height: 1.5;
+}
+
+.input::placeholder {
+  color: #66746b;
+}
+
+/* 状态徽章 */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.status-badge-done {
+  background: #e8f5ef;
+  color: #1a4d3a;
+  border: 1px solid #c8e6d8;
+}
+
+.status-badge-pending {
+  background: #f7f9f7;
+  color: #5c6a60;
+  border: 1px solid #e1e6e2;
+}
+
+.status-badge-warning {
+  background: #fff4e0;
+  color: #b86e00;
+  border: 1px solid #f5d9a8;
+}
+
+.status-badge-error {
+  background: #fdecea;
+  color: #c9372d;
+  border: 1px solid #f5c4c0;
+}
+
+/* 风险等级 */
+.risk-high {
+  border-left: 6px solid #c9372d;
+  background: #fffbfb;
+}
+
+.risk-medium {
+  border-left: 6px solid #b86e00;
+  background: #fffdfb;
+}
+
+.risk-low {
+  border-left: 6px solid #1a4d3a;
+  background: #fafffc;
+}
+
+/* AI 任务按钮（各页面共用） */
 .ai-task-btn {
   width: 100%;
-  min-height: 84px;
-  margin: 18px 0 0;
+  min-height: 88px;
+  margin: 24px 0 0;
   border: 0;
-  border-radius: 14px;
-  background: #173d2b;
-  color: #fff;
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 84px;
+  border-radius: 8px;
+  background: #1a4d3a;
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 88px;
+  text-align: center;
 }
 
-.ai-task-btn::after { border: 0; }
+.ai-task-btn::after {
+  border: 0;
+}
 
 .ai-task-btn[disabled] {
-  background: #d8dfd8;
-  color: #78847b;
+  background: #dbe3de;
+  color: #8a968d;
+}
+
+/* 操作提示条 */
+.operation-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin: 20px 24px 0;
+  padding: 18px 20px;
+  border: 1px solid #f5c4c0;
+  border-radius: 8px;
+  background: #fffbfb;
+}
+
+.operation-notice text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #a53f32;
+  font-size: 24px;
+  line-height: 1.5;
+}
+
+.operation-notice button {
+  flex-shrink: 0;
+  min-height: 64px;
+  margin: 0;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 8px;
+  background: #a53f32;
+  color: #ffffff;
+  font-size: 24px;
+  line-height: 64px;
+}
+
+.operation-notice button::after {
+  border: 0;
+}
+
+/* 底部操作栏 */
+.sticky-actions {
+  display: flex;
+  gap: 16px;
+  margin: 20px 24px 0;
+  padding: 0 0 calc(16px + env(safe-area-inset-bottom));
+}
+
+.sticky-actions button {
+  flex: 1;
+}
+
+/* 底部说明文字 */
+.legal-note {
+  display: block;
+  margin: 32px 24px 40px;
+  color: #66746b;
+  font-size: 22px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+/* 窄屏适配 */
+@media (max-width: 340px) {
+  .card {
+    margin-left: 20px;
+    margin-right: 20px;
+    padding: 20px;
+  }
+
+  .page-title {
+    font-size: 36px;
+  }
+
+  .section-title {
+    font-size: 30px;
+  }
+
+  .sticky-actions {
+    margin-left: 20px;
+    margin-right: 20px;
+  }
 }

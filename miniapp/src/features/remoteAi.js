@@ -26,8 +26,8 @@ export const AI_TASK_PRESETS = {
     modules: ['checkin'],
   },
   evidence: {
-    label: '证据缺口检查',
-    prompt: '请结合当前退租证据包，找出最重要的证据缺口，给出可执行的补证顺序，并生成克制、清楚、可直接发送的沟通文本。',
+    label: '润色沟通说明',
+    prompt: '请结合当前退租证据包和已有沟通说明，先把话术改得更自然、更像微信里发给房东的话，再提醒最重要的证据缺口。回答要短，避免官方函件腔。',
     modules: ['evidence'],
   },
   subsidy: {
@@ -116,13 +116,24 @@ function buildEvidenceLines(context) {
     const names = group.attachmentNames?.slice(0, 4).map((item) => compact(item, 50)).join('、')
     lines.push(`${compact(group.title, 40)}：${group.attachmentCount || 0} 个附件${names ? `（${names}）` : ''}${missing ? `；待补：${missing}` : '；清单已勾选完整'}`)
   })
+  if (evidence.communicationText) lines.push(`已有沟通说明：${compact(evidence.communicationText, 260)}`)
   return lines
 }
 
 function buildSubsidyLines(context) {
   const subsidy = context?.subsidy
   if (!subsidy?.hasData) return []
-  return [`城市 ${compact(subsidy.city || '未选择', 30)}，共 ${subsidy.total || 0} 条政策线索：满足 ${subsidy.satisfied || 0}、待确认 ${subsidy.pending || 0}、不满足 ${subsidy.unsatisfied || 0}。`]
+  const lines = [`城市 ${compact(subsidy.city || '未选择', 30)}，共 ${subsidy.total || 0} 条政策线索：满足 ${subsidy.satisfied || 0}、待确认 ${subsidy.pending || 0}、不满足 ${subsidy.unsatisfied || 0}。`]
+  if (subsidy.profile) lines.push(`个人情况：${compact(subsidy.profile, 500)}`)
+  const statusLabel = { satisfied: '满足', pending: '待确认', unsatisfied: '不满足' }
+  subsidy.matches?.forEach((match) => {
+    const details = match.criteria?.filter((item) => item.status !== 'satisfied').map((item) => {
+      const reason = item.missing || item.evidence || ''
+      return `${compact(item.label, 30)}：${statusLabel[item.status] || '待确认'}${reason ? `（${compact(reason, 80)}）` : ''}`
+    }).join('；')
+    lines.push(`${compact(match.policy, 80)}：${statusLabel[match.status] || '待确认'}，参考 ${Number(match.score) || 0} 分${details ? `；${details}` : ''}。`)
+  })
+  return lines
 }
 
 export function buildRemoteContextSections(context, selectedModules) {

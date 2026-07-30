@@ -1,4 +1,6 @@
-import { legalKnowledgeItems } from './data/legal-knowledge.mjs'
+import { legalKnowledgeItems, productFlowItems } from './data/legal-knowledge.mjs'
+
+const allKnowledgeItems = [...legalKnowledgeItems, ...productFlowItems]
 
 const fallbackTokens = ['租赁合同', '押金', '维修', '租金', '格式条款']
 
@@ -19,7 +21,7 @@ function tokenizeText(text) {
     }
     return grams
   })
-  const keywordTokens = legalKnowledgeItems
+  const keywordTokens = allKnowledgeItems
     .flatMap((item) => [item.title, item.tag, item.scope, ...(item.keywords || [])])
     .filter(Boolean)
     .filter((keyword) => value.includes(normalizeText(keyword)))
@@ -87,7 +89,7 @@ export function searchKnowledge(query, limit = 5) {
   const queryTokens = tokens.length ? tokens : fallbackTokens.map(normalizeText)
   const cappedLimit = Math.max(1, Math.min(Number(limit) || 5, 12))
 
-  return legalKnowledgeItems
+  return allKnowledgeItems
     .map((item) => {
       const result = scoreKnowledgeItem(queryTokens, item)
       return {
@@ -107,11 +109,13 @@ export function evaluateKnowledgeRetrieval(cases, limit = 5) {
     const ids = items.map((item) => item.id)
     const expectedIds = testCase.expectedIds || []
     const matchedIds = expectedIds.filter((id) => ids.includes(id))
+    const topMatched = !testCase.topExpectedId || ids[0] === testCase.topExpectedId
 
     return {
       ...testCase,
-      passed: matchedIds.length === expectedIds.length,
+      passed: matchedIds.length === expectedIds.length && topMatched,
       matchedIds,
+      topMatched,
       returnedIds: ids,
       topTitle: items[0]?.title || '',
       topScore: items[0]?.score || 0,

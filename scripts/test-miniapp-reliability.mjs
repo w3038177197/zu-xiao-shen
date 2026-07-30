@@ -136,9 +136,14 @@ Taro.getFileSystemManager = () => ({
 let messageFileResult = null
 let messageFileError = null
 let clipboardText = ''
-Taro.chooseMessageFile = async () => {
-  if (messageFileError) throw messageFileError
-  return messageFileResult || { tempFiles: [] }
+Taro.chooseMessageFile = async (options = {}) => {
+  if (messageFileError) {
+    options.fail?.(messageFileError)
+    throw messageFileError
+  }
+  const result = messageFileResult || { tempFiles: [] }
+  options.success?.(result)
+  return result
 }
 Taro.getClipboardData = async () => ({ data: clipboardText })
 Taro.shareFileMessage = ({ filePath, fileName, success, fail }) => {
@@ -484,6 +489,35 @@ const checks = [
     assert.equal(privacySource.includes('scope.album'), false)
     assert.match(checkinSource, /sourceType:\s*\['camera'\]/)
     assert.match(checkinSource, /sourceType:\s*\['album'\]/)
+  }],
+  ['证据包附件选择：相册和聊天文件一次最多选择 9 个', async () => {
+    lastChooseImageArgs = null
+    await attachmentUtils.pickImagesFromAlbum(9)
+    assert.equal(lastChooseImageArgs.count, 9)
+    assert.deepEqual(lastChooseImageArgs.sourceType, ['album'])
+
+    const originalChooseMessageFile = Taro.chooseMessageFile
+    let lastChooseMessageFileArgs = null
+    try {
+      Taro.chooseMessageFile = async (options) => {
+        lastChooseMessageFileArgs = options
+        const result = { tempFiles: [{ path: 'wxfile://temp/a.pdf', name: 'a.pdf', size: 128 }] }
+        options.success?.(result)
+        return result
+      }
+      const files = await attachmentUtils.pickFilesFromChat(9)
+      assert.equal(lastChooseMessageFileArgs.count, 9)
+      assert.equal(files.length, 1)
+    } finally {
+      Taro.chooseMessageFile = originalChooseMessageFile
+    }
+
+    const fs = await import('node:fs')
+    const evidenceSource = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.jsx', import.meta.url), 'utf8')
+    assert.match(evidenceSource, /pickImagesFromAlbum\(9\)/)
+    assert.match(evidenceSource, /pickFilesFromChat\(9\)/)
+    assert.match(evidenceSource, /选择文件\/最近文件/)
+    assert.match(evidenceSource, /一次最多 9 个/)
   }],
   ['小程序使用微信官方隐私授权弹窗且声明清单完整', async () => {
     const fs = await import('node:fs')
@@ -886,6 +920,17 @@ const checks = [
     const result = sanitizeFileName(long)
     assert.ok(result.length <= 80)
     assert.ok(result.endsWith('.txt'))
+  }],
+  ['文本导出：备份 JSON 可以保留 .json 扩展名', async () => {
+    const { sanitizeFileName } = textFileExport
+    assert.equal(sanitizeFileName('租小审备份.json', '.json'), '租小审备份.json')
+    assert.equal(sanitizeFileName('租小审/备份?.json', '.json'), '租小审_备份_.json')
+
+    lastShareArgs = null
+    const result = await textFileExport.exportTextToFile('租小审备份.json', '{"ok":true}', { extension: '.json' })
+    assert.equal(result.ok, true)
+    assert.ok(result.filePath.endsWith('租小审备份.json'))
+    assert.equal(lastShareArgs.fileName, '租小审备份.json')
   }],
   ['TXT 导出：空内容禁止导出', async () => {
     const result1 = await textFileExport.exportTextToFile('空测试.txt', '')
@@ -2109,6 +2154,9 @@ const checks = [
     assert.equal(context.evidence.attachmentStats.total, 1)
     assert.equal(context.modules.evidence.status, '已整理')
     assert.equal(context.subsidy.city, '杭州')
+    assert.equal(context.subsidy.profile, '应届本科毕业生，已缴社保，在杭无房')
+    assert.ok(context.subsidy.matches.length > 0)
+    assert.ok(context.subsidy.matches[0].criteria.length > 0)
     assert.equal(context.linkedSources.length, 4)
   }],
 
@@ -2153,8 +2201,20 @@ const checks = [
     const reply = aiAssistant.buildLocalReply({ prompt: '房东要扣押金，我应该怎么办？', context })
     assert.match(reply, /本机证据包已有 1 个附件/)
     assert.match(reply, /登记押金为 3800 元/)
-    assert.match(reply, /本机资料：合同：/)
-    assert.match(reply, /当前回答由本地规则与知识库生成/)
+    assert.match(reply, /仅供参考/)
+    assert.doesNotMatch(reply, /^(?:结论|重点风险|建议动作|依据|下一步)：/m)
+    assert.ok(reply.length <= 500, '本地回答应引用真实资料但避免重复资料目录')
+  }],
+
+  ['本地知识库：Web 与小程序双源一致且覆盖新增高频主题', async () => {
+    const [{ knowledgeBaseItems: webItems }, { knowledgeBaseItems: miniappItems }] = await Promise.all([
+      import('../src/data/knowledgeBase.js'),
+      import('../miniapp/src/shared/knowledgeBase.js'),
+    ])
+    assert.deepEqual(miniappItems, webItems)
+    assert.ok(webItems.length >= 19)
+    const titles = webItems.map((item) => item.title).join('｜')
+    ;['提前解约', '转租', '房屋出售', '正常损耗', '安全健康', '杂费凭证', '通知送达'].forEach((keyword) => assert.match(titles, new RegExp(keyword)))
   }],
 
   ['本地文件治理：统计真实占用且只清理未被业务记录引用的文件', async () => {
@@ -2195,9 +2255,10 @@ const checks = [
       subsidy: { hasData: false },
     }
     const reply = aiAssistant.buildLocalReply({ prompt: '你好', context })
-    assert.match(reply, /我可以帮你检查合同/)
-    assert.match(reply, /优先使用联网 AI/)
-    assert.match(reply, /自动使用本地知识库/)
+    assert.match(reply, /我可以帮你看合同/)
+    assert.match(reply, /联网不可用时会自动用本地分析/)
+    assert.match(reply, /自动用本地分析/)
+    assert.doesNotMatch(reply, /^结论：/)
     assert.doesNotMatch(reply, /争议事实.*合同.*凭证.*照片/)
   }],
 
@@ -2227,11 +2288,42 @@ const checks = [
   ['首页与补贴：不再使用演示金额和演示身份冒充用户数据', async () => {
     const fs = await import('node:fs')
     const homeSource = fs.readFileSync(new URL('../miniapp/src/pages/index/index.jsx', import.meta.url), 'utf8')
+    const homeStyles = fs.readFileSync(new URL('../miniapp/src/pages/index/index.css', import.meta.url), 'utf8')
     const subsidySource = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.jsx', import.meta.url), 'utf8')
     assert.match(homeSource, /depositAmount:\s*''/)
     assert.match(homeSource, /填写金额后计算/)
+    assert.match(homeSource, /const review = workflow\.review/)
+    assert.match(homeSource, /if \(!review\.isCurrent\)/)
+    assert.match(homeSource, /workflow\.review\.isCurrent/)
+    assert.match(homeStyles, /\.home-page \.card\s*{[^}]*margin-left:\s*0;[^}]*margin-right:\s*0;/s)
     assert.match(subsidySource, /profile:\s*''/)
     assert.match(subsidySource, /页面不会再使用演示身份代替你/)
+  }],
+
+  ['补贴页 AI：在当前页面请求、展示和降级，不再跳转 AI 页面', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.jsx', import.meta.url), 'utf8')
+    assert.doesNotMatch(source, /openAiTask/)
+    assert.match(source, /await confirmRemoteConsent\(\)/)
+    assert.match(source, /startRemoteAiRequest\(payload, \{ force \}\)/)
+    assert.match(source, /selectedModules: \['subsidy'\]/)
+    assert.match(source, /buildLocalReply\(\{ prompt, context \}\)/)
+    assert.match(source, /AI 匹配解释/)
+    assert.match(source, /aiAnalysis\.reply\.length > 280/)
+    assert.match(source, /查看完整分析/)
+    assert.match(source, /收起完整分析/)
+    assert.match(source, /重试联网/)
+    assert.match(source, /const runId = \+\+aiRunRef\.current/)
+    assert.match(source, /if \(runId !== aiRunRef\.current\) return/)
+    const styles = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.css', import.meta.url), 'utf8')
+    assert.match(styles, /\.inline-ai-content\.is-collapsed\s*{[^}]*max-height:\s*360px;[^}]*overflow:\s*hidden;/s)
+  }],
+
+  ['验房折叠项：补充记录按钮覆盖全局满宽样式且标题保持可收缩', async () => {
+    const fs = await import('node:fs')
+    const styles = fs.readFileSync(new URL('../miniapp/src/pages/checkin/index.css', import.meta.url), 'utf8')
+    assert.match(styles, /\.inspection-head > view\s*{[^}]*flex:\s*1;[^}]*min-width:\s*0;/s)
+    assert.match(styles, /\.item-expand\s*{[^}]*width:\s*auto;[^}]*flex-shrink:\s*0;/s)
   }],
 
   ['表单可达性：证据和验房高频输入均有明确标签', async () => {
@@ -2248,16 +2340,23 @@ const checks = [
   ['深层交互体验：欢迎语不误导模式，长内容与高频按钮适合真机操作', async () => {
     const fs = await import('node:fs')
     const aiSource = fs.readFileSync(new URL('../miniapp/src/pages/ai/index.jsx', import.meta.url), 'utf8')
+    const remoteRequestSource = fs.readFileSync(new URL('../miniapp/src/utils/remoteAiRequest.js', import.meta.url), 'utf8')
     const contractSource = fs.readFileSync(new URL('../miniapp/src/pages/contract/index.jsx', import.meta.url), 'utf8')
     const appStyles = fs.readFileSync(new URL('../miniapp/src/app.css', import.meta.url), 'utf8')
     const evidenceStyles = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.css', import.meta.url), 'utf8')
-    assert.match(aiSource, /优先使用联网 AI；服务不可用时自动切换本地分析/)
+    assert.match(aiSource, /我会优先联网回答；不可用时自动切换本地分析/)
     assert.match(aiSource, /meta: '租房助手'/)
-    assert.match(aiSource, /confirmText: '同意启用'/)
+    assert.match(remoteRequestSource, /confirmText: '同意启用'/)
+    assert.match(aiSource, /return hasRemoteConsent\(\) \? fetchRemoteAiQuota\(\) : null/)
+    assert.match(aiSource, /if \(!prompt \|\| isSending \|\| sendPreparingRef\.current\) return/)
+    assert.match(aiSource, /sendPreparingRef\.current = false/)
     assert.match(aiSource, /confirmText: '确认撤销'/)
     assert.match(contractSource, /aria-label='修订版合同草案'/)
     assert.match(appStyles, /touch-action:\s*manipulation/)
+    assert.match(appStyles, /safe-area-inset-bottom/)
+    assert.doesNotMatch(appStyles, /\.sticky-actions\s*{[^}]*position:\s*sticky/s)
     assert.match(evidenceStyles, /overscroll-behavior:\s*contain/)
+    assert.doesNotMatch(evidenceStyles, /\.action-buttons\s*{[^}]*position:\s*sticky/s)
   }],
 
   ['发布体验：合法域名校验开启且隐私接口使用微信官方授权弹窗', async () => {
@@ -2276,6 +2375,377 @@ const checks = [
     assert.match(checkinSource, /replaceCheckinStateAndRemovePhotos/)
     assert.match(checkinSource, /className='photo-preview'/)
     assert.match(localDataSource, /globalThis\.wx\?\.getFileSystemManager/)
+  }],
+
+  // ============================================================
+  // 整包备份与恢复
+  // ============================================================
+
+  ['整包备份：正常导出包含版本、appName 和数据摘要', async () => {
+    storage.set(STORAGE_KEYS.contractDraft, JSON.stringify({ text: '合同草稿内容' }))
+    storage.set(STORAGE_KEYS.reviewHistory, JSON.stringify([
+      { id: 'r1', summary: '审查1' },
+      { id: 'r2', summary: '审查2' },
+    ]))
+    storage.set(STORAGE_KEYS.aiRemoteConsent, JSON.stringify(true))
+
+    const json = localDataManager.backupLocalData()
+    const parsed = JSON.parse(json)
+
+    assert.equal(parsed.appName, '租小审')
+    assert.equal(parsed.app, '租小审')
+    assert.equal(parsed.version, 1)
+    assert.ok(parsed.exportedAt)
+    assert.ok(parsed.schema)
+    assert.ok(Array.isArray(parsed.schema.dataKeys))
+    assert.ok(parsed.schema.dataKeys.includes('contractDraft'))
+    assert.ok(parsed.schema.dataKeys.includes('reviewHistory'))
+    assert.ok(parsed.schema.authStateKeys.includes('aiRemoteConsent'))
+    // 数据存在
+    assert.ok(parsed.data.contractDraft)
+    assert.equal(parsed.data.reviewHistory.length, 2)
+    assert.equal(parsed.authStates.aiRemoteConsent, true)
+    // 摘要包含数量
+    assert.ok(parsed.summary.reviewHistory)
+    assert.equal(parsed.summary.reviewHistory.count, 2)
+    assert.ok(parsed.summary.contractDraft)
+    // notes 明确说明照片/附件不包含
+    assert.ok(Array.isArray(parsed.notes))
+    assert.ok(parsed.notes.some((n) => n.includes('照片') && n.includes('不包含')))
+    assert.ok(parsed.notes.some((n) => n.includes('不导出') && n.includes('token')))
+  }],
+
+  ['整包备份：不导出 token/openid/密钥/API key', async () => {
+    // 在 reviewHistory 中嵌入敏感字段
+    storage.set(STORAGE_KEYS.reviewHistory, JSON.stringify([
+      { id: 'r1', summary: '审查1', token: 'session-token-abc', openid: 'wx-openid-123', apiKey: 'sk-secret' },
+      { id: 'r2', summary: '审查2', secret: 'cloud-key', sessionKey: 'session-key-val' },
+    ]))
+    storage.set(STORAGE_KEYS.aiChat, JSON.stringify({ messages: [{ role: 'user', content: 'hi', accessToken: 'should-be-stripped' }] }))
+
+    const json = localDataManager.backupLocalData()
+    const parsed = JSON.parse(json)
+
+    // 所有敏感字段必须被置为 null，不能出现在导出中
+    const r1 = parsed.data.reviewHistory[0]
+    assert.equal(r1.token, null, 'token 应被清空')
+    assert.equal(r1.openid, null, 'openid 应被清空')
+    assert.equal(r1.apiKey, null, 'apiKey 应被清空')
+    assert.equal(r1.summary, '审查1', '非敏感字段应保留')
+
+    const r2 = parsed.data.reviewHistory[1]
+    assert.equal(r2.secret, null, 'secret 应被清空')
+    assert.equal(r2.sessionKey, null, 'sessionKey 应被清空')
+
+    const chat = parsed.data.aiChat
+    assert.equal(chat.messages[0].accessToken, null, 'accessToken 应被清空')
+    assert.equal(chat.messages[0].content, 'hi', '非敏感字段应保留')
+
+    // 整个 JSON 字符串中不应出现敏感值
+    assert.ok(!json.includes('session-token-abc'), 'token 值不应出现在导出')
+    assert.ok(!json.includes('wx-openid-123'), 'openid 值不应出现在导出')
+    assert.ok(!json.includes('sk-secret'), 'apiKey 值不应出现在导出')
+    assert.ok(!json.includes('cloud-key'), 'secret 值不应出现在导出')
+    assert.ok(!json.includes('session-key-val'), 'sessionKey 值不应出现在导出')
+    assert.ok(!json.includes('should-be-stripped'), 'accessToken 值不应出现在导出')
+  }],
+
+  ['整包恢复：正常恢复写入所有数据', async () => {
+    // 准备一份备份 JSON
+    const backup = JSON.stringify({
+      app: '租小审',
+      appName: '租小审',
+      version: 1,
+      exportedAt: '2026-07-01T00:00:00.000Z',
+      schema: { dataKeys: ['contractDraft', 'reviewHistory'], authStateKeys: ['aiRemoteConsent'] },
+      data: {
+        contractDraft: { text: '恢复的合同草稿' },
+        reviewHistory: [{ id: 'r1', summary: '恢复的审查1' }],
+      },
+      authStates: { aiRemoteConsent: true },
+      summary: {},
+      notes: [],
+    })
+
+    // 先清空 storage 确保干净起点
+    storage.clear()
+
+    const result = await localDataManager.restoreLocalData(backup)
+    assert.equal(result.ok, true, `恢复应成功，error: ${result.error}`)
+    assert.ok(result.restoredKeys.includes('contractDraft'))
+    assert.ok(result.restoredKeys.includes('reviewHistory'))
+    assert.ok(result.restoredKeys.includes('aiRemoteConsent'))
+    assert.equal(result.rolledBack, false)
+
+    // 验证写入内容
+    const draft = JSON.parse(storage.get(STORAGE_KEYS.contractDraft))
+    assert.equal(draft.text, '恢复的合同草稿')
+    const history = JSON.parse(storage.get(STORAGE_KEYS.reviewHistory))
+    assert.equal(history.length, 1)
+    assert.equal(history[0].id, 'r1')
+    const consent = JSON.parse(storage.get(STORAGE_KEYS.aiRemoteConsent))
+    assert.equal(consent, true)
+  }],
+
+  ['整包恢复：损坏 JSON 拒绝恢复且不修改现有数据', async () => {
+    storage.set(STORAGE_KEYS.contractDraft, JSON.stringify({ text: '原有草稿' }))
+    const originalDraft = storage.get(STORAGE_KEYS.contractDraft)
+
+    const brokenJson = '{not valid json,,,}'
+    const result = await localDataManager.restoreLocalData(brokenJson)
+    assert.equal(result.ok, false)
+    assert.ok(result.error.includes('JSON') || result.error.includes('解析'))
+    assert.equal(result.restoredKeys.length, 0)
+    // 现有数据未被修改
+    assert.equal(storage.get(STORAGE_KEYS.contractDraft), originalDraft)
+  }],
+
+  ['整包恢复：不支持版本拒绝或明确提示', async () => {
+    // 版本过低
+    const tooOld = JSON.stringify({
+      app: '租小审', appName: '租小审', version: 0,
+      data: { contractDraft: { text: 'old' } }, authStates: {}, summary: {}, notes: [],
+    })
+    const resultOld = await localDataManager.restoreLocalData(tooOld)
+    assert.equal(resultOld.ok, false)
+    assert.ok(resultOld.error.includes('不支持') || resultOld.error.includes('版本'))
+
+    // 版本过高
+    const tooNew = JSON.stringify({
+      app: '租小审', appName: '租小审', version: 999,
+      data: { contractDraft: { text: 'new' } }, authStates: {}, summary: {}, notes: [],
+    })
+    const resultNew = await localDataManager.restoreLocalData(tooNew)
+    assert.equal(resultNew.ok, false)
+    assert.ok(resultNew.error.includes('版本') || resultNew.error.includes('升级'))
+  }],
+
+  ['整包恢复：部分写入失败时回滚到 prevState', async () => {
+    // 准备原有数据
+    storage.set(STORAGE_KEYS.contractDraft, JSON.stringify({ text: '原有草稿' }))
+    storage.set(STORAGE_KEYS.reviewHistory, JSON.stringify([{ id: 'old1', summary: '原有审查' }]))
+    const originalDraft = storage.get(STORAGE_KEYS.contractDraft)
+    const originalHistory = storage.get(STORAGE_KEYS.reviewHistory)
+
+    // 让 setStorageSync 在写入 reviewHistory 时抛错
+    const originalSet = Taro.setStorageSync
+    let callCount = 0
+    Taro.setStorageSync = (key, value) => {
+      callCount += 1
+      if (key === STORAGE_KEYS.reviewHistory) {
+        throw new Error('Storage 写入失败：空间不足')
+      }
+      storage.set(key, value)
+    }
+
+    try {
+      const backup = JSON.stringify({
+        app: '租小审', appName: '租小审', version: 1,
+        exportedAt: '2026-07-01T00:00:00.000Z',
+        schema: { dataKeys: ['contractDraft', 'reviewHistory'], authStateKeys: ['aiRemoteConsent'] },
+        data: {
+          contractDraft: { text: '新草稿（应被回滚）' },
+          reviewHistory: [{ id: 'new1', summary: '新审查（写入失败）' }],
+        },
+        authStates: { aiRemoteConsent: true },
+        summary: {}, notes: [],
+      })
+
+      const result = await localDataManager.restoreLocalData(backup)
+      assert.equal(result.ok, false)
+      assert.equal(result.rolledBack, true)
+      assert.ok(result.error.includes('回滚') || result.error.includes('失败'))
+
+      // 回滚后原有数据应保持不变
+      assert.equal(storage.get(STORAGE_KEYS.contractDraft), originalDraft, 'contractDraft 应回滚到原值')
+      assert.equal(storage.get(STORAGE_KEYS.reviewHistory), originalHistory, 'reviewHistory 应回滚到原值')
+    } finally {
+      Taro.setStorageSync = originalSet
+    }
+  }],
+
+  ['整包恢复：重复导入同一备份不产生重复记录', async () => {
+    storage.clear()
+
+    const backup = JSON.stringify({
+      app: '租小审', appName: '租小审', version: 1,
+      exportedAt: '2026-07-01T00:00:00.000Z',
+      schema: { dataKeys: ['contractDraft', 'reviewHistory'], authStateKeys: ['aiRemoteConsent'] },
+      data: {
+        reviewHistory: [
+          { id: 'r1', summary: '审查1' },
+          { id: 'r2', summary: '审查2' },
+        ],
+      },
+      authStates: {},
+      summary: {}, notes: [],
+    })
+
+    // 第一次导入
+    const r1 = await localDataManager.restoreLocalData(backup)
+    assert.equal(r1.ok, true)
+    const history1 = JSON.parse(storage.get(STORAGE_KEYS.reviewHistory))
+    assert.equal(history1.length, 2, '第一次导入应有 2 条')
+
+    // 第二次导入同一备份
+    const r2 = await localDataManager.restoreLocalData(backup)
+    assert.equal(r2.ok, true)
+    const history2 = JSON.parse(storage.get(STORAGE_KEYS.reviewHistory))
+    assert.equal(history2.length, 2, '重复导入不应产生重复记录')
+    // id 不重复
+    const ids = history2.map((h) => h.id).sort()
+    assert.deepEqual(ids, ['r1', 'r2'])
+  }],
+
+  ['整包恢复：缺失本地照片/附件时不崩溃并给出提示', async () => {
+    storage.clear()
+    savedFiles.clear()
+
+    // 备份中引用了一个 wxfile:// 路径，但本机 savedFiles 为空
+    const backup = JSON.stringify({
+      app: '租小审', appName: '租小审', version: 1,
+      exportedAt: '2026-07-01T00:00:00.000Z',
+      schema: { dataKeys: ['checkinInspection'], authStateKeys: ['aiRemoteConsent'] },
+      data: {
+        checkinInspection: {
+          rooms: [
+            { name: '客厅', photos: ['wxfile://saved/missing_photo_1.jpg'] },
+          ],
+          evidenceFiles: ['wxfile://saved/missing_attachment.pdf'],
+        },
+      },
+      authStates: {},
+      summary: {}, notes: [],
+    })
+
+    const result = await localDataManager.restoreLocalData(backup)
+    // 恢复应成功，但应报告缺失文件
+    assert.equal(result.ok, true, '缺失文件不应导致恢复失败')
+    assert.ok(result.missingFiles.length > 0, '应报告缺失文件')
+    assert.ok(result.missingFiles.includes('wxfile://saved/missing_photo_1.jpg'))
+    assert.ok(result.missingFiles.includes('wxfile://saved/missing_attachment.pdf'))
+
+    // 数据本身应已写入（引用信息保留，不崩溃）
+    const checkin = JSON.parse(storage.get(STORAGE_KEYS.checkinInspection))
+    assert.equal(checkin.rooms[0].photos[0], 'wxfile://saved/missing_photo_1.jpg')
+  }],
+
+  ['整包恢复：parseBackupSummary 返回导入前摘要', async () => {
+    const backup = JSON.stringify({
+      app: '租小审', appName: '租小审', version: 1,
+      exportedAt: '2026-07-15T10:30:00.000Z',
+      schema: { dataKeys: ['contractDraft', 'reviewHistory'], authStateKeys: ['aiRemoteConsent'] },
+      data: {
+        contractDraft: { text: '草稿' },
+        reviewHistory: [{ id: 'r1' }, { id: 'r2' }, { id: 'r3' }],
+      },
+      authStates: { aiRemoteConsent: true },
+      summary: {}, notes: ['note1'],
+    })
+
+    const summary = localDataManager.parseBackupSummary(backup)
+    assert.equal(summary.ok, true)
+    assert.equal(summary.version, 1)
+    assert.equal(summary.exportedAt, '2026-07-15T10:30:00.000Z')
+    assert.equal(summary.appName, '租小审')
+    assert.ok(Array.isArray(summary.summary))
+    // 摘要应包含数量
+    const histItem = summary.summary.find((i) => i.key === 'reviewHistory')
+    assert.ok(histItem)
+    assert.equal(histItem.count, 3)
+    const consentItem = summary.summary.find((i) => i.key === 'aiRemoteConsent')
+    assert.ok(consentItem)
+    assert.ok(Array.isArray(summary.notes))
+  }],
+
+  ['整包恢复：结构校验失败拒绝导入', async () => {
+    // 根对象不是对象
+    const notObject = '"just a string"'
+    const r1 = localDataManager.parseBackupSummary(notObject)
+    assert.equal(r1.ok, false)
+
+    // 缺少 version
+    const noVersion = JSON.stringify({ data: {} })
+    const r2 = localDataManager.parseBackupSummary(noVersion)
+    assert.equal(r2.ok, false)
+    assert.ok(r2.error.includes('version'))
+
+    // 过多未知 key（可能是别的应用备份）
+    const tooManyUnknown = JSON.stringify({
+      version: 1,
+      data: {
+        unknown1: 1, unknown2: 2, unknown3: 3, unknown4: 4,
+      },
+    })
+    const r3 = localDataManager.parseBackupSummary(tooManyUnknown)
+    assert.equal(r3.ok, false)
+    assert.ok(r3.error.includes('未知') || r3.error.includes('不是租小审'))
+  }],
+
+  ['整包备份与恢复：导出后清空再恢复，数据一致', async () => {
+    // 端到端：写入数据 → 导出 → 清空 → 恢复 → 验证一致
+    storage.clear()
+    storage.set(STORAGE_KEYS.contractDraft, JSON.stringify({ text: '端到端合同草稿', parties: ['张三', '李四'] }))
+    storage.set(STORAGE_KEYS.reviewHistory, JSON.stringify([
+      { id: 'e2e-1', summary: '端到端审查1', findings: ['a', 'b'] },
+      { id: 'e2e-2', summary: '端到端审查2', findings: [] },
+    ]))
+    storage.set(STORAGE_KEYS.reviewProfile, JSON.stringify({ strictMode: true }))
+    storage.set(STORAGE_KEYS.aiRemoteConsent, JSON.stringify(true))
+
+    // 导出
+    const backup = localDataManager.backupLocalData()
+    const parsedBackup = JSON.parse(backup)
+    assert.ok(parsedBackup.data.contractDraft)
+    assert.equal(parsedBackup.data.reviewHistory.length, 2)
+
+    // 清空
+    storage.clear()
+    assert.equal(storage.has(STORAGE_KEYS.contractDraft), false)
+
+    // 恢复
+    const result = await localDataManager.restoreLocalData(backup)
+    assert.equal(result.ok, true, `端到端恢复应成功: ${result.error}`)
+
+    // 验证一致
+    const draft = JSON.parse(storage.get(STORAGE_KEYS.contractDraft))
+    assert.equal(draft.text, '端到端合同草稿')
+    assert.deepEqual(draft.parties, ['张三', '李四'])
+
+    const history = JSON.parse(storage.get(STORAGE_KEYS.reviewHistory))
+    assert.equal(history.length, 2)
+    assert.equal(history[0].id, 'e2e-1')
+    assert.deepEqual(history[0].findings, ['a', 'b'])
+
+    const profile = JSON.parse(storage.get(STORAGE_KEYS.reviewProfile))
+    assert.equal(profile.strictMode, true)
+
+    const consent = JSON.parse(storage.get(STORAGE_KEYS.aiRemoteConsent))
+    assert.equal(consent, true)
+  }],
+
+  ['首页数据管理入口包含导出备份和导入备份按钮', async () => {
+    const fs = await import('node:fs')
+    const homeSource = fs.readFileSync(new URL('../miniapp/src/pages/index/index.jsx', import.meta.url), 'utf8')
+    assert.match(homeSource, /handleExportBackup/)
+    assert.match(homeSource, /handleImportBackup/)
+    assert.match(homeSource, /导出备份/)
+    assert.match(homeSource, /导入备份/)
+    // 稳定提示不只依赖 Toast
+    assert.match(homeSource, /backupMessage/)
+    assert.match(homeSource, /backup-message/)
+    assert.match(homeSource, /const result = await exportTextToFile\('租小审备份\.json', json, \{ extension: '\.json' \}\)/)
+    assert.match(homeSource, /if \(result\.ok\)/)
+    // 引用了备份/恢复函数
+    assert.match(homeSource, /backupLocalData/)
+    assert.match(homeSource, /parseBackupSummary/)
+    assert.match(homeSource, /restoreLocalData/)
+    // CSS 样式存在
+    const homeStyles = fs.readFileSync(new URL('../miniapp/src/pages/index/index.css', import.meta.url), 'utf8')
+    assert.match(homeStyles, /\.backup-message/)
+    assert.match(homeStyles, /\.backup-message-error/)
+    assert.match(homeStyles, /\.backup-message-success/)
+    assert.match(homeStyles, /\.backup-message-warning/)
   }],
 ]
 
