@@ -68,6 +68,7 @@ export default class ContractReview extends Component {
     showHistory: false,
     operationNotice: '',
     lastImportSource: '',
+    lastAnalysisFailed: false,
   }
 
   componentDidMount() {
@@ -94,7 +95,7 @@ export default class ContractReview extends Component {
   }
 
   updateContract = (contractText, extra = {}) => {
-    this.setState({ contractText, findings: [], summary: null, dimensions: [], adoptedItems: [], revisedDraft: '', activeProfile: null, ...extra })
+    this.setState({ contractText, findings: [], summary: null, dimensions: [], adoptedItems: [], revisedDraft: '', activeProfile: null, lastAnalysisFailed: false, ...extra })
     this.draftSaver.schedule(contractText)
   }
 
@@ -175,7 +176,7 @@ export default class ContractReview extends Component {
       return
     }
 
-    this.setState({ isAnalyzing: true })
+    this.setState({ isAnalyzing: true, operationNotice: '', lastAnalysisFailed: false })
     try {
       const cleanText = cleanContractTextForReview(contractText)
       const activeProfile = resolveReviewProfile(this.state.profile, cleanText)
@@ -192,6 +193,8 @@ export default class ContractReview extends Component {
         revisedDraft,
         activeProfile,
         isAnalyzing: false,
+        operationNotice: '',
+        lastAnalysisFailed: false,
         expandedIndex: 0,
       })
       // 直接传本次计算出的完整结果，不依赖 this.state（setState 异步，this.state 此时仍是旧值）
@@ -213,9 +216,18 @@ export default class ContractReview extends Component {
       Taro.showToast({ title, icon: findings.length || historyStatus !== 'saved' ? 'none' : 'success' })
     } catch (error) {
       console.error('审查失败:', error)
-      this.setState({ isAnalyzing: false })
+      this.setState({
+        isAnalyzing: false,
+        operationNotice: '本地审查失败，当前合同内容没有被修改。请重试；如果仍失败，可先导出或复制合同正文。',
+        lastAnalysisFailed: true,
+      })
       Taro.showToast({ title: '审查失败，请重试', icon: 'none' })
     }
+  }
+
+  retryAnalyze = () => {
+    if (this.state.isAnalyzing) return
+    this.handleAnalyze()
   }
 
   loadDemo = (index) => {
@@ -436,7 +448,7 @@ export default class ContractReview extends Component {
   }
 
   render() {
-    const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, isImporting, importProgress, expandedIndex, showHistory, operationNotice, lastImportSource } = this.state
+    const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, isImporting, importProgress, expandedIndex, showHistory, operationNotice, lastImportSource, lastAnalysisFailed } = this.state
     const lowCount = Math.max(0, findings.length - (summary?.highCount || 0) - (summary?.mediumCount || 0))
 
     return (
@@ -474,6 +486,7 @@ export default class ContractReview extends Component {
             <View className='operation-notice' aria-live='polite'>
               <Text>{operationNotice}</Text>
               <View className='operation-notice-actions'>
+                {lastAnalysisFailed ? <Button aria-label='重试本地审查' disabled={isAnalyzing} onClick={this.retryAnalyze}>重试审查</Button> : null}
                 {lastImportSource ? <Button aria-label='重试上次导入' disabled={isImporting} onClick={this.retryLastImport}>重试</Button> : null}
                 <Button aria-label='关闭错误提示' onClick={() => this.setState({ operationNotice: '' })}>关闭</Button>
               </View>

@@ -236,9 +236,9 @@ check('AI 提示词：服务端固定规则且带 AI 生成提示', () => {
 
 check('AI 响应：清理 Markdown 星号和标题符号', () => {
   const reply = extractAiReply({
-    choices: [{ message: { content: '**押金建议**\n* 先要明细\n# 不要口头确认' } }],
+    choices: [{ message: { content: '**押金建议**\n* 先要明细\n# 不要口头确认\n风险*提示*' } }],
   })
-  assert.equal(reply, '押金建议\n先要明细\n不要口头确认')
+  assert.equal(reply, '押金建议\n先要明细\n不要口头确认\n风险提示')
 })
 
 check('AI 寒暄：自然短回复提示且不附带无关法规', () => {

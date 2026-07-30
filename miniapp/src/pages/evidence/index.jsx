@@ -135,6 +135,12 @@ export default class EvidencePack extends Component {
     }), this.scheduleSave)
   }
 
+  showImportFailure = (error) => {
+    const message = error?.message || '导入失败，请重试'
+    this.setState({ operationNotice: message })
+    Taro.showToast({ title: message, icon: 'none' })
+  }
+
   handleAddFromAlbum = async (group) => {
     if (this.state.isAttaching) return
     this.setState({ isAttaching: true })
@@ -398,7 +404,7 @@ export default class EvidencePack extends Component {
       this.setState({ packState: next })
       Taro.showToast({ title: `已导入 ${added} 张验房照片${skipped ? `，${skipped} 张已存在` : ''}`, icon: 'none' })
     } catch (error) {
-      Taro.showToast({ title: error?.message || '导入失败，请重试', icon: 'none' })
+      this.showImportFailure(error)
     } finally {
       this.setState({ isImporting: false })
     }
@@ -428,7 +434,7 @@ export default class EvidencePack extends Component {
       this.setState({ packState: next })
       Taro.showToast({ title: '已导入验房报告', icon: 'success' })
     } catch (error) {
-      Taro.showToast({ title: error?.message || '导入失败，请重试', icon: 'none' })
+      this.showImportFailure(error)
     } finally {
       this.setState({ isImporting: false })
     }
@@ -458,7 +464,7 @@ export default class EvidencePack extends Component {
       this.setState({ packState: next })
       Taro.showToast({ title: '已导入合同正文', icon: 'success' })
     } catch (error) {
-      Taro.showToast({ title: error?.message || '导入失败，请重试', icon: 'none' })
+      this.showImportFailure(error)
     } finally {
       this.setState({ isImporting: false })
     }
@@ -488,7 +494,7 @@ export default class EvidencePack extends Component {
       this.setState({ packState: next })
       Taro.showToast({ title: `已导入 ${added} 份审查报告${skipped ? `，${skipped} 份已存在` : ''}`, icon: 'none' })
     } catch (error) {
-      Taro.showToast({ title: error?.message || '导入失败，请重试', icon: 'none' })
+      this.showImportFailure(error)
     } finally {
       this.setState({ isImporting: false })
     }

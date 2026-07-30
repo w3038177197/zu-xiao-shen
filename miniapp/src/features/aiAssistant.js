@@ -10,6 +10,7 @@ function compactText(value, maxLength) {
 function cleanAiDisplayLine(line) {
   return String(line || '')
     .replace(/\*\*/g, '')
+    .replace(/[*#]/g, '')
     .replace(/^\s*[-*•]\s+/, '')
     .replace(/^\s*\d+[.)、]\s+/, '')
     .trim()

@@ -175,6 +175,8 @@ export function extractAiReply(data) {
       .replace(/\*\*/g, '')
       .replace(/^\s*[-*•]\s+/gm, '')
       .replace(/^\s*#{1,6}\s+/gm, '')
+      .replace(/[*#]/g, '')
+      .replace(/\n{3,}/g, '\n\n')
       .trim()
     : ''
   if (!reply) {

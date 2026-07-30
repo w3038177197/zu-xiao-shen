@@ -2342,6 +2342,7 @@ const checks = [
     const aiSource = fs.readFileSync(new URL('../miniapp/src/pages/ai/index.jsx', import.meta.url), 'utf8')
     const remoteRequestSource = fs.readFileSync(new URL('../miniapp/src/utils/remoteAiRequest.js', import.meta.url), 'utf8')
     const contractSource = fs.readFileSync(new URL('../miniapp/src/pages/contract/index.jsx', import.meta.url), 'utf8')
+    const evidenceSource = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.jsx', import.meta.url), 'utf8')
     const appStyles = fs.readFileSync(new URL('../miniapp/src/app.css', import.meta.url), 'utf8')
     const evidenceStyles = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.css', import.meta.url), 'utf8')
     assert.match(aiSource, /我会优先联网回答；不可用时自动切换本地分析/)
@@ -2352,10 +2353,13 @@ const checks = [
     assert.match(aiSource, /sendPreparingRef\.current = false/)
     assert.match(aiSource, /confirmText: '确认撤销'/)
     assert.match(contractSource, /aria-label='修订版合同草案'/)
+    assert.match(contractSource, /lastAnalysisFailed/)
+    assert.match(contractSource, /retryAnalyze/)
     assert.match(appStyles, /touch-action:\s*manipulation/)
     assert.match(appStyles, /safe-area-inset-bottom/)
     assert.doesNotMatch(appStyles, /\.sticky-actions\s*{[^}]*position:\s*sticky/s)
     assert.match(evidenceStyles, /overscroll-behavior:\s*contain/)
+    assert.match(evidenceSource, /showImportFailure/)
     assert.doesNotMatch(evidenceStyles, /\.action-buttons\s*{[^}]*position:\s*sticky/s)
   }],
 
