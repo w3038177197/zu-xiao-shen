@@ -436,6 +436,7 @@ function makeProfessionalFinding({
   minHits,
   matchGroups = [],
   matchPredicate,
+  excludePredicate,
 }) {
   return {
     id,
@@ -459,6 +460,7 @@ function makeProfessionalFinding({
     minHits,
     matchGroups,
     matchPredicate,
+    excludePredicate,
   }
 }
 
@@ -480,6 +482,7 @@ function makeLeaseFinding({
   minHits,
   matchGroups,
   matchPredicate,
+  excludePredicate,
 }) {
   return makeProfessionalFinding({
     id,
@@ -499,6 +502,7 @@ function makeLeaseFinding({
     minHits,
     matchGroups,
     matchPredicate,
+    excludePredicate,
   })
 }
 
@@ -835,6 +839,7 @@ function getLeaseFindings(text) {
   const findings = []
   const matchWindows = getLeaseMatchWindows(text)
   const add = (finding) => {
+    if (typeof finding.excludePredicate === 'function' && finding.excludePredicate(text)) return
     const minHits = finding.minHits || 1
     const match = matchWindows
       .map((window) => {
@@ -1139,6 +1144,7 @@ function getLeaseFindings(text) {
     suggestion: '建议区分转租、转借、长期新增居住人和短期访客，并允许经书面同意调整居住人。',
     negotiation: '可承诺不擅自转租牟利，但应保留家庭成员、短期访客和经同意合住的空间。',
     replacement: '未经甲方书面同意，乙方不得将房屋转租、转借或用于经营性合租。乙方新增长期共同居住人的，应提前告知甲方并经书面确认；正常亲友短期探访不视为转租或严重违约。',
+    excludePredicate: (source) => source.includes('正常亲友短期探访不视为转租或严重违约'),
   }))
 
   add(makeLeaseFinding({

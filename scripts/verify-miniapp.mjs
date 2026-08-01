@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const steps = [
   ['lint', root],
+  ['test:e2e', root],
   ['test:miniapp-core', root],
   ['test:miniapp-reliability', root],
   ['test:miniapp-ai', root],
