@@ -251,7 +251,7 @@ function shareFile(filePath, fileName) {
   })
 }
 
-async function writeAndShare(fileName, bytes) {
+export async function writeAndShare(fileName, bytes) {
   const filePath = `${Taro.env.USER_DATA_PATH}/${fileName}`
   const fs = Taro.getFileSystemManager()
   try {

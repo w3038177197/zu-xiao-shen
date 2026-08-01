@@ -2319,11 +2319,33 @@ const checks = [
     assert.match(styles, /\.inline-ai-content\.is-collapsed\s*{[^}]*max-height:\s*360px;[^}]*overflow:\s*hidden;/s)
   }],
 
-  ['验房折叠项：补充记录按钮覆盖全局满宽样式且标题保持可收缩', async () => {
+  ['证据页 AI：当前页面优化沟通说明、失败保留草稿并支持采用', async () => {
     const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.jsx', import.meta.url), 'utf8')
+    const styles = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.css', import.meta.url), 'utf8')
+    assert.doesNotMatch(source, /openAiTask/)
+    assert.match(source, /await confirmRemoteConsent\(\)/)
+    assert.match(source, /selectedModules: \['evidence'\]/)
+    assert.match(source, /startRemoteAiRequest\(payload, \{ force \}\)/)
+    assert.match(source, /已保留本地草稿/)
+    assert.match(source, /applyAiCommunication/)
+    assert.match(source, /让 AI 优化这段话/)
+    assert.match(source, /重试联网/)
+    assert.match(styles, /\.evidence-ai-panel\s*{/)
+    assert.match(styles, /\.evidence-ai-line\s*{[^}]*overflow-wrap:\s*anywhere;/s)
+  }],
+
+  ['验房折叠项：未检查项默认收起且照片提示不会在真机逐字换行', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/checkin/index.jsx', import.meta.url), 'utf8')
     const styles = fs.readFileSync(new URL('../miniapp/src/pages/checkin/index.css', import.meta.url), 'utf8')
+    assert.match(source, /const expanded = expandedItemKey === itemKey/)
+    assert.match(source, /record\.status === 'unchecked' \? '开始记录' : '补充记录'/)
+    assert.match(source, /record\.status === 'unchecked' \? '未检查'/)
     assert.match(styles, /\.inspection-head > view\s*{[^}]*flex:\s*1;[^}]*min-width:\s*0;/s)
     assert.match(styles, /\.item-expand\s*{[^}]*width:\s*auto;[^}]*flex-shrink:\s*0;/s)
+    assert.match(styles, /\.storage-tools\s*{[^}]*display:\s*flex;/s)
+    assert.match(styles, /\.storage-hint\s*{[^}]*flex:\s*1;[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s)
   }],
 
   ['表单可达性：证据和验房高频输入均有明确标签', async () => {
@@ -2728,6 +2750,64 @@ const checks = [
     assert.equal(consent, true)
   }],
 
+  ['整包 Word 备份：文档可打开且包含照片、附件和恢复数据', async () => {
+    storage.clear()
+    virtualFiles.clear()
+    savedFiles.clear()
+    const photoPath = 'wxfile://saved/backup-photo.jpg'
+    const attachmentPath = 'wxfile://saved/receipt.pdf'
+    virtualFiles.set(photoPath, { data: Uint8Array.of(0xff, 0xd8, 0x01, 0x02).buffer })
+    virtualFiles.set(attachmentPath, { data: Uint8Array.of(0x25, 0x50, 0x44, 0x46).buffer })
+    storage.set(STORAGE_KEYS.checkinInspection, JSON.stringify({ living: { wall: { status: 'defect', defect: '墙面', note: '', photos: [photoPath] } } }))
+    storage.set(STORAGE_KEYS.evidencePack, JSON.stringify({
+      attachments: { contract: [{ id: 'att-1', fileName: '押金收据.pdf', fileType: 'file', localPath: attachmentPath, source: 'chat' }] },
+    }))
+
+    const archive = await localDataManager.buildLocalBackupArchive({ format: 'docx' })
+    assert.equal(archive.format, 'docx')
+    assert.equal(archive.included.length, 2)
+    const JSZip = (await import('jszip')).default
+    const zip = await JSZip.loadAsync(archive.bytes)
+    assert.ok(zip.file('租小审备份.json'))
+    assert.ok(zip.file('manifest.json'))
+    assert.ok(zip.file('word/document.xml'))
+    assert.ok(zip.file('word/media/image-1.jpg'))
+    assert.ok(zip.file('word/media/image-2.pdf') === null || zip.file('word/media/image-2.pdf') === undefined)
+    const backupJson = JSON.parse(await zip.file('租小审备份.json').async('string'))
+    assert.equal(backupJson.backupFormat, 'zip')
+    assert.match(JSON.stringify(backupJson.data), /backup-file:\/\//)
+    assert.ok((await zip.file('word/document.xml').async('string')).includes('押金收据.pdf'))
+  }],
+
+  ['整包 Word 备份：缺失本地文件进入 skipped，不阻断其他文件', async () => {
+    storage.clear()
+    virtualFiles.clear()
+    storage.set(STORAGE_KEYS.evidencePack, JSON.stringify({
+      attachments: { photos: [{ id: 'missing-1', fileName: '缺失.jpg', fileType: 'image', localPath: 'wxfile://saved/missing.jpg', source: 'album' }] },
+    }))
+    const archive = await localDataManager.buildLocalBackupArchive({ format: 'docx' })
+    assert.equal(archive.included.length, 0)
+    assert.equal(archive.skipped.length, 1)
+    assert.equal(archive.skipped[0].status, 'skipped')
+  }],
+
+  ['整包 Word 备份：导入后恢复 Storage 和本地文件引用', async () => {
+    storage.clear()
+    virtualFiles.clear()
+    savedFiles.clear()
+    const photoPath = 'wxfile://saved/restore-photo.jpg'
+    virtualFiles.set(photoPath, { data: Uint8Array.of(1, 2, 3, 4).buffer })
+    storage.set(STORAGE_KEYS.checkinInspection, JSON.stringify({ living: { wall: { status: 'good', defect: '', note: '', photos: [photoPath] } } }))
+    const archive = await localDataManager.buildLocalBackupArchive({ format: 'docx' })
+    storage.clear()
+    const restored = await localDataManager.restoreBackupArchive(archive.bytes)
+    assert.equal(restored.ok, true, restored.error)
+    assert.equal(restored.restoredFiles, 1)
+    const restoredState = JSON.parse(storage.get(STORAGE_KEYS.checkinInspection))
+    assert.match(restoredState.living.wall.photos[0], /^wxfile:\/\/saved\//)
+    assert.notEqual(restoredState.living.wall.photos[0], photoPath)
+  }],
+
   ['首页数据管理入口包含导出备份和导入备份按钮', async () => {
     const fs = await import('node:fs')
     const homeSource = fs.readFileSync(new URL('../miniapp/src/pages/index/index.jsx', import.meta.url), 'utf8')
@@ -2738,7 +2818,9 @@ const checks = [
     // 稳定提示不只依赖 Toast
     assert.match(homeSource, /backupMessage/)
     assert.match(homeSource, /backup-message/)
-    assert.match(homeSource, /const result = await exportTextToFile\('租小审备份\.json', json, \{ extension: '\.json' \}\)/)
+    assert.match(homeSource, /buildLocalBackupArchive/)
+    assert.match(homeSource, /writeAndShare\('租小审-完整备份\.docx'/)
+    assert.match(homeSource, /extension: \['docx', 'zip', 'json'\]/)
     assert.match(homeSource, /if \(result\.ok\)/)
     // 引用了备份/恢复函数
     assert.match(homeSource, /backupLocalData/)

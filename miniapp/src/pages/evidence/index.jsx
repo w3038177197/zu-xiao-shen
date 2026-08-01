@@ -28,7 +28,10 @@ import { exportTextToFile } from '../../utils/textFileExport'
 import { exportEvidencePdf, exportEvidenceZip } from '../../utils/evidencePackageExport'
 import { deleteEvidenceAttachmentTransaction } from '../../utils/evidenceAttachmentTransactions'
 import { getCapabilityFailure, showCapabilityFailure } from '../../utils/privacyAuth'
-import { openAiTask } from '../../utils/aiTaskHandoff'
+import { formatMessageBlocks, loadAllModuleContext } from '../../features/aiAssistant'
+import { AI_TASK_PRESETS, buildRemoteAiPayload } from '../../features/remoteAi'
+import { REMOTE_AI_CONFIG } from '../../constants/appConfig'
+import { confirmRemoteConsent, getRemoteAiError, startRemoteAiRequest } from '../../utils/remoteAiRequest'
 import {
   persistAttachment,
   removePersistedFile,
@@ -50,6 +53,8 @@ const STEPS = [
 
 export default class EvidencePack extends Component {
   autoSaver = createDebouncedSaver((state) => saveEvidencePackState(state))
+  pendingAiRequest = null
+  aiRunId = 0
 
   state = {
     packState: createDefaultEvidencePackState(),
@@ -63,6 +68,9 @@ export default class EvidencePack extends Component {
     textPreview: null,
     activeStep: 'basic',
     operationNotice: '',
+    isAiAnalyzing: false,
+    aiCommunication: null,
+    aiError: null,
   }
 
   componentDidMount() {
@@ -75,6 +83,8 @@ export default class EvidencePack extends Component {
   }
 
   componentWillUnmount() {
+    this.aiRunId += 1
+    this.pendingAiRequest?.cancel()
     this.autoSaver.flush()
   }
 
@@ -125,6 +135,8 @@ export default class EvidencePack extends Component {
     const text = buildEvidenceCommunication(currentTab, packState.formData)
     this.setState((prev) => ({
       packState: { ...prev.packState, communicationText: text },
+      aiCommunication: null,
+      aiError: null,
     }), this.scheduleSave)
     Taro.showToast({ title: '已生成沟通说明', icon: 'success' })
   }
@@ -133,6 +145,71 @@ export default class EvidencePack extends Component {
     this.setState((prev) => ({
       packState: { ...prev.packState, communicationText: value },
     }), this.scheduleSave)
+  }
+
+  applyAiCommunication = () => {
+    const text = String(this.state.aiCommunication?.reply || '').trim().slice(0, 2000)
+    if (!text) return
+    this.setState((prev) => ({
+      packState: { ...prev.packState, communicationText: text },
+    }), this.scheduleSave)
+    Taro.showToast({ title: '已采用 AI 版本', icon: 'success' })
+  }
+
+  handleAiEvidenceCheck = async (force = false) => {
+    if (this.state.isAiAnalyzing) return
+    const localDraft = String(this.state.packState.communicationText || '').trim()
+      || buildEvidenceCommunication(this.state.currentTab, this.state.packState.formData)
+    const nextPackState = { ...this.state.packState, communicationText: localDraft }
+    this.autoSaver.cancel()
+    if (!saveEvidencePackState(nextPackState)) {
+      this.setState({ operationNotice: '资料保存失败，请清理本地空间后重试。' })
+      return
+    }
+
+    const prompt = AI_TASK_PRESETS.evidence.prompt
+    const context = loadAllModuleContext()
+    const runId = ++this.aiRunId
+    const showLocalDraft = (meta) => {
+      if (runId !== this.aiRunId) return
+      this.setState({ aiCommunication: { reply: localDraft, meta, citations: [] } })
+    }
+
+    this.setState({ packState: nextPackState, isAiAnalyzing: true, aiCommunication: null, aiError: null })
+    if (!REMOTE_AI_CONFIG.enabled) {
+      showLocalDraft('本地草稿')
+      this.setState({ isAiAnalyzing: false })
+      return
+    }
+
+    try {
+      if (!await confirmRemoteConsent()) {
+        showLocalDraft('本地草稿')
+        return
+      }
+      if (runId !== this.aiRunId) return
+      const payload = buildRemoteAiPayload({ prompt, context, selectedModules: ['evidence'] })
+      const request = startRemoteAiRequest(payload, { force })
+      this.pendingAiRequest = request
+      const result = await request.promise
+      if (runId !== this.aiRunId) return
+      this.setState({ aiCommunication: { reply: result.reply, meta: 'AI生成 · 联网', citations: result.citations } })
+    } catch (error) {
+      const detail = getRemoteAiError(error)
+      if (detail.cancelled || runId !== this.aiRunId) return
+      showLocalDraft('本地草稿')
+      this.setState({
+        aiError: {
+          message: detail.code === 'quota' ? '今日联网额度已用完，已保留本地草稿' : `${detail.message}，已保留本地草稿`,
+          retryable: detail.retryable,
+        },
+      })
+    } finally {
+      if (runId === this.aiRunId) {
+        this.pendingAiRequest = null
+        this.setState({ isAiAnalyzing: false })
+      }
+    }
   }
 
   showImportFailure = (error) => {
@@ -512,19 +589,15 @@ export default class EvidencePack extends Component {
     }
   }
 
-  handleAiEvidenceCheck = () => {
-    this.autoSaver.flush()
-    openAiTask('evidence')
-  }
-
   render() {
-    const { packState, currentTab, currentGroup, isSaving, isAttaching, isImporting, exportingType, textPreview, activeStep, operationNotice } = this.state
+    const { packState, currentTab, currentGroup, isSaving, isAttaching, isImporting, exportingType, textPreview, activeStep, operationNotice, isAiAnalyzing, aiCommunication, aiError } = this.state
     const { formData, evidence, actions, communicationText } = packState
     const progress = this.getProgress()
     const hasAiContext = progress.totalAttachments > 0
       || actions.some(Boolean)
       || Object.values(evidence).some((items) => Array.isArray(items) && items.some(Boolean))
       || Object.values(formData).some((value) => String(value || '').trim())
+      || Boolean(String(communicationText || '').trim())
     const [activeGroupKey, activeGroupMeta] = GROUPS[currentGroup] || GROUPS[0]
     const activeGroupAttachments = getGroupAttachments(packState, activeGroupKey)
     const moduleSourceLabel = (att) => {
@@ -700,7 +773,7 @@ export default class EvidencePack extends Component {
               <Button
                 key={tab.value}
                 className={`tab-btn ${currentTab === tab.value ? 'active' : ''}`}
-                onClick={() => this.setState({ currentTab: tab.value })}
+                onClick={() => this.setState({ currentTab: tab.value, aiCommunication: null, aiError: null })}
               >
                 {tab.label}
               </Button>
@@ -712,7 +785,16 @@ export default class EvidencePack extends Component {
           {communicationText ? (
             <Textarea className='communication-text' aria-label='沟通说明' adjustPosition cursorSpacing={20} value={communicationText} maxlength={2000} onInput={(e) => this.handleCommunicationChange(e.detail.value)} />
           ) : null}
-            <Button className='ai-task-btn' disabled={!hasAiContext} onClick={this.handleAiEvidenceCheck}>{hasAiContext ? '让 AI 润色说明并查缺口' : '暂无证据资料可检查'}</Button>
+            <Button className='ai-task-btn' disabled={!hasAiContext || isAiAnalyzing} onClick={() => this.handleAiEvidenceCheck()}>{isAiAnalyzing ? '正在优化沟通说明…' : hasAiContext ? '让 AI 优化这段话' : '暂无证据资料可优化'}</Button>
+            {isAiAnalyzing || aiCommunication ? (
+              <View className='evidence-ai-panel' aria-live='polite'>
+                <View className='evidence-ai-head'><Text>优化结果</Text><Text>{isAiAnalyzing ? '生成中' : aiCommunication?.meta}</Text></View>
+                {isAiAnalyzing ? <Text className='evidence-ai-loading'>正在结合当前证据摘要生成简短话术…</Text> : null}
+                {aiCommunication ? <View className='evidence-ai-content'>{formatMessageBlocks(aiCommunication.reply).map((block, index) => <View className='evidence-ai-block' key={`${block.title}-${index}`}>{block.title ? <Text className='evidence-ai-title'>{block.title}</Text> : null}{block.lines.map((line, lineIndex) => <Text className='evidence-ai-line' userSelect key={`${index}-${lineIndex}`}>{line}</Text>)}</View>)}</View> : null}
+                {aiCommunication ? <View className='evidence-ai-actions'><Button onClick={this.applyAiCommunication}>采用这版</Button><Button onClick={() => copyText(aiCommunication.reply, 'AI 话术已复制')}>复制</Button></View> : null}
+                {aiError ? <View className='evidence-ai-error'><Text>{aiError.message}</Text>{aiError.retryable ? <Button disabled={isAiAnalyzing} onClick={() => this.handleAiEvidenceCheck(true)}>重试联网</Button> : null}</View> : null}
+              </View>
+            ) : null}
         </View>
 
         <View className='action-buttons'>

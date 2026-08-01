@@ -573,6 +573,105 @@
   line-height: 1.6;
 }
 
+.evidence-ai-panel {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid #c8e6d8;
+  border-radius: 8px;
+  background: #f7fbf8;
+}
+
+.evidence-ai-head,
+.evidence-ai-actions,
+.evidence-ai-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.evidence-ai-head {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.evidence-ai-head text:first-child {
+  color: #1a211c;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.evidence-ai-head text:last-child,
+.evidence-ai-loading {
+  color: #5c6a60;
+  font-size: 22px;
+}
+
+.evidence-ai-block + .evidence-ai-block {
+  margin-top: 12px;
+}
+
+.evidence-ai-title,
+.evidence-ai-line {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.evidence-ai-title {
+  margin-bottom: 6px;
+  color: #1a4d3a;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.evidence-ai-line {
+  margin-bottom: 8px;
+  color: #1a211c;
+  font-size: 26px;
+  line-height: 1.65;
+}
+
+.evidence-ai-actions {
+  margin-top: 14px;
+}
+
+.evidence-ai-actions button,
+.evidence-ai-error button {
+  min-height: 60px;
+  margin: 0;
+  padding: 0 18px;
+  border: 1px solid #1a4d3a;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1a4d3a;
+  font-size: 22px;
+  line-height: 58px;
+}
+
+.evidence-ai-actions button:first-child {
+  background: #1a4d3a;
+  color: #ffffff;
+}
+
+.evidence-ai-actions button::after,
+.evidence-ai-error button::after {
+  border: 0;
+}
+
+.evidence-ai-error {
+  align-items: flex-start;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f5d9a8;
+}
+
+.evidence-ai-error text {
+  flex: 1;
+  min-width: 0;
+  color: #b86e00;
+  font-size: 22px;
+  line-height: 1.5;
+}
+
 /* Bottom actions */
 .action-buttons {
   display: flex;

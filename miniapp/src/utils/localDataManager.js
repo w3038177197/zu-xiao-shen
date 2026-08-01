@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
 import { STORAGE_KEYS } from '../constants/appConfig.js'
+import { createZipArchive } from './evidencePackageExport.js'
 
 const DATA_KEYS = [
   ['contractDraft', '合同草稿'],
@@ -31,6 +32,8 @@ const CLEAR_ONLY_KEYS = [
 const BACKUP_SCHEMA_VERSION = 1
 // 支持恢复的最低版本（低于此版本需明确提示）
 const BACKUP_MIN_SUPPORTED_VERSION = 1
+const BACKUP_FORMAT = 'zip'
+const MAX_BACKUP_BYTES = 35 * 1024 * 1024
 
 // 不导出的敏感字段（出现在 data 中时会被清空）
 // 这些字段与 token/openid/密钥/API key 相关，不属于本机资料
@@ -55,6 +58,91 @@ function getSavedFileList() {
 function parseValue(value) {
   if (typeof value !== 'string') return value
   try { return JSON.parse(value) } catch { return value }
+}
+
+function toBytes(value) {
+  if (value instanceof Uint8Array) return value
+  if (value instanceof ArrayBuffer) return new Uint8Array(value)
+  if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+  return new Uint8Array()
+}
+
+function utf8Bytes(value) {
+  if (typeof TextEncoder === 'function') return new TextEncoder().encode(String(value || ''))
+  const bytes = []
+  for (const symbol of String(value || '')) {
+    const code = symbol.codePointAt(0)
+    if (code <= 0x7f) bytes.push(code)
+    else if (code <= 0x7ff) bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f))
+    else if (code <= 0xffff) bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f))
+    else bytes.push(0xf0 | (code >> 18), 0x80 | ((code >> 12) & 0x3f), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f))
+  }
+  return Uint8Array.from(bytes)
+}
+
+function readFileBytes(filePath) {
+  const fs = Taro.getFileSystemManager?.()
+  return new Promise((resolve, reject) => {
+    if (!fs?.readFile) {
+      reject(new Error('当前环境不支持读取本地文件'))
+      return
+    }
+    fs.readFile({ filePath, success: ({ data }) => resolve(toBytes(data)), fail: reject })
+  })
+}
+
+function writeFileBytes(filePath, bytes) {
+  const fs = Taro.getFileSystemManager?.()
+  return new Promise((resolve, reject) => {
+    if (!fs?.writeFile) {
+      reject(new Error('当前环境不支持写入本地文件'))
+      return
+    }
+    const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+    fs.writeFile({ filePath, data, success: resolve, fail: reject })
+  })
+}
+
+function decodeUtf8(bytes) {
+  if (typeof TextDecoder === 'function') return new TextDecoder().decode(bytes)
+  let binary = ''
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte) })
+  return decodeURIComponent(binary.split('').map((char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`).join(''))
+}
+
+function readU16(bytes, offset) { return bytes[offset] | (bytes[offset + 1] << 8) }
+function readU32(bytes, offset) { return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0 }
+
+// createZipArchive 只写入 STORE ZIP；解析器只接受同一格式，避免引入解压依赖。
+function readStoreZip(bytes) {
+  const data = toBytes(bytes)
+  let eocd = -1
+  for (let index = data.length - 22; index >= 0; index -= 1) {
+    if (readU32(data, index) === 0x06054b50) { eocd = index; break }
+  }
+  if (eocd < 0) throw new Error('ZIP 备份缺少结束目录')
+  const count = readU16(data, eocd + 10)
+  const centralOffset = readU32(data, eocd + 16)
+  const files = new Map()
+  let cursor = centralOffset
+  for (let index = 0; index < count; index += 1) {
+    if (readU32(data, cursor) !== 0x02014b50) throw new Error('ZIP 目录损坏')
+    const flags = readU16(data, cursor + 8)
+    const method = readU16(data, cursor + 10)
+    const compressedSize = readU32(data, cursor + 20)
+    const nameLength = readU16(data, cursor + 28)
+    const extraLength = readU16(data, cursor + 30)
+    const commentLength = readU16(data, cursor + 32)
+    const localOffset = readU32(data, cursor + 42)
+    if (method !== 0 || (flags & 0x08)) throw new Error('只支持未压缩 ZIP 备份')
+    const name = decodeUtf8(data.slice(cursor + 46, cursor + 46 + nameLength))
+    const localNameLength = readU16(data, localOffset + 26)
+    const localExtraLength = readU16(data, localOffset + 28)
+    const start = localOffset + 30 + localNameLength + localExtraLength
+    files.set(name, data.slice(start, start + compressedSize))
+    cursor += 46 + nameLength + extraLength + commentLength
+  }
+  return files
 }
 
 export function getLocalDataSnapshot() {
@@ -304,6 +392,253 @@ export function backupLocalData() {
       '不导出 session token、openid、云端密钥、API key 等敏感凭据。',
     ],
   }, null, 2)
+}
+
+function safeArchiveName(value, fallback = '未命名文件') {
+  const cleaned = String(value || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^\.+/, '').trim()
+  return (cleaned || fallback).slice(0, 100)
+}
+
+function isLocalPath(value) {
+  return typeof value === 'string' && /^(wxfile|ttfile|myfile|swanfile|https?:\/\/tmp\/)/i.test(value)
+}
+
+function collectPackageFiles(parsed) {
+  const files = new Map()
+  const add = (localPath, meta = {}) => {
+    if (!isLocalPath(localPath)) return
+    const current = files.get(localPath) || { localPath, fileName: '', source: 'unknown', group: '其他材料' }
+    files.set(localPath, {
+      ...current,
+      ...meta,
+      fileName: safeArchiveName(meta.fileName || current.fileName || `本地文件-${files.size + 1}.bin`),
+    })
+  }
+  const evidence = parsed?.data?.evidencePack
+  Object.entries(evidence?.attachments || {}).forEach(([group, attachments]) => {
+    ;(Array.isArray(attachments) ? attachments : []).forEach((attachment) => add(attachment?.localPath, {
+      fileName: attachment?.fileName,
+      source: attachment?.source || 'attachment',
+      group,
+    }))
+  })
+  const checkin = parsed?.data?.checkinInspection
+  Object.entries(checkin || {}).forEach(([room, items]) => {
+    Object.entries(items || {}).forEach(([item, record]) => {
+      ;(Array.isArray(record?.photos) ? record.photos : []).forEach((localPath, index) => add(localPath, {
+        fileName: `验房照片-${room}-${item}-${index + 1}.jpg`,
+        source: 'checkin',
+        group: '验房照片',
+      }))
+    })
+  })
+  const walk = (value) => {
+    if (isLocalPath(value)) add(value)
+    else if (Array.isArray(value)) value.forEach(walk)
+    else if (value && typeof value === 'object') Object.values(value).forEach(walk)
+  }
+  walk(parsed?.data)
+  return [...files.values()]
+}
+
+function replaceLocalPaths(value, pathMap, seen = new Set()) {
+  if (typeof value === 'string') return pathMap.get(value) || value
+  if (!value || typeof value !== 'object' || seen.has(value)) return value
+  seen.add(value)
+  if (Array.isArray(value)) return value.map((item) => replaceLocalPaths(item, pathMap, seen))
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceLocalPaths(item, pathMap, seen)]))
+}
+
+function replaceBackupTokens(value, tokenMap, seen = new Set()) {
+  if (typeof value === 'string') return tokenMap.get(value) || value
+  if (!value || typeof value !== 'object' || seen.has(value)) return value
+  seen.add(value)
+  if (Array.isArray(value)) return value.map((item) => replaceBackupTokens(item, tokenMap, seen))
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceBackupTokens(item, tokenMap, seen)]))
+}
+
+function escapeXml(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
+}
+
+function imageExtension(fileName) {
+  const ext = String(fileName || '').toLowerCase().split('.').pop()
+  return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext) ? ext : ''
+}
+
+function buildDocxEntries(included, skipped, bytesById, data = {}) {
+  const imageItems = included.filter((item) => imageExtension(item.fileName) && bytesById.has(item.id))
+  const paragraphs = [
+    '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>租小审完整备份</w:t></w:r></w:p>',
+    `<w:p><w:r><w:t>生成时间：${escapeXml(new Date().toLocaleString('zh-CN', { hour12: false }))}</w:t></w:r></w:p>`,
+    '<w:p><w:r><w:t>本文件同时保留可恢复的备份数据、照片和附件。请勿直接编辑压缩包内的备份文件。</w:t></w:r></w:p>',
+    '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>文件清单</w:t></w:r></w:p>',
+    ...included.map((item) => `<w:p><w:r><w:t>已包含：${escapeXml(item.fileName)}（${escapeXml(item.group || '其他材料')}，${item.size} 字节）</w:t></w:r></w:p>`),
+    ...skipped.map((item) => `<w:p><w:r><w:t>未能读取：${escapeXml(item.fileName)}（${escapeXml(item.reason || '读取失败')}）</w:t></w:r></w:p>`),
+  ]
+  const reportSections = [
+    ['合同审查数据', data.contractDraft],
+    ['审查历史', data.reviewHistory],
+    ['验房记录', data.checkinInspection],
+    ['证据包数据', data.evidencePack],
+    ['AI 对话', data.aiChat],
+    ['补贴资料', data.subsidyMatcher],
+  ]
+  reportSections.forEach(([title, value]) => {
+    if (value == null || value === '' || (Array.isArray(value) && !value.length)) return
+    let text = typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+    text = text.replace(/(?:wxfile|ttfile|myfile|swanfile):\/\/[^"\s,}\]]+|backup-file:\/\/[^"\s,}\]]+/gi, '本地文件已打包')
+    const lines = text.split(/\r?\n/).slice(0, 160)
+    paragraphs.push(`<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>${escapeXml(title)}</w:t></w:r></w:p>`)
+    lines.forEach((line) => paragraphs.push(`<w:p><w:r><w:t>${escapeXml(line || ' ')}</w:t></w:r></w:p>`))
+    if (text.split(/\r?\n/).length > lines.length) paragraphs.push('<w:p><w:r><w:t>（内容较长，完整数据保存在包内的租小审备份.json）</w:t></w:r></w:p>')
+  })
+  const relationships = []
+  const mediaEntries = []
+  imageItems.forEach((item, index) => {
+    const ext = imageExtension(item.fileName)
+    const mediaName = `image-${index + 1}.${ext}`
+    const relId = `rId${index + 1}`
+    relationships.push(`<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${mediaName}"/>`)
+    mediaEntries.push({ name: `word/media/${mediaName}`, data: bytesById.get(item.id), ext })
+    paragraphs.push(`<w:p><w:r><w:t>${escapeXml(item.fileName)}</w:t></w:r></w:p><w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="5486400" cy="3657600"/><wp:docPr id="${index + 1}" name="${escapeXml(item.fileName)}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${index + 1}" name="${escapeXml(item.fileName)}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${relId}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="5486400" cy="3657600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`)
+  })
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${paragraphs.join('')}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`
+  return {
+    entries: [
+      { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Default Extension="gif" ContentType="image/gif"/><Default Extension="webp" ContentType="image/webp"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>` },
+      { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdOfficeDocument" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
+      { name: 'word/document.xml', data: documentXml },
+      { name: 'word/_rels/document.xml.rels', data: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships.join('')}</Relationships>` },
+      ...mediaEntries,
+    ],
+  }
+}
+
+export async function buildLocalBackupArchive({ format = 'docx' } = {}) {
+  const parsed = JSON.parse(backupLocalData())
+  const files = collectPackageFiles(parsed)
+  const entries = []
+  const included = []
+  const skipped = []
+  const bytesById = new Map()
+  const pathMap = new Map()
+  let totalBytes = 0
+  const addEntry = (name, data) => {
+    const bytes = data instanceof Uint8Array ? data : utf8Bytes(data)
+    totalBytes += bytes.length
+    if (totalBytes > MAX_BACKUP_BYTES) {
+      const error = new Error('备份文件超过 35MB，请删除部分大文件后重试')
+      error.code = 'backup-too-large'
+      throw error
+    }
+    entries.push({ name, data: bytes })
+  }
+
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index]
+    const id = `f${String(index + 1).padStart(4, '0')}`
+    const archivePath = `files/${id}-${safeArchiveName(file.fileName)}`
+    try {
+      const bytes = await readFileBytes(file.localPath)
+      addEntry(archivePath, bytes)
+      bytesById.set(id, bytes)
+      pathMap.set(file.localPath, `backup-file://${id}`)
+      included.push({ id, archivePath, fileName: file.fileName, source: file.source, group: file.group, size: bytes.length, status: 'included' })
+    } catch (error) {
+      skipped.push({ id, fileName: file.fileName, source: file.source, group: file.group, size: 0, status: 'skipped', reason: error?.errMsg || error?.message || '文件读取失败' })
+    }
+  }
+
+  const transformed = {
+    ...parsed,
+    backupFormat: BACKUP_FORMAT,
+    fileManifest: [...included, ...skipped],
+    data: replaceLocalPaths(parsed.data, pathMap),
+    notes: [
+      '本整包备份包含本机可读取的合同审查、验房、证据包、AI 对话和补贴资料。',
+      '验房照片和证据附件以二进制文件放在 files/ 目录；缺失或读取失败的文件会列入 manifest.json。',
+      '不导出 session token、openid、云端密钥或 API key。',
+    ],
+  }
+  addEntry('租小审备份.json', JSON.stringify(transformed, null, 2))
+  const manifest = {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    included,
+    skipped,
+    totalFiles: files.length,
+    notice: '本压缩包由租小审在本机生成，请核对附件完整性后再保存或发送。',
+  }
+  addEntry('manifest.json', JSON.stringify(manifest, null, 2))
+  if (format === 'docx') {
+    buildDocxEntries(included, skipped, bytesById, transformed.data).entries.forEach((entry) => addEntry(entry.name, entry.data))
+  }
+  return { bytes: createZipArchive(entries), included, skipped, totalBytes, format }
+}
+
+export function parseBackupPackageSummary(bytes) {
+  let files
+  try { files = readStoreZip(bytes) } catch (error) { return { ok: false, error: error.message || 'ZIP 备份无法读取' } }
+  const jsonBytes = files.get('租小审备份.json')
+  if (!jsonBytes) return { ok: false, error: 'ZIP 备份缺少租小审备份.json' }
+  const summary = parseBackupSummary(decodeUtf8(jsonBytes))
+  if (!summary.ok) return summary
+  let manifest = { included: [], skipped: [] }
+  try {
+    const manifestBytes = files.get('manifest.json')
+    if (manifestBytes) manifest = JSON.parse(decodeUtf8(manifestBytes))
+  } catch {
+    return { ok: false, error: 'ZIP 备份的 manifest.json 损坏' }
+  }
+  return {
+    ...summary,
+    backupFormat: BACKUP_FORMAT,
+    fileCount: Array.isArray(manifest.included) ? manifest.included.length : 0,
+    skippedFileCount: Array.isArray(manifest.skipped) ? manifest.skipped.length : 0,
+  }
+}
+
+async function saveRestoredFile(id, bytes) {
+  const base = Taro.env?.USER_DATA_PATH || 'wxfile://userdata'
+  const tempPath = `${base}/.zu-xiao-shen-restore-${id}`
+  await writeFileBytes(tempPath, bytes)
+  if (typeof Taro.saveFile !== 'function') return tempPath
+  const result = await Taro.saveFile({ tempFilePath: tempPath })
+  try { Taro.getFileSystemManager?.().unlink?.({ filePath: tempPath, success: () => {}, fail: () => {} }) } catch {}
+  return result.savedFilePath || tempPath
+}
+
+export async function restoreBackupArchive(bytes) {
+  let files
+  try { files = readStoreZip(bytes) } catch (error) { return { ok: false, rolledBack: false, missingFiles: [], error: error.message || 'ZIP 备份无法读取' } }
+  const jsonBytes = files.get('租小审备份.json')
+  if (!jsonBytes) return { ok: false, rolledBack: false, missingFiles: [], error: 'ZIP 备份缺少租小审备份.json' }
+  let parsed
+  try { parsed = JSON.parse(decodeUtf8(jsonBytes)) } catch { return { ok: false, rolledBack: false, missingFiles: [], error: '备份 JSON 格式损坏' } }
+  const manifestBytes = files.get('manifest.json')
+  let manifest
+  try { manifest = manifestBytes ? JSON.parse(decodeUtf8(manifestBytes)) : { included: [], skipped: [] } } catch { return { ok: false, rolledBack: false, missingFiles: [], error: 'ZIP 备份的 manifest.json 损坏' } }
+  const tokenMap = new Map()
+  const written = []
+  try {
+    for (const item of Array.isArray(manifest.included) ? manifest.included : []) {
+      const archiveBytes = files.get(item.archivePath)
+      if (!archiveBytes) throw new Error(`备份缺少文件：${item.fileName || item.archivePath}`)
+      const localPath = await saveRestoredFile(item.id, archiveBytes)
+      written.push(localPath)
+      tokenMap.set(`backup-file://${item.id}`, localPath)
+    }
+    const restoredJson = JSON.stringify({ ...parsed, data: replaceBackupTokens(parsed.data, tokenMap) })
+    const result = await restoreLocalData(restoredJson)
+    if (!result.ok) throw new Error(result.error || '本地数据恢复失败')
+    return { ...result, backupFormat: BACKUP_FORMAT, restoredFiles: written.length, missingFiles: (manifest.skipped || []).map((item) => item.fileName || item.id) }
+  } catch (error) {
+    await Promise.all(written.map(async (filePath) => {
+      try { await Taro.removeSavedFile?.({ filePath }) } catch {}
+    }))
+    return { ok: false, rolledBack: true, missingFiles: [], error: error.message || '整包恢复失败' }
+  }
 }
 
 // 解析备份 JSON 并生成摘要（用于导入前展示）

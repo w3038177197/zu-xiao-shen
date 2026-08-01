@@ -20,6 +20,8 @@
     "test:miniapp-ai": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-miniapp-ai.mjs",
     "test:miniapp-usage": "node scripts/test-miniapp-usage-store.mjs",
     "test:contract-import": "node scripts/test-contract-import.mjs",
+    "generate:contract-review-cases": "node scripts/generate-contract-review-cases.mjs",
+    "test:contract-review-benchmark": "node scripts/test-contract-review-benchmark.mjs",
     "test:miniapp-http": "node scripts/test-miniapp-http.mjs",
     "check:miniapp-deployment": "node scripts/check-miniapp-deployment.mjs",
     "check:subsidy-policies": "node scripts/check-subsidy-policies.mjs",
@@ -27,7 +29,7 @@
     "review:subsidy-policies:online": "node scripts/review-subsidy-policies.mjs --online",
     "test:subsidy-review": "node scripts/test-subsidy-review.mjs",
     "smoke:miniapp": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/smoke-miniapp.mjs",
-    "verify:miniapp": "npm run lint && npm run test:miniapp-core && npm run test:miniapp-reliability && npm run test:miniapp-ai && npm run test:miniapp-usage && npm run test:contract-import && npm run test:miniapp-http && npm run test:subsidy-review && npm run check:subsidy-policies && npm run smoke:miniapp && npm run build && cd miniapp && npm run build:weapp"
+    "verify:miniapp": "npm run lint && npm run test:miniapp-core && npm run test:miniapp-reliability && npm run test:miniapp-ai && npm run test:miniapp-usage && npm run test:contract-import && npm run test:contract-review-benchmark && npm run test:miniapp-http && npm run test:subsidy-review && npm run check:subsidy-policies && npm run smoke:miniapp && npm run build && cd miniapp && npm run build:weapp"
   },
   "dependencies": {
     "@tesseract.js-data/chi_sim": "^1.0.0",

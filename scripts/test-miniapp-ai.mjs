@@ -10,7 +10,9 @@ import {
   buildMiniappAiMessages,
   buildMiniappCitations,
   extractAiReply,
+  getMiniappAiPerspective,
   getMiniappAiRequestFingerprint,
+  isAmbiguousMiniappPrompt,
   isCasualMiniappPrompt,
   normalizeMiniappAiRequest,
   redactSensitiveText,
@@ -226,19 +228,38 @@ check('AI 提示词：服务端固定规则且带 AI 生成提示', () => {
   assert.match(messages[0].content, /不得自称律师/)
   assert.match(messages[0].content, new RegExp(AI_GENERATED_NOTICE.slice(0, 8)))
   assert.match(messages[0].content, /默认用 2 个短自然段回答/)
-  assert.match(messages[0].content, /简单问题控制在 80 至 140 个汉字/)
-  assert.match(messages[0].content, /复杂问题不超过 260 个汉字/)
+  assert.match(messages[0].content, /简单问题控制在 60 至 120 个汉字/)
+  assert.match(messages[0].content, /复杂问题不超过 220 个汉字/)
   assert.match(messages[0].content, /不要使用 Markdown 标记/)
   assert.match(messages[0].content, /列表最多 4 项/)
+  assert.match(messages[0].content, /看不到合同全文、照片画面或附件文件/)
   assert.doesNotMatch(messages[0].content, /按信息复杂度选用“结论、重点风险、建议动作、依据、下一步”/)
   assert.match(messages.at(-1).content, /住房租赁条例/)
 })
 
 check('AI 响应：清理 Markdown 星号和标题符号', () => {
   const reply = extractAiReply({
-    choices: [{ message: { content: '**押金建议**\n* 先要明细\n# 不要口头确认\n风险*提示*' } }],
+    choices: [{ message: { content: '**押金建议**\n* 先要明细\n# 不要口头确认\n风险*提示*\n`保留`_票据_' } }],
   })
-  assert.equal(reply, '押金建议\n先要明细\n不要口头确认\n风险提示')
+  assert.equal(reply, '押金建议\n先要明细\n不要口头确认\n风险提示\n保留票据')
+})
+
+check('AI 视角：明确房东才切换，提到房东行为仍按租客回答', () => {
+  assert.equal(getMiniappAiPerspective('我是房东，租客拖欠租金怎么办？'), 'landlord')
+  assert.equal(getMiniappAiPerspective('房东要扣我押金怎么办？'), 'tenant')
+  const landlord = buildMiniappAiMessages({ prompt: '我是房东，租客逾期不搬怎么办？' })
+  assert.match(landlord[0].content, /用户明确以房东身份提问/)
+  assert.match(landlord[0].content, /不得建议换锁、断水断电或强行腾退/)
+  const tenant = buildMiniappAiMessages({ prompt: '房东要扣我押金怎么办？' })
+  assert.match(tenant[0].content, /默认用户是租客/)
+})
+
+check('AI 模糊问题：只追问一个关键信息，不猜测事实', () => {
+  assert.equal(isAmbiguousMiniappPrompt('这个怎么办？'), true)
+  assert.equal(isAmbiguousMiniappPrompt('房东要扣我押金怎么办？'), false)
+  const messages = buildMiniappAiMessages({ prompt: '这个合理吗？' })
+  assert.match(messages[0].content, /当前问题过于模糊/)
+  assert.match(messages[0].content, /只问一个最关键的问题/)
 })
 
 check('AI 寒暄：自然短回复提示且不附带无关法规', () => {
@@ -311,6 +332,7 @@ check('AI golden cases：高风险问题保留边界并携带对应依据', () =
   const landlordKnowledge = searchKnowledge(landlordPrompt, 3)
   assert.ok(landlordKnowledge.some((item) => item.id === 'landlord-notice-before-eviction'))
   const landlordMessages = buildMiniappAiMessages({ prompt: landlordPrompt, knowledge: landlordKnowledge })
+  assert.match(landlordMessages[0].content, /用户明确以房东身份提问/)
   assert.match(landlordMessages.at(-1).content, /换锁|断水断电|合理期限/)
 
   const photoPrompt = '验房有 6 张照片，你能直接判断墙面损坏程度吗？'
@@ -320,6 +342,7 @@ check('AI golden cases：高风险问题保留边界并携带对应依据', () =
   })
   assert.equal(selectMiniappAiSkill(photoPrompt)?.id, 'checkin-evidence')
   assert.match(photoMessages[0].content, /不得声称看过或识别了照片/)
+  assert.match(photoMessages[0].content, /看不到合同全文、照片画面或附件文件/)
 })
 
 check('AI 来源：只返回 HTTPS 官网链接', () => {

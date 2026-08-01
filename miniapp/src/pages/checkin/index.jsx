@@ -479,7 +479,7 @@ export default class CheckinInspection extends Component {
             {INSPECTION_ITEMS.map((item) => {
               const record = inspectionState[room.key]?.[item.key] || { status: 'unchecked', defect: '', note: '', photos: [] }
               const itemKey = `${room.key}-${item.key}`
-              const expanded = record.status === 'unchecked' || expandedItemKey === itemKey
+              const expanded = expandedItemKey === itemKey
               return (
                 <View key={item.key} className={`inspection-item ${expanded ? '' : 'collapsed'}`}>
                   <View className='inspection-head'>
@@ -487,11 +487,11 @@ export default class CheckinInspection extends Component {
                       <Text className='card-title item-name'>{item.label}</Text>
                       <Text className='caption item-desc'>{item.desc}</Text>
                     </View>
-                    {!expanded ? <Button className='btn-secondary item-expand' onClick={() => this.setState({ expandedItemKey: itemKey })}>补充记录</Button> : null}
+                    {!expanded ? <Button className='btn-secondary item-expand' onClick={() => this.setState({ expandedItemKey: itemKey })}>{record.status === 'unchecked' ? '开始记录' : '补充记录'}</Button> : null}
                   </View>
 
                   {!expanded ? (
-                    <Text className={`item-summary ${record.status}`}>{record.status === 'good' ? '良好' : '瑕疵'} · {(record.photos || []).length} 张照片{record.note ? ' · 已备注' : ''}</Text>
+                    <Text className={`item-summary ${record.status}`}>{record.status === 'unchecked' ? '未检查' : `${record.status === 'good' ? '良好' : '瑕疵'} · ${(record.photos || []).length} 张照片${record.note ? ' · 已备注' : ''}`}</Text>
                   ) : (
                     <>
                       <View className='status-buttons'>

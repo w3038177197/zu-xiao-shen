@@ -11,11 +11,15 @@ import {
   getLocalDataUsage,
   getLocalStorageInfo,
   backupLocalData,
+  buildLocalBackupArchive,
+  parseBackupPackageSummary,
   parseBackupSummary,
+  restoreBackupArchive,
   restoreLocalData,
 } from '../../utils/localDataManager'
 import { copyText } from '../../utils/copyText'
 import { exportTextToFile } from '../../utils/textFileExport'
+import { writeAndShare } from '../../utils/evidencePackageExport'
 import './index.css'
 
 const workflowSteps = [
@@ -105,14 +109,15 @@ export default function Index() {
     exportTextToFile('租小审本地数据.txt', formatLocalDataExport())
   }
 
-  // 导出整包备份 JSON
+  // 导出可用 Word 打开的整包备份，包含本机可读取的照片和附件
   const handleExportBackup = async () => {
     setBackupMessage(null)
     try {
-      const json = backupLocalData()
-      const result = await exportTextToFile('租小审备份.json', json, { extension: '.json' })
+      const archive = await buildLocalBackupArchive({ format: 'docx' })
+      const result = await writeAndShare('租小审-完整备份.docx', archive.bytes)
       if (result.ok) {
-        setBackupMessage({ type: 'success', text: '备份已导出为 JSON 文件。照片和附件文件不包含在内，只包含引用信息。' })
+        const skipped = archive.skipped?.length ? `，${archive.skipped.length} 个文件读取失败` : ''
+        setBackupMessage({ type: skipped ? 'warning' : 'success', text: `完整备份已导出，包含 ${archive.included.length} 个照片/附件${skipped}。` })
       } else if (result.reason === 'share-cancelled') {
         setBackupMessage({ type: 'warning', text: '备份文件已生成，但没有完成分享。需要保存时请重新导出。' })
       } else {
@@ -123,13 +128,13 @@ export default function Index() {
     }
   }
 
-  // 选择并导入备份文件
+  // 选择并导入 Word/ZIP 整包；兼容旧版 JSON 备份
   const handleImportBackup = () => {
     setBackupMessage(null)
     Taro.chooseMessageFile({
       count: 1,
       type: 'file',
-      extension: ['json'],
+      extension: ['docx', 'zip', 'json'],
       success: async ({ tempFiles }) => {
         const file = tempFiles?.[0]
         if (!file) {
@@ -137,15 +142,20 @@ export default function Index() {
           return
         }
         try {
-          // 读取文件内容
+          // 读取文件内容；ZIP 使用二进制，旧 JSON 使用 UTF-8
           const fs = Taro.getFileSystemManager?.()
+          let isZip = /\.(zip|docx)$/i.test(file.name || file.path || '')
           const content = await new Promise((resolve, reject) => {
-            if (fs?.readFile) fs.readFile({ filePath: file.path, encoding: 'utf8', success: (r) => resolve(r.data), fail: reject })
+            if (fs?.readFile) fs.readFile({ filePath: file.path, ...(isZip ? {} : { encoding: 'utf8' }), success: (r) => resolve(r.data), fail: reject })
             else reject(new Error('当前环境不支持读取文件'))
           })
+          const binaryHeader = content instanceof ArrayBuffer
+            ? new Uint8Array(content)
+            : ArrayBuffer.isView(content) ? new Uint8Array(content.buffer, content.byteOffset, content.byteLength) : null
+          isZip = isZip || Boolean(binaryHeader && binaryHeader[0] === 0x50 && binaryHeader[1] === 0x4b)
 
           // 先解析摘要，展示给用户确认
-          const summary = parseBackupSummary(content)
+          const summary = isZip ? parseBackupPackageSummary(content) : parseBackupSummary(typeof content === 'string' ? content : String(content))
           if (!summary.ok) {
             setBackupMessage({ type: 'error', text: summary.error || '备份文件无效' })
             return
@@ -158,19 +168,22 @@ export default function Index() {
             .join('，') || '空备份'
           const timeText = summary.exportedAt ? `备份时间：${summary.exportedAt}\n` : ''
           const versionText = `版本：v${summary.version}\n`
+          const fileText = isZip ? `\n文件：${summary.fileCount || 0} 个，缺失 ${summary.skippedFileCount || 0} 个` : '\n旧版 JSON 不包含照片和附件文件'
 
           Taro.showModal({
             title: '确认恢复备份',
-            content: `${versionText}${timeText}包含数据：${itemsText}\n\n恢复将覆盖当前本机资料，照片和附件文件不会被恢复。是否继续？`,
+            content: `${versionText}${timeText}包含数据：${itemsText}${fileText}\n\n恢复将写回当前本机资料。是否继续？`,
             success: async ({ confirm }) => {
               if (!confirm) return
-              const result = await restoreLocalData(content)
+              const result = isZip
+                ? await restoreBackupArchive(content)
+                : await restoreLocalData(typeof content === 'string' ? content : String(content))
               await refreshLocalState()
               if (result.ok) {
                 if (result.missingFiles?.length) {
                   setBackupMessage({
                     type: 'warning',
-                    text: `记录已恢复，部分本地文件需要重新添加（${result.missingFiles.length} 个文件不在本机）`,
+                    text: `记录已恢复，${result.missingFiles.length} 个照片/附件未能恢复，需要重新添加`,
                   })
                 } else {
                   setBackupMessage({ type: 'success', text: '备份已恢复，所有记录已写回本机' })
@@ -373,7 +386,7 @@ export default function Index() {
         </Button>
         {showDataDetails ? (
           <View className='data-details'>
-            <Text className='body-text'>合同草稿、审查记录、AI 对话、验房记录、证据包和补贴资料仅保存在本机。建议先导出备份，再清除数据。</Text>
+            <Text className='body-text'>完整备份会生成 Word 文件，包含合同审查、验房、证据包、AI 对话、补贴资料，以及本机可读取的照片和附件。TXT 和复制只包含文字数据。</Text>
             <View className='data-usage-row'>
               <View className='data-usage-item'>
                 <Text className='caption'>记录占用</Text>
@@ -386,7 +399,7 @@ export default function Index() {
             </View>
             {dataUsage?.unreferencedCount ? <Text className='cleanup-hint'>发现 {dataUsage.unreferencedCount} 个未引用文件，可安全清理 {formatLocalBytes(dataUsage.unreferencedBytes)}</Text> : null}
             <View className='data-actions'>
-              <Button className='btn-secondary data-button' onClick={handleExportBackup}>导出备份</Button>
+              <Button className='btn-secondary data-button' onClick={handleExportBackup}>导出备份（Word）</Button>
               <Button className='btn-secondary data-button' onClick={handleImportBackup}>导入备份</Button>
               <Button className='btn-secondary data-button' onClick={handleExportTxt}>导出数据 TXT</Button>
               <Button className='btn-secondary data-button' onClick={handleExportLocalData}>复制数据</Button>

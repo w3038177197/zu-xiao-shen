@@ -63,6 +63,28 @@
   line-height: 1.4;
 }
 
+.input-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.input-clear {
+  width: auto;
+  min-height: 56px;
+  margin: 0;
+  padding: 0 18px;
+  border: 0;
+  background: transparent;
+  color: #a53f32;
+  font-size: 24px;
+  line-height: 56px;
+}
+
+.input-clear::after {
+  border: 0;
+}
+
 /* Input */
 .contract-input {
   width: 100%;
@@ -111,6 +133,12 @@
 .import-help {
   display: block;
   margin-top: 16px;
+}
+
+.contract-size-warning {
+  display: block;
+  margin-top: 8px;
+  color: #8a5a00;
 }
 
 /* Import progress */
@@ -292,6 +320,58 @@
   color: #b86e00;
 }
 
+.audit-coverage,
+.audit-alerts {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border-radius: 8px;
+  background: #f7f9f7;
+}
+
+.audit-coverage-head,
+.audit-alert-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.audit-coverage-value {
+  color: #1a4d3a;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.audit-alerts {
+  background: #fff8ed;
+  border: 1px solid #f0d7a5;
+}
+
+.audit-alert-item {
+  padding: 10px 0;
+  border-top: 1px solid rgba(184, 110, 0, 0.16);
+}
+
+.audit-alert-title {
+  display: block;
+  margin-bottom: 4px;
+  color: #7d4d00;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.evidence-location {
+  display: block;
+  margin-top: 8px;
+  color: #68766d;
+}
+
+.feedback-button {
+  color: #5c6a60;
+  font-size: 22px;
+}
+
 /* Dimensions */
 .dimension-list {
   margin-top: 16px;
@@ -381,6 +461,25 @@
   padding: 0 20px;
   font-size: 22px;
   line-height: 54px;
+}
+
+.finding-group {
+  margin-top: 18px;
+}
+
+.finding-group:first-of-type {
+  margin-top: 0;
+}
+
+.finding-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 0 4px;
+  color: #45524a;
+  font-size: 23px;
+  font-weight: 700;
 }
 
 .finding-card {

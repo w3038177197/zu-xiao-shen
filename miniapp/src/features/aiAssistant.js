@@ -10,14 +10,14 @@ function compactText(value, maxLength) {
 function cleanAiDisplayLine(line) {
   return String(line || '')
     .replace(/\*\*/g, '')
-    .replace(/[*#]/g, '')
+    .replace(/[*#`_]/g, '')
     .replace(/^\s*[-*•]\s+/, '')
     .replace(/^\s*\d+[.)、]\s+/, '')
     .trim()
 }
 
 function isLandlordPrompt(prompt) {
-  return /我是房东|房东视角|房东怎么|房东收租|房东催告|房东验房|房东扣款|房东解约|房东合规/.test(prompt)
+  return /我是房东|作为房东|房东视角|房东怎么|房东收租|房东催告|房东验房|房东扣款|房东解约|房东合规/.test(prompt)
 }
 
 function actionAdvice(prompt) {
@@ -154,8 +154,7 @@ export function buildLocalReply({ prompt, context, contractText, findings = [], 
   const nextStep = buildNextStep(prompt, resolvedContext)
   return [
     `${conclusion} ${contextRisk}`,
-    `你可以先这样处理：${action} ${nextStep}`,
-    '仅供参考，政策和法规以官方最新口径为准。',
+    `现在先做：${action} ${nextStep} 仅供参考，具体责任或资格以合同、证据和官方最新口径为准。`,
   ].join('\n')
 }
 

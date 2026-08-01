@@ -128,8 +128,7 @@
 
 /* Storage tools */
 .storage-tools {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
   gap: 12px;
   margin: -6px 0 16px;
@@ -140,7 +139,9 @@
 }
 
 .storage-hint {
+  flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
   color: #5c6a60;
   font-size: 22px;
   line-height: 1.5;
@@ -206,6 +207,10 @@
 
 .inspection-item.collapsed {
   padding-bottom: 18px;
+}
+
+.inspection-item.collapsed .item-desc {
+  margin-bottom: 0;
 }
 
 .inspection-head {

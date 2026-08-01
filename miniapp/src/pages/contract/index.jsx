@@ -10,21 +10,21 @@ import {
   createRevisedContractDraft,
   getDimensionScores,
   getRiskSummary,
+  groupFindingsByTheme,
   mergeRevisionItems,
   resolveReviewProfile,
 } from '../../features/contractReview'
 import { createReviewHistoryEntry, saveReviewHistory } from '../../features/reviewHistory'
+import { formatReviewFeedbackExport, saveReviewFeedback } from '../../features/reviewFeedback'
 import { createDebouncedSaver } from '../../utils/debounceSave'
 import { copyText as copyToClipboard } from '../../utils/copyText'
 import {
   CONTRACT_TEXT_EXTENSIONS,
-  chooseContractImage,
   chooseWechatContractFile,
   getContractImportError,
   importClipboardContractText,
   importLocalContractFile,
   startRemoteDocumentImport,
-  startRemoteImageImport,
 } from '../../utils/contractTextImport'
 import { exportTextToFile } from '../../utils/textFileExport'
 import { openAiTask } from '../../utils/aiTaskHandoff'
@@ -247,7 +247,7 @@ export default class ContractReview extends Component {
 
   applyImportedContract = ({ text, fileName }) => {
     const apply = () => {
-      this.updateContract(text, { findings: [], summary: null, dimensions: [], adoptedItems: [], revisedDraft: '', operationNotice: '' })
+      this.updateContract(text)
       Taro.showToast({ title: '合同正文已导入', icon: 'success' })
     }
     if (!this.state.contractText.trim() || this.state.contractText.trim() === text.trim()) {
@@ -272,12 +272,11 @@ export default class ContractReview extends Component {
     Taro.showModal({ title: detail.title, content: detail.content, showCancel: false })
   }
 
-  confirmRemoteParse = async (fileName, source) => {
-    const isImage = source === 'camera' || source === 'album'
+  confirmRemoteParse = async (fileName) => {
     try {
       const result = await Taro.showModal({
-        title: isImage ? '上传识别合同？' : '上传解析合同？',
-        content: `“${String(fileName || '合同文件').slice(0, 36)}”将上传至租小审服务端，仅用于${isImage ? '文字识别' : '提取正文'}，原始文件仅在内存中处理，不写入磁盘、不持久化保存，请求处理结束后释放相关内存。解析完成后仍在本机审查。`,
+        title: '上传解析合同？',
+        content: `“${String(fileName || '合同文件').slice(0, 36)}”将上传至租小审服务端，仅用于提取正文，原始文件仅在内存中处理，不写入磁盘、不持久化保存，请求处理结束后释放相关内存。解析完成后仍在本机审查。`,
         confirmText: '上传解析',
         cancelText: '暂不上传',
       })
@@ -287,15 +286,13 @@ export default class ContractReview extends Component {
     }
   }
 
-  runRemoteImport = async (file, source) => {
-    if (!await this.confirmRemoteParse(file.name, source)) return
+  runRemoteImport = async (file) => {
+    if (!await this.confirmRemoteParse(file.name)) return
     this.setState({ importProgress: { fileName: file.name, progress: 0 } })
     const options = {
       onProgress: (progress) => this.setState({ importProgress: { fileName: file.name, progress } }),
     }
-    const task = source === 'camera' || source === 'album'
-      ? startRemoteImageImport(file, options)
-      : startRemoteDocumentImport(file, options)
+    const task = startRemoteDocumentImport(file, options)
     this.activeImportTask = task
     const result = await task.promise
     this.applyImportedContract({ ...result, fileName: result.fileName || file.name })
@@ -309,24 +306,10 @@ export default class ContractReview extends Component {
       if (CONTRACT_TEXT_EXTENSIONS.includes(file.extension)) {
         this.applyImportedContract(await importLocalContractFile(file))
       } else {
-        await this.runRemoteImport(file, 'wechat')
+        await this.runRemoteImport(file)
       }
     } catch (error) {
       this.showImportFailure(error, 'wechat')
-    } finally {
-      this.activeImportTask = null
-      this.setState({ isImporting: false, importProgress: null })
-    }
-  }
-
-  importContractImage = async (source) => {
-    if (this.state.isImporting) return
-    this.setState({ isImporting: true })
-    try {
-      const file = await chooseContractImage(source)
-      await this.runRemoteImport(file, source)
-    } catch (error) {
-      this.showImportFailure(error, source)
     } finally {
       this.activeImportTask = null
       this.setState({ isImporting: false, importProgress: null })
@@ -341,8 +324,7 @@ export default class ContractReview extends Component {
     const source = this.state.lastImportSource
     this.setState({ operationNotice: '', lastImportSource: '' })
     if (!source || this.state.isImporting) return
-    if (source === 'camera' || source === 'album') this.importContractImage(source)
-    else if (source === 'wechat') this.chooseWechatFile()
+    if (source === 'wechat') this.chooseWechatFile()
     else if (source === 'phone') this.importFromPhone()
   }
 
@@ -365,6 +347,12 @@ export default class ContractReview extends Component {
       return { adoptedItems, revisedDraft: createRevisedContractDraft(previous.contractText, adoptedItems) }
     })
     Taro.showToast({ title: '已采纳，修订稿已更新', icon: 'success' })
+  }
+
+  handleFindingFeedback = (finding, type) => {
+    const result = saveReviewFeedback({ findingId: finding.id, type, contractType: this.state.activeProfile?.contractType || this.state.profile.contractType })
+    if (result.ok) this.setState({ operationNotice: type === 'accurate' ? '已记录为识别准确' : '已记录为需要人工复核' })
+    else this.setState({ operationNotice: '反馈保存失败，请稍后重试' })
   }
 
   handleAdoptAll = () => {
@@ -408,6 +396,11 @@ export default class ContractReview extends Component {
     exportTextToFile('合同审查报告.txt', createReportText({ summary, findings, revisionItems: adoptedItems, contractText, reviewProfile: activeProfile || profile }))
   }
 
+  exportFeedback = () => {
+    const content = formatReviewFeedbackExport()
+    exportTextToFile('合同审查反馈.json', content)
+  }
+
   clearHistory = () => {
     Taro.showModal({
       title: '清空审查记录',
@@ -425,7 +418,10 @@ export default class ContractReview extends Component {
       title: '清空合同',
       content: '将清空合同正文和当前审查结果，是否继续？',
       success: ({ confirm }) => {
-        if (confirm) this.updateContract('', { expandedIndex: 0 })
+        if (!confirm) return
+        this.draftSaver.cancel()
+        this.updateContract('', { expandedIndex: 0, operationNotice: '', lastImportSource: '' })
+        this.draftSaver.flush()
       },
     })
   }
@@ -450,6 +446,7 @@ export default class ContractReview extends Component {
   render() {
     const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, isImporting, importProgress, expandedIndex, showHistory, operationNotice, lastImportSource, lastAnalysisFailed } = this.state
     const lowCount = Math.max(0, findings.length - (summary?.highCount || 0) - (summary?.mediumCount || 0))
+    const groupedFindings = groupFindingsByTheme(findings)
 
     return (
       <ScrollView scrollY enableFlex className='page contract-page'>
@@ -459,7 +456,7 @@ export default class ContractReview extends Component {
           <Text className='body-text'>标出押金、涨租、维修、入户和违约责任，把风险翻译成可直接沟通的修改建议。</Text>
           <View className='privacy-note'>
             <View className='privacy-indicator'>✓</View>
-            <Text>审查在本机完成；PDF、DOCX 与图片仅在你确认后上传提取文字</Text>
+            <Text>审查在本机完成；PDF、DOCX 仅在你确认后上传提取文字</Text>
           </View>
         </View>
 
@@ -469,7 +466,10 @@ export default class ContractReview extends Component {
               <Text className='eyebrow'>审查材料</Text>
               <Text className='section-title'>合同正文</Text>
             </View>
-            <Text className='char-count'>{contractText.length.toLocaleString()} 字</Text>
+            <View className='input-header-actions'>
+              <Text className='char-count'>{contractText.length.toLocaleString()} 字</Text>
+              {contractText ? <Button className='input-clear' aria-label='清空合同正文' disabled={isImporting || isAnalyzing} onClick={this.handleReset}>清空</Button> : null}
+            </View>
           </View>
           <Textarea
             className='contract-input'
@@ -477,11 +477,12 @@ export default class ContractReview extends Component {
             name='contractText'
             adjustPosition
             cursorSpacing={20}
-            placeholder='粘贴正文，或导入 TXT、MD、DOCX、PDF 与合同照片…'
+            placeholder='粘贴正文，或导入 TXT、MD、DOCX、PDF…'
             value={contractText}
             onInput={(event) => this.updateContract(event.detail.value)}
             maxlength={-1}
           />
+          {contractText.length > 120000 ? <Text className='caption contract-size-warning'>合同较长，本地审查可能需要更久。建议按章节分段导入或先删除重复页眉页脚，避免遗漏重点条款。</Text> : null}
           {operationNotice ? (
             <View className='operation-notice' aria-live='polite'>
               <Text>{operationNotice}</Text>
@@ -494,9 +495,7 @@ export default class ContractReview extends Component {
           ) : null}
           <View className='secondary-actions'>
             <Button className='btn-secondary' disabled={isImporting} onClick={this.importFromPhone}>手机粘贴</Button>
-            <Button className='btn-secondary' disabled={isImporting} onClick={this.chooseWechatFile}>微信文件</Button>
-            <Button className='btn-secondary' disabled={isImporting} onClick={() => this.importContractImage('camera')}>拍照识别</Button>
-            <Button className='btn-secondary' disabled={isImporting} onClick={() => this.importContractImage('album')}>相册识别</Button>
+            <Button className='btn-secondary' disabled={isImporting} onClick={this.chooseWechatFile}>选择文件/最近文件</Button>
             <Picker className='demo-picker' aria-label='选择演示合同' range={demoContracts.map((item) => item.title)} onChange={(event) => this.loadDemo(Number(event.detail.value))}>
               <Button className='btn-secondary demo-picker-button'>载入演示合同</Button>
             </Picker>
@@ -511,7 +510,7 @@ export default class ContractReview extends Component {
               <Button className='btn-danger import-cancel' onClick={this.cancelImport}>取消解析</Button>
             </View>
           ) : null}
-          <Text className='caption import-help'>TXT/MD 在本机读取；微信里的 DOCX/PDF 可确认后上传解析。手机文件可在 WPS/文件 App 复制正文，或把文件发送到微信后选择。合同照片可直接拍摄或从相册选择。</Text>
+          <Text className='caption import-help'>TXT/MD 在本机读取；微信里的 DOCX/PDF 可确认后上传解析。手机文件可在 WPS/文件 App 复制正文，或把文件发送到微信后选择。</Text>
           <View className='profile-grid'>
             {this.renderProfilePicker('合同类型', contractTypeOptions, 'contractType')}
             {this.renderProfilePicker('审查角色', partyRoleOptions, 'partyRole')}
@@ -521,7 +520,6 @@ export default class ContractReview extends Component {
 
         <View className='sticky-actions'>
           <Button className='btn-primary' onClick={this.handleAnalyze} disabled={isAnalyzing || !contractText.trim()}>{isAnalyzing ? '审查中…' : '开始本地审查'}</Button>
-          {(findings.length > 0 || contractText) ? <Button className='btn-secondary' onClick={this.handleReset}>重置</Button> : null}
         </View>
 
         {summary ? (
@@ -544,6 +542,31 @@ export default class ContractReview extends Component {
               <View className='stat-item medium'><Text>{summary.mediumCount}</Text><Text>中风险</Text></View>
               <View className='stat-item'><Text>{lowCount}</Text><Text>低风险</Text></View>
             </View>
+            {summary.coverage ? (
+              <View className='audit-coverage'>
+                <View className='audit-coverage-head'>
+                  <Text className='finding-label'>审查覆盖率</Text>
+                  <Text className='audit-coverage-value'>{summary.coverage.percent}%</Text>
+                </View>
+                <View className='dimension-bar'><View className='dimension-fill low' style={{ width: `${summary.coverage.percent}%` }} /></View>
+                <Text className='caption'>已核对 {summary.coverage.label}。覆盖率不等于合同安全结论。</Text>
+              </View>
+            ) : null}
+            {(summary.missingCount || summary.consistencyCount) ? (
+              <View className='audit-alerts'>
+                <View className='audit-alert-head'>
+                  <Text className='finding-label'>还需要人工确认</Text>
+                  <Text className='caption'>{summary.missingCount || 0} 项缺失 · {summary.consistencyCount || 0} 项矛盾</Text>
+                </View>
+                {[...(summary.missingFindings || []), ...(summary.consistencyFindings || [])].slice(0, 4).map((item) => (
+                  <View className='audit-alert-item' key={item.id}>
+                    <Text className='audit-alert-title'>{item.title}</Text>
+                    <Text className='caption'>{item.explanation}</Text>
+                  </View>
+                ))}
+                {[...(summary.missingFindings || []), ...(summary.consistencyFindings || [])].length > 4 ? <Text className='caption'>其余项目已写入导出报告。</Text> : null}
+              </View>
+            ) : null}
             {dimensions.length ? (
               <View className='dimension-list'>
                 {dimensions.map((item) => (
@@ -560,6 +583,7 @@ export default class ContractReview extends Component {
             <View className='report-export-row'>
               <Button className='btn-secondary' onClick={this.exportReportTxt}>导出审查报告 TXT</Button>
               <Button className='btn-secondary' onClick={this.copyReport}>复制审查报告</Button>
+              <Button className='btn-secondary' onClick={this.exportFeedback}>导出反馈 JSON</Button>
             </View>
             <Button className='ai-task-btn' onClick={this.handleAiReview}>让 AI 解读审查结果</Button>
           </View>
@@ -574,11 +598,17 @@ export default class ContractReview extends Component {
               </View>
               <Button className='btn-secondary btn-adopt-all' onClick={this.handleAdoptAll}>全部采纳</Button>
             </View>
-            {findings.map((finding, index) => {
-              const expanded = expandedIndex === index
-              const adopted = adoptedItems.some((item) => item.id === finding.id)
-              return (
-                <View key={finding.id || index} className={`finding-card risk-${finding.level}`}>
+            {groupedFindings.map((group) => (
+              <View className='finding-group' key={group.title}>
+                <View className='finding-group-head'>
+                  <Text>{group.title}</Text>
+                  <Text>{group.items.length} 条</Text>
+                </View>
+                {group.items.map(({ finding, index }) => {
+                  const expanded = expandedIndex === index
+                  const adopted = adoptedItems.some((item) => item.id === finding.id)
+                  return (
+                    <View key={finding.id || index} className={`finding-card risk-${finding.level}`}>
                   <Button className='finding-header' aria-expanded={expanded} onClick={() => this.setState({ expandedIndex: expanded ? -1 : index })}>
                     <View>
                       <Text className='finding-number'>{String(index + 1).padStart(2, '0')}</Text>
@@ -599,6 +629,7 @@ export default class ContractReview extends Component {
                         <View className='finding-content'>
                           <Text className='finding-label'>合同原文</Text>
                           <Text className='body-text evidence-text'>{finding.evidence}</Text>
+                          {finding.evidenceLocation ? <Text className='caption evidence-location'>{finding.evidenceLocation.clause ? `${finding.evidenceLocation.clause} · ` : ''}第${finding.evidenceLocation.line}行 · 置信度 ${Math.round((finding.confidence || 0) * 100)}%</Text> : null}
                         </View>
                       ) : null}
                       {finding.suggestion ? (
@@ -622,12 +653,16 @@ export default class ContractReview extends Component {
                       <View className='finding-actions'>
                         {finding.replacement ? <Button className='btn-primary' disabled={adopted} onClick={() => this.handleAdopt(finding)}>{adopted ? '已采纳' : '采纳并改写'}</Button> : null}
                         {finding.negotiation ? <Button className='btn-secondary' onClick={() => this.copyText(finding.negotiation, '话术已复制')}>复制话术</Button> : null}
+                        <Button className='btn-ghost feedback-button' onClick={() => this.handleFindingFeedback(finding, 'accurate')}>识别准确</Button>
+                        <Button className='btn-ghost feedback-button' onClick={() => this.handleFindingFeedback(finding, 'review')}>需要复核</Button>
                       </View>
                     </View>
                   ) : null}
-                </View>
-              )
-            })}
+                    </View>
+                  )
+                })}
+              </View>
+            ))}
           </View>
         ) : null}
 

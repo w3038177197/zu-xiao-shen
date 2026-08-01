@@ -65,9 +65,11 @@ check('首页：导出备份与导入备份入口存在', () => {
 // ---------- 2. 合同审查：空数据/已有数据 ----------
 check('合同审查：空数据引导粘贴或导入，有演示合同', () => {
   const contract = readPage('contract')
-  assert.match(contract, /粘贴正文，或导入 TXT、MD、DOCX、PDF 与合同照片/, '空数据应有粘贴/导入引导')
+  assert.match(contract, /粘贴正文，或导入 TXT、MD、DOCX、PDF/, '空数据应有粘贴/导入引导')
   assert.match(contract, /手机粘贴/, '应有手机粘贴入口')
   assert.match(contract, /载入演示合同/, '应有载入演示合同入口')
+  assert.match(contract, /清空合同正文/, '有正文时应有清空入口')
+  assert.doesNotMatch(contract, /拍照识别|相册识别/, '合同页不应提供图片 OCR 入口')
   assert.match(contract, /请先粘贴或导入合同/, '空数据提交时应提示先粘贴')
 })
 
@@ -89,8 +91,8 @@ check('入住验房：空数据引导按房间拍照，有数据时显示统计'
 check('证据包：空数据提示暂无附件，有数据时显示 AI 润色入口', () => {
   const evidence = readPage('evidence')
   assert.match(evidence, /该组暂无附件/, '空数据应提示暂无附件')
-  assert.match(evidence, /让 AI 润色说明并查缺口/, '应有 AI 润色沟通说明入口')
-  assert.match(evidence, /暂无证据资料可检查/, '空数据时 AI 检查应禁用并提示')
+  assert.match(evidence, /让 AI 优化这段话/, '应有当前页 AI 优化沟通说明入口')
+  assert.match(evidence, /暂无证据资料可优化/, '空数据时 AI 优化应禁用并提示')
 })
 
 // ---------- 5. 补贴匹配 ----------
@@ -132,7 +134,7 @@ check('数据管理：备份导入前展示摘要并请求用户确认', () => {
   const home = readPage('index')
   assert.match(home, /parseBackupSummary/, '导入前应解析摘要')
   assert.match(home, /确认恢复备份/, '导入前应弹窗确认')
-  assert.match(home, /恢复将覆盖当前本机资料/, '确认弹窗应说明覆盖风险')
+  assert.match(home, /恢复将写回当前本机资料/, '确认弹窗应说明写回范围')
 })
 
 // ---------- 8. 双源知识库一致 ----------
@@ -158,7 +160,7 @@ check('AI 本地兜底：buildLocalReply 可用且简短', async () => {
   })
   const { buildLocalReply } = await import('../miniapp/src/features/aiAssistant.js')
   const reply = buildLocalReply({ prompt: '押金不退怎么办？' })
-  assert.match(reply, /你可以先这样处理/, '本地回复应包含行动建议')
+  assert.match(reply, /现在先做/, '本地回复应包含首要行动')
   assert.ok(reply.length <= 500, '本地回复应简短')
 })
 
