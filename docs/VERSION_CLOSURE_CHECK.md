@@ -1,6 +1,6 @@
 # 租小审版本收口检查
 
-检查日期：2026-07-30
+检查日期：2026-08-02
 
 ## 当前结论
 
@@ -92,7 +92,7 @@
 
 ## 已执行验证
 
-- npm run verify:miniapp：通过。
+- npm run verify:miniapp：通过（Windows 原生链式执行脚本）。
 - 官方 npm 源 npm audit --omit=dev：found 0 vulnerabilities。
 
 ## 不要做
