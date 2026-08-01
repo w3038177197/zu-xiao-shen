@@ -1012,6 +1012,11 @@ if (existsSync(indexHtmlPath)) {
   })
 }
 
-app.listen(port, () => {
-  console.log(`Zu Xiao Shen AI proxy listening on http://localhost:${port}`)
-})
+const isMainModule = process.argv[1]
+  && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))
+
+if (isMainModule) {
+  app.listen(port, () => {
+    console.log(`Zu Xiao Shen AI proxy listening on http://localhost:${port}`)
+  })
+}
