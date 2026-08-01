@@ -762,24 +762,26 @@ function getLeaseConsistencyFindings(text) {
 
   const money = parseLeaseMoneyTerms(text)
   if (money.rentValues.length > 1 && new Set(money.rentValues).size > 1) {
+    const rentEvidence = [...text.matchAll(/(?:月租金|租金)[^\d]{0,12}\d+(?:\.\d+)?\s*元/g)].map((match) => match[0])
     findings.push(makeAuditItem({
       id: 'consistency-rent-amount',
       title: '合同内月租金金额不一致',
       level: 'high',
       explanation: `正文出现多个月租金金额：${[...new Set(money.rentValues)].join('、')} 元。`,
       suggestion: '核对正文、附件和补充条款，只保留一个经双方签字确认的金额。',
-      evidence: '月租金金额出现不同表述。',
+      evidence: [...new Set(rentEvidence)].join('；'),
       dimension: '租金',
     }))
   }
   if (money.depositValues.length > 1 && new Set(money.depositValues).size > 1) {
+    const depositEvidence = [...text.matchAll(/押金[^\d]{0,12}\d+(?:\.\d+)?\s*元/g)].map((match) => match[0])
     findings.push(makeAuditItem({
       id: 'consistency-deposit-amount',
       title: '合同内押金金额不一致',
       level: 'high',
       explanation: `正文出现多个押金金额：${[...new Set(money.depositValues)].join('、')} 元。`,
       suggestion: '核对押金金额、支付凭证和附件，明确退还基数。',
-      evidence: '押金金额出现不同表述。',
+      evidence: [...new Set(depositEvidence)].join('；'),
       dimension: '押金',
     }))
   }
@@ -795,7 +797,7 @@ function getLeaseConsistencyFindings(text) {
         level: 'medium',
         explanation: `按月租金和“押${expected}”计算，押金应约为 ${money.rent * expected} 元，正文为 ${money.deposit} 元。`,
         suggestion: '核对押金金额和押付方式，避免退租时产生争议。',
-        evidence: '押金金额与押付方式同时出现。',
+        evidence: extractEvidenceSnippet(text, ['押金', '押一付', '押二付', '押三付']) || '押金金额与押付方式同时出现。',
         dimension: '押金',
       }))
     }
@@ -1908,7 +1910,7 @@ export function getRiskSummary(findings) {
   const missingFindings = audit.missingFindings || []
   const consistencyFindings = audit.consistencyFindings || []
   const coverage = audit.coverage || null
-  const base = { highCount, mediumCount, missingFindings, consistencyFindings, missingCount: missingFindings.length, consistencyCount: consistencyFindings.length, coverage }
+  const base = { highCount, mediumCount, missingFindings, consistencyFindings, missingCount: missingFindings.length, consistencyCount: consistencyFindings.length, auditCount: missingFindings.length + consistencyFindings.length, coverage }
 
   if (score >= 70 || highCount >= 1) {
     return { score, label: '高风险', tone: 'danger', advice: '建议先修核心条款，再进入签署。', ...base }

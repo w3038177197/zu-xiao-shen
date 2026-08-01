@@ -71,12 +71,15 @@ const contradictorySummary = getRiskSummary(contradictory)
 assert.ok(contradictorySummary.consistencyFindings.some((item) => item.id === 'consistency-lease-months') === false, '正常十二个月租期不应误报月数矛盾')
 assert.ok(contradictorySummary.consistencyFindings.some((item) => item.id === 'consistency-rent-amount'), '重复月租金应被识别')
 assert.ok(contradictorySummary.consistencyFindings.some((item) => item.id === 'consistency-deposit-amount'), '重复押金应被识别')
+assert.ok(contradictorySummary.consistencyFindings.find((item) => item.id === 'consistency-rent-amount')?.evidence.includes('月租金2500元'), '月租金矛盾证据应包含实际金额')
+assert.ok(contradictorySummary.consistencyFindings.find((item) => item.id === 'consistency-deposit-amount')?.evidence.includes('押金2500元'), '押金矛盾证据应包含实际金额')
 
 const wrongDuration = analyzeContract('房屋租赁合同\n租赁时间：2026年2月1日—2026年5月31日，租期共计12个月。', profile)
 assert.ok(getRiskSummary(wrongDuration).consistencyFindings.some((item) => item.id === 'consistency-lease-months'), '起止日期与租期月数矛盾应被识别')
 
 const wrongDepositRatio = analyzeContract('房屋租赁合同\n月租金2000元，押金3000元，押二付一。', profile)
 assert.ok(getRiskSummary(wrongDepositRatio).consistencyFindings.some((item) => item.id === 'consistency-deposit-ratio'), '押金金额与押付方式矛盾应被识别')
+assert.ok(getRiskSummary(wrongDepositRatio).consistencyFindings.find((item) => item.id === 'consistency-deposit-ratio')?.evidence.includes('押金3000元'), '押付方式矛盾证据应包含押金金额')
 
 assert.ok(reviewContractOcrText('租赁期限：2026年2月1日至2027年1月31日，月租金2000元。').ok, '完整日期和金额 OCR 文本不应产生误报')
 assert.ok(reviewContractOcrText('租赁期限：日期待确认，月租金待确认。').requiresManualCheck, '关键字段缺失时 OCR 应要求人工核对')
