@@ -346,6 +346,54 @@ matchedTotal += seventyDayExpectedIds.filter((id) => seventyDayIds.has(id)).leng
 assert.equal(analyzeContract('押金争议时，无争议部分应先行返还。', profile).some((item) => item.id === 'lease-deposit-indefinite-hold'), false, '正常争议处理不得误报为无限期暂扣')
 assert.equal(analyzeContract('乙方逾期搬离时，按原日租金据实结算。', profile).some((item) => item.id === 'lease-excessive-holdover-rent'), false, '原日租金据实结算不得误报为多倍计费')
 
+const colloquialTrapContract = [
+  '月租金2000元，押金2000元。',
+  '墙面脚印、白墙轻微发黄、地板日常划痕、门窗开关磨损、洗手池水垢等正常居住痕迹，均算作租客损坏，赔付价格由房东单方制定。',
+  '退房后房东需60个工作日核对账目才可退押金，双方存在分歧可无限暂扣押金。',
+  '家电自然老化故障、水管电路小故障维修费用全部由乙方承担。',
+  '欠费每日按照欠款总额2%收取滞纳金。',
+  '欠租超5天房东可开锁收房，屋内所有私人物品视作遗弃，房东可直接清理丢弃。',
+  '物业费、公摊水电、垃圾处理费等所有杂费全部由租客承担。',
+  '合同全部条款最终解释权归甲方所有，租客签字即放弃异议权利。',
+  '周边房租涨价，房东可每月上调100-200元租金，租客拒绝即解约扣全款。',
+  '租客因换工作提前退租，押金不退、剩余房租不予返还，额外赔付1.5个月房租违约金。',
+  '房东可随时上门检修、带看房源，无需提前告知，租客阻拦一次扣300元押金。',
+  '房东卖房或抵押房屋，可随时要求租客7日内搬离，无需支付违约金，逾期收取双倍占用费。',
+  '房东逾期交房、房屋漏水无法居住或无故单方解约，仅退还剩余房租，无需支付任何违约金。',
+  '留宿超2天、饲养宠物、夜间扰民单次扣押金200元，累计三次即可解约。',
+  '纠纷只能前往房东户籍地法院起诉。',
+  '阳台、飘窗使用权归房东，租客不得存放私人物品，房东可随时取用。',
+].join('\n')
+const colloquialFindings = analyzeContract(colloquialTrapContract, profile)
+const colloquialIds = new Set(colloquialFindings.map((item) => item.id))
+const colloquialExpectedIds = [
+  'lease-early-exit-stacked-penalty',
+  'lease-unilateral-rent-adjustment',
+  'lease-daily-late-fee-5-percent',
+  'lease-lockout-forfeiture',
+  'lease-deposit-return-delay',
+  'lease-arbitrary-deposit-deduction',
+  'lease-appliance-depreciation-deduction',
+  'lease-landlord-entry-no-consent',
+  'lease-landlord-reserved-space',
+  'lease-normal-use-fixed-penalty',
+  'lease-landlord-loss-exclusion',
+  'lease-unfavorable-jurisdiction',
+  'lease-format-clause-waiver',
+  'lease-sale-terminates-tenancy',
+  'lease-abandoned-property-disposal',
+  'lease-excessive-holdover-rent',
+  'lease-deposit-indefinite-hold',
+  'lease-common-area-fee-transfer',
+]
+for (const id of colloquialExpectedIds) {
+  assert.ok(colloquialIds.has(id), `口语化陷阱合同应识别：${id}`)
+}
+expectedTotal += colloquialExpectedIds.length
+matchedTotal += colloquialExpectedIds.filter((id) => colloquialIds.has(id)).length
+assert.equal(analyzeContract('阳台和飘窗随房屋交付乙方正常使用，甲方不得随意进入。', profile).some((item) => item.id === 'lease-landlord-reserved-space'), false, '完整交付套内空间不得误报为房东保留使用权')
+assert.equal(analyzeContract('任一方需进入检修，应提前24小时通知并取得对方同意。', profile).some((item) => item.id === 'lease-landlord-entry-no-consent'), false, '预约并取得同意的检修不得误报为擅自入户')
+
 const grouped = groupFindingsByTheme(amountAudit)
 assert.deepEqual(grouped.flatMap((group) => group.items.map((item) => item.index)).sort((a, b) => a - b), amountAudit.map((_, index) => index), '主题分组不得丢失或重复风险')
 const groupedReport = createReportText({
