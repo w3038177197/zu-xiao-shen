@@ -27,6 +27,7 @@ import {
   startRemoteDocumentImport,
 } from '../../utils/contractTextImport'
 import { buildRemoteContractReviewPayload } from '../../features/remoteAi'
+import { exportRevisedContract } from '../../utils/revisedContractExport'
 import {
   getRemoteAiError,
   startRemoteContractReviewRequest,
@@ -77,6 +78,7 @@ export default class ContractReview extends Component {
     operationNotice: '',
     lastImportSource: '',
     lastAnalysisFailed: false,
+    isExportingRevised: false,
   }
 
   componentDidMount() {
@@ -436,6 +438,19 @@ export default class ContractReview extends Component {
     })
   }
 
+  handleExportRevised = async () => {
+    if (!this.state.revisedDraft || this.state.isExportingRevised) return
+    this.setState({ isExportingRevised: true })
+    try {
+      const result = await exportRevisedContract(this.state.revisedDraft)
+      if (result.ok) Taro.showToast({ title: '修订合同已导出', icon: 'success' })
+    } catch (error) {
+      Taro.showToast({ title: error?.message || '修订合同导出失败', icon: 'none' })
+    } finally {
+      this.setState({ isExportingRevised: false })
+    }
+  }
+
   copyText = (data, title = '已复制') => {
     copyToClipboard(data, title)
   }
@@ -478,7 +493,7 @@ export default class ContractReview extends Component {
   }
 
   render() {
-    const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, analysisStage, isImporting, importProgress, expandedIndex, showHistory, operationNotice, lastImportSource, lastAnalysisFailed } = this.state
+    const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, analysisStage, isImporting, importProgress, expandedIndex, showHistory, operationNotice, lastImportSource, lastAnalysisFailed, isExportingRevised } = this.state
     const lowCount = Math.max(0, findings.length - (summary?.highCount || 0) - (summary?.mediumCount || 0))
     const groupedFindings = groupFindingsByTheme(findings)
     const reviewDepthHint = reviewDepthOptions.find((item) => item.value === profile.reviewDepth)?.desc
@@ -710,7 +725,7 @@ export default class ContractReview extends Component {
             </View>
             <Textarea className='contract-input revised-draft' aria-label='修订版合同草案' value={revisedDraft} maxlength={-1} disabled />
             <View className='revised-actions'>
-              <Button className='btn-secondary' onClick={() => this.copyText(revisedDraft, '修订稿已复制')}>复制修订稿</Button>
+              <Button className='btn-secondary' disabled={isExportingRevised} onClick={this.handleExportRevised}>{isExportingRevised ? '正在生成…' : '导出修订合同'}</Button>
               <Button className='btn-primary' onClick={this.handleWriteBack}>写回编辑区</Button>
             </View>
           </View>

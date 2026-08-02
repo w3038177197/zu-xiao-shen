@@ -30,12 +30,13 @@ const [{
   hasModuleReference,
   addModuleReference,
   importModuleReferences,
-}, { createDebouncedSaver }, localDataManager, businessReportExport, subsidyData, clipboard, attachmentUtils, textFileExport, evidencePackageExport, evidenceImport, contractReview, demoContractsData, reviewHistory, workflowContext, aiAssistant, contractTextImport, privacyAuth] = await Promise.all([
+}, { createDebouncedSaver }, localDataManager, businessReportExport, revisedContractExport, subsidyData, clipboard, attachmentUtils, textFileExport, evidencePackageExport, evidenceImport, contractReview, demoContractsData, reviewHistory, workflowContext, aiAssistant, contractTextImport, privacyAuth] = await Promise.all([
   import('../miniapp/src/features/checkinInspection.js'),
   import('../miniapp/src/features/evidencePack.js'),
   import('../miniapp/src/utils/debounceSave.js'),
   import('../miniapp/src/utils/localDataManager.js'),
   import('../miniapp/src/utils/businessReportExport.js'),
+  import('../miniapp/src/utils/revisedContractExport.js'),
   import('../src/data/subsidyPolicies.js'),
   import('../miniapp/src/utils/copyText.js'),
   import('../miniapp/src/utils/evidenceAttachments.js'),
@@ -2403,6 +2404,9 @@ const checks = [
     assert.doesNotMatch(contractSource, /expandedIndex:\s*0/)
     assert.match(contractSource, /expandedIndex:\s*expanded \? -1 : index/)
     assert.match(contractSource, /operationNoticeIsError/)
+    assert.match(contractSource, /导出修订合同/)
+    assert.match(contractSource, /exportRevisedContract/)
+    assert.doesNotMatch(contractSource, /复制修订稿/)
     assert.match(contractStyles, /\.operation-notice\.is-success/)
     assert.match(appStyles, /touch-action:\s*manipulation/)
     assert.match(appStyles, /safe-area-inset-bottom/)
@@ -2862,6 +2866,33 @@ const checks = [
     assert.doesNotMatch(documentXml, /入住验房报告/)
     assert.doesNotMatch(documentXml, /证据包汇总/)
     assert.match(report.fileName, /合同分析报告.*\.docx$/)
+  }],
+
+  ['修订合同 Word：只导出规范排版的合同正文', async () => {
+    const contractText = [
+      '房屋租赁合同',
+      '甲方（出租方）：张三',
+      '乙方（承租方）：李四',
+      '第一条 房屋信息',
+      '甲方将位于贵阳市测试路1号的房屋出租给乙方居住。',
+      '第二条 租赁期限',
+      '租赁期限自2026年1月1日起至2026年12月31日止。',
+      '甲方签字：__________',
+      '乙方签字：__________',
+    ].join('\n')
+    const document = revisedContractExport.buildRevisedContractDocx({ contractText, now: new Date('2026-08-02T10:30:00.000Z') })
+    const JSZip = (await import('jszip')).default
+    const zip = await JSZip.loadAsync(document.bytes)
+    const documentXml = await zip.file('word/document.xml').async('string')
+    const styles = await zip.file('word/styles.xml').async('string')
+    assert.match(document.fileName, /^修订版房屋租赁合同-\d{8}-\d{4}\.docx$/)
+    assert.match(documentXml, /房屋租赁合同/)
+    assert.match(documentXml, /ContractTitle/)
+    assert.match(documentXml, /ContractHeading/)
+    assert.match(documentXml, /w:pgSz w:w="11906" w:h="16838"/)
+    assert.match(styles, /w:eastAsia="宋体"/)
+    assert.match(styles, /w:line="360"/)
+    assert.doesNotMatch(documentXml, /风险|审查|修改建议|租小审/)
   }],
 
   ['业务 Word 报告：组合导出包含验房分析、真实照片和证据汇总', async () => {
