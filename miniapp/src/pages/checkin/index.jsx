@@ -8,10 +8,10 @@ import {
   CHECKIN_PHOTO_MAX_EDGE,
   CHECKIN_PHOTO_QUALITY,
   checkinRoomTypes,
+  getCheckinItems,
 } from '../../constants/checkinConfig'
 import {
   ROOMS,
-  INSPECTION_ITEMS,
   createDefaultCheckinState,
   getCheckinStats,
   getCheckinDefectRows,
@@ -360,7 +360,7 @@ export default class CheckinInspection extends Component {
 
     ROOMS.forEach((room) => {
       report += `【${room.label}】\n`
-      INSPECTION_ITEMS.forEach((item) => {
+      getCheckinItems(room.key).forEach((item) => {
         const record = inspectionState[room.key]?.[item.key]
         if (!record || record.status === 'unchecked') return
         const statusText = record.status === 'good' ? '良好' : '瑕疵'
@@ -411,6 +411,7 @@ export default class CheckinInspection extends Component {
   render() {
     const { inspectionState, currentRoom, isSaving, roomType, report, expandedItemKey, operationNotice, lastPhotoSource } = this.state
     const room = ROOMS[currentRoom]
+    const inspectionItems = getCheckinItems(room.key)
     const stats = getCheckinStats(inspectionState)
 
     return (
@@ -476,7 +477,7 @@ export default class CheckinInspection extends Component {
           </View>
 
           <View className='inspection-list'>
-            {INSPECTION_ITEMS.map((item) => {
+            {inspectionItems.map((item) => {
               const record = inspectionState[room.key]?.[item.key] || { status: 'unchecked', defect: '', note: '', photos: [] }
               const itemKey = `${room.key}-${item.key}`
               const expanded = expandedItemKey === itemKey

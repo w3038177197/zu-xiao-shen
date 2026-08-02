@@ -228,6 +228,11 @@
   font-weight: 700;
 }
 
+.review-depth-hint {
+  display: block;
+  margin-top: 14px;
+}
+
 /* Summary */
 .summary-card {
   display: flex;

@@ -447,6 +447,7 @@ export default class ContractReview extends Component {
     const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, isImporting, importProgress, expandedIndex, showHistory, operationNotice, lastImportSource, lastAnalysisFailed } = this.state
     const lowCount = Math.max(0, findings.length - (summary?.highCount || 0) - (summary?.mediumCount || 0))
     const groupedFindings = groupFindingsByTheme(findings)
+    const reviewDepthHint = reviewDepthOptions.find((item) => item.value === profile.reviewDepth)?.desc
 
     return (
       <ScrollView scrollY enableFlex className='page contract-page'>
@@ -516,6 +517,7 @@ export default class ContractReview extends Component {
             {this.renderProfilePicker('审查角色', partyRoleOptions, 'partyRole')}
             {this.renderProfilePicker('审查深度', reviewDepthOptions, 'reviewDepth')}
           </View>
+          {reviewDepthHint ? <Text className='caption review-depth-hint'>当前档位：{reviewDepthHint}</Text> : null}
         </View>
 
         <View className='sticky-actions'>

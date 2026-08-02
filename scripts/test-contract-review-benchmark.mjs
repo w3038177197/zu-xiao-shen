@@ -240,6 +240,21 @@ assert.ok(getRiskSummary(incompleteDepositAudit).missingFindings.some((item) => 
 const completeDepositAudit = analyzeContract('月租金2000元，合同终止、费用结清并完成验收后7个工作日内退还押金。', profile)
 assert.equal(getRiskSummary(completeDepositAudit).missingFindings.some((item) => item.id === 'missing-deposit-return-deadline'), false, '写明验收、结清和期限后不应误报押金期限缺失')
 
+const depthContract = [
+  '租赁期间甲方可根据市场情况调整租金，提前7日通知乙方后生效，乙方不同意的可自行退租，押金不予退还。',
+  '禁止饲养任何宠物，一经发现，立刻解除租赁，押金全额没收。',
+  '双方发生纠纷只能向甲方户籍所在地人民法院提起诉讼。',
+].join('\n')
+const strictDepth = analyzeContract(depthContract, { ...profile, reviewDepth: 'strict' })
+const balancedDepth = analyzeContract(depthContract, { ...profile, reviewDepth: 'balanced' })
+const businessDepth = analyzeContract(depthContract, { ...profile, reviewDepth: 'business' })
+assert.ok(strictDepth.length >= balancedDepth.length && balancedDepth.length >= businessDepth.length, '三档审查结果应按严格、标准、宽松依次收敛')
+assert.ok(strictDepth.some((item) => item.level === 'low'), '严格风控应保留低风险提示')
+assert.equal(balancedDepth.some((item) => item.level === 'low'), false, '标准审查不应显示低风险提示')
+assert.ok(balancedDepth.some((item) => item.level === 'medium'), '标准审查应保留中风险提示')
+assert.ok(businessDepth.length > 0 && businessDepth.every((item) => item.level === 'high'), '宽松友好应只显示高风险和签署阻断项')
+assert.equal(getRiskSummary(businessDepth).missingCount, 0, '宽松友好不应显示一般完整性提示')
+
 const grouped = groupFindingsByTheme(amountAudit)
 assert.deepEqual(grouped.flatMap((group) => group.items.map((item) => item.index)).sort((a, b) => a - b), amountAudit.map((_, index) => index), '主题分组不得丢失或重复风险')
 const groupedReport = createReportText({

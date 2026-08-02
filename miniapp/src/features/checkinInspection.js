@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro'
 import { STORAGE_KEYS } from '../constants/appConfig.js'
-import { CHECKIN_MAX_PHOTOS_PER_ITEM, checkinItems, checkinRooms } from '../constants/checkinConfig.js'
+import { CHECKIN_MAX_PHOTOS_PER_ITEM, checkinItems, checkinRooms, getCheckinItems } from '../constants/checkinConfig.js'
 
 const LEGACY_STORAGE_KEY = 'checkin_inspection_data'
 
@@ -66,7 +66,7 @@ export function createDefaultCheckinState() {
   return Object.fromEntries(
     checkinRooms.map((room) => [
       room.key,
-      Object.fromEntries(checkinItems.map((item) => [item.key, createEmptyCheckinRecord()])),
+      Object.fromEntries(getCheckinItems(room.key).map((item) => [item.key, createEmptyCheckinRecord()])),
     ]),
   )
 }
@@ -76,7 +76,7 @@ export function normalizeCheckinState(savedState) {
   if (!savedState || typeof savedState !== 'object') return state
 
   checkinRooms.forEach((room) => {
-    checkinItems.forEach((item) => {
+    getCheckinItems(room.key).forEach((item) => {
       const current = savedState?.[room.key]?.[item.key]
       state[room.key][item.key] = current ? normalizeCheckinRecord(current) : normalizeCheckinRecord(readLegacyRecord(savedState, room.key, item.key))
     })
@@ -85,7 +85,7 @@ export function normalizeCheckinState(savedState) {
 }
 
 export function getCheckinStats(checkinData) {
-  const records = checkinRooms.flatMap((room) => checkinItems.map((item) => checkinData?.[room.key]?.[item.key]))
+  const records = checkinRooms.flatMap((room) => getCheckinItems(room.key).map((item) => checkinData?.[room.key]?.[item.key]))
   const checked = records.filter((record) => record?.status && record.status !== 'unchecked').length
   const defects = records.filter((record) => record?.status === 'defect').length
   const photos = records.reduce((total, record) => total + (Array.isArray(record?.photos) ? record.photos.length : 0), 0)
@@ -95,7 +95,7 @@ export function getCheckinStats(checkinData) {
 }
 
 export function hasCheckinContent(checkinData) {
-  return checkinRooms.some((room) => checkinItems.some((item) => {
+  return checkinRooms.some((room) => getCheckinItems(room.key).some((item) => {
     const record = checkinData?.[room.key]?.[item.key]
     return Boolean(
       (record?.status && record.status !== 'unchecked')
@@ -107,7 +107,7 @@ export function hasCheckinContent(checkinData) {
 }
 
 export function getCheckinDefectRows(checkinData) {
-  return checkinRooms.flatMap((room) => checkinItems
+  return checkinRooms.flatMap((room) => getCheckinItems(room.key)
     .filter((item) => checkinData?.[room.key]?.[item.key]?.status === 'defect')
     .map((item) => {
       const record = checkinData[room.key][item.key]

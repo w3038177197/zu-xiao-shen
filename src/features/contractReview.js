@@ -1890,14 +1890,17 @@ export function analyzeContract(text, profile = { contractType: 'lease', partyRo
           .filter((rule) => rule.matched)
       : []
 
-  const findings = [...baseFindings, ...getProfessionalFindings(reviewText, profile)].map((finding) => ({
+  const allFindings = [...baseFindings, ...getProfessionalFindings(reviewText, profile)].map((finding) => ({
     ...finding,
     confidence: finding.confidence ?? Math.min(0.96, 0.65 + (finding.hits?.length || 0) * 0.08),
     evidenceLocation: finding.evidenceLocation || getEvidenceLocation(reviewText, finding.evidence || finding.hits?.[0]),
   }))
+  const includeFinding = (finding) => profile.reviewDepth === 'strict'
+    || (profile.reviewDepth === 'business' ? finding.level === 'high' : finding.level !== 'low')
+  const findings = allFindings.filter(includeFinding)
   if (profile.contractType === 'lease') {
-    const missingFindings = getLeaseCompletenessFindings(reviewText)
-    const consistencyFindings = getLeaseConsistencyFindings(reviewText)
+    const missingFindings = getLeaseCompletenessFindings(reviewText).filter(includeFinding)
+    const consistencyFindings = getLeaseConsistencyFindings(reviewText).filter(includeFinding)
     findings.analysisMeta = {
       missingFindings,
       consistencyFindings,

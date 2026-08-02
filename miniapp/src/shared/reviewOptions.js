@@ -14,7 +14,7 @@ export const partyRoleOptions = [
 ]
 
 export const reviewDepthOptions = [
-  { value: 'balanced', label: '标准' },
-  { value: 'strict', label: '严格风控' },
-  { value: 'business', label: '宽松友好' },
+  { value: 'balanced', label: '标准', desc: '显示高、中风险，适合日常签约前检查' },
+  { value: 'strict', label: '严格风控', desc: '显示高、中、低风险，并完整提示缺失和矛盾' },
+  { value: 'business', label: '宽松友好', desc: '只显示高风险和签署阻断项' },
 ]

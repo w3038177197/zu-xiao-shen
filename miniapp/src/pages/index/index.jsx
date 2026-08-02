@@ -18,8 +18,8 @@ import {
   restoreLocalData,
 } from '../../utils/localDataManager'
 import { copyText } from '../../utils/copyText'
-import { exportTextToFile } from '../../utils/textFileExport'
-import { writeAndShare } from '../../utils/evidencePackageExport'
+import { prepareTextFile } from '../../utils/textFileExport'
+import { writePackageFile } from '../../utils/evidencePackageExport'
 import './index.css'
 
 const workflowSteps = [
@@ -72,6 +72,7 @@ export default function Index() {
   const [workflow, setWorkflow] = useState(loadWorkflowContext)
   // 备份/恢复稳定提示（不只依赖 Toast）
   const [backupMessage, setBackupMessage] = useState(null)
+  const [preparedExports, setPreparedExports] = useState({ word: null, txt: null })
   const result = useMemo(() => calculateDeposit(deposit), [deposit])
   const hasDepositAmount = Number(deposit.depositAmount) > 0
   const storageUsageLabel = storageInfo
@@ -105,8 +106,15 @@ export default function Index() {
     copyText(formatLocalDataExport(), '本地数据已复制')
   }
 
-  const handleExportTxt = () => {
-    exportTextToFile('租小审本地数据.txt', formatLocalDataExport())
+  const handleExportTxt = async () => {
+    setBackupMessage(null)
+    const prepared = await prepareTextFile('租小审本地数据.txt', formatLocalDataExport())
+    if (!prepared.ok) {
+      setBackupMessage({ type: 'error', text: 'TXT 生成失败，请重试。' })
+      return
+    }
+    setPreparedExports((current) => ({ ...current, txt: prepared }))
+    setBackupMessage({ type: 'success', text: 'TXT 已生成，请再次点击“分享数据 TXT”完成保存或发送。' })
   }
 
   // 导出可用 Word 打开的整包备份，包含本机可读取的照片和附件
@@ -114,17 +122,41 @@ export default function Index() {
     setBackupMessage(null)
     try {
       const archive = await buildLocalBackupArchive({ format: 'docx' })
-      const result = await writeAndShare('租小审-完整备份.docx', archive.bytes)
+      const result = await writePackageFile('租小审-完整备份.docx', archive.bytes)
       if (result.ok) {
         const skipped = archive.skipped?.length ? `，${archive.skipped.length} 个文件读取失败` : ''
-        setBackupMessage({ type: skipped ? 'warning' : 'success', text: `完整备份已导出，包含 ${archive.included.length} 个照片/附件${skipped}。` })
-      } else if (result.reason === 'share-cancelled') {
-        setBackupMessage({ type: 'warning', text: '备份文件已生成，但没有完成分享。需要保存时请重新导出。' })
+        setPreparedExports((current) => ({ ...current, word: { ...result, includedCount: archive.included.length, skippedCount: archive.skipped?.length || 0 } }))
+        setBackupMessage({ type: skipped ? 'warning' : 'success', text: `完整备份已生成，包含 ${archive.included.length} 个照片/附件${skipped}。请再次点击“分享备份（Word）”。` })
       } else {
         setBackupMessage({ type: 'error', text: '备份导出失败，请重试。' })
       }
     } catch (error) {
       setBackupMessage({ type: 'error', text: `备份导出失败：${error?.message || '未知错误'}` })
+    }
+  }
+
+  const handleSharePrepared = (type) => {
+    const prepared = preparedExports[type]
+    if (!prepared) return
+    try {
+      Taro.shareFileMessage({
+        filePath: prepared.filePath,
+        fileName: prepared.fileName,
+        success: () => {
+          setPreparedExports((current) => ({ ...current, [type]: null }))
+          setBackupMessage({ type: 'success', text: type === 'word'
+            ? `完整备份已打开分享，包含 ${prepared.includedCount} 个照片/附件。`
+            : 'TXT 已打开微信分享。' })
+        },
+        fail: (error) => {
+          const cancelled = /cancel/i.test(error?.errMsg || error?.message || '')
+          setBackupMessage({ type: cancelled ? 'warning' : 'error', text: cancelled
+            ? '已取消分享，文件仍在，可再次点击分享。'
+            : '微信未能打开分享面板，请更新微信后重试。' })
+        },
+      })
+    } catch {
+      setBackupMessage({ type: 'error', text: '微信未能打开分享面板，请更新微信后重试。' })
     }
   }
 
@@ -399,9 +431,9 @@ export default function Index() {
             </View>
             {dataUsage?.unreferencedCount ? <Text className='cleanup-hint'>发现 {dataUsage.unreferencedCount} 个未引用文件，可安全清理 {formatLocalBytes(dataUsage.unreferencedBytes)}</Text> : null}
             <View className='data-actions'>
-              <Button className='btn-secondary data-button' onClick={handleExportBackup}>导出备份（Word）</Button>
+              <Button className='btn-secondary data-button' onClick={preparedExports.word ? () => handleSharePrepared('word') : handleExportBackup}>{preparedExports.word ? '分享备份（Word）' : '导出备份（Word）'}</Button>
               <Button className='btn-secondary data-button' onClick={handleImportBackup}>导入备份</Button>
-              <Button className='btn-secondary data-button' onClick={handleExportTxt}>导出数据 TXT</Button>
+              <Button className='btn-secondary data-button' onClick={preparedExports.txt ? () => handleSharePrepared('txt') : handleExportTxt}>{preparedExports.txt ? '分享数据 TXT' : '导出数据 TXT'}</Button>
               <Button className='btn-secondary data-button' onClick={handleExportLocalData}>复制数据</Button>
               <Button className='btn-secondary data-button' disabled={!dataUsage?.unreferencedCount} onClick={handleCleanupUnusedFiles}>清理无用文件</Button>
               <Button className='btn-danger data-button' onClick={handleClearLocalData}>清除全部数据</Button>

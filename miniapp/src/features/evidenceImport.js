@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
 import { STORAGE_KEYS } from '../constants/appConfig.js'
+import { getCheckinItems } from '../constants/checkinConfig.js'
 import { getCheckinContextSummary, hasCheckinContent, loadCheckinInspectionState } from './checkinInspection.js'
 import { loadEvidencePackState } from './evidencePack.js'
 
@@ -15,13 +16,6 @@ const ROOM_LABELS = {
   kitchen: '厨房',
   bathroom: '卫生间',
   meter: '水电燃气',
-}
-
-const ITEM_LABELS = {
-  wall: '墙面/地板',
-  doorWindow: '门窗/门锁',
-  appliance: '家具家电',
-  waterElectric: '水电燃气',
 }
 
 function genRefId() {
@@ -45,7 +39,7 @@ export function buildCheckinPhotoRefs() {
         if (typeof path !== 'string' || !path) return
         refs.push({
           id: genRefId(),
-          fileName: `验房照片-${ROOM_LABELS[roomKey] || roomKey}-${ITEM_LABELS[itemKey] || itemKey}-${idx + 1}.jpg`,
+          fileName: `验房照片-${ROOM_LABELS[roomKey] || roomKey}-${getCheckinItems(roomKey).find((item) => item.key === itemKey)?.label || itemKey}-${idx + 1}.jpg`,
           fileType: 'image',
           size: 0,
           localPath: path,

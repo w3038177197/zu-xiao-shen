@@ -50,6 +50,7 @@ const [{
   import('../miniapp/src/utils/privacyAuth.js'),
 ])
 const { STORAGE_KEYS } = await import('../miniapp/src/constants/appConfig.js')
+const { getCheckinItems } = await import('../miniapp/src/constants/checkinConfig.js')
 const checkinPhotoTransactions = await import('../miniapp/src/utils/checkinPhotoTransactions.js')
 const evidenceAttachmentTransactions = await import('../miniapp/src/utils/evidenceAttachmentTransactions.js')
 const Taro = (await import('../miniapp/node_modules/@tarojs/taro/index.js')).default
@@ -206,6 +207,9 @@ const checks = [
     assert.equal(state.living.wall.photos.length, 6)
     assert.equal(getCheckinStats(state).total, 16)
     assert.equal(Object.keys(createDefaultCheckinState()).length, 4)
+    assert.deepEqual(getCheckinItems('meter').map((item) => item.label), ['水表', '电表', '燃气表', '阀门/线路'])
+    assert.equal(getCheckinItems('kitchen').some((item) => item.label.includes('门锁')), false)
+    assert.equal(getCheckinItems('bathroom').some((item) => item.label === '家具家电'), false)
   }],
   ['验房照片添加：记录保存失败时回收新文件且不更新状态', async () => {
     const state = createDefaultCheckinState()
@@ -958,6 +962,14 @@ const checks = [
     assert.equal(lastShareArgs.filePath, result.filePath)
     assert.equal(lastShareArgs.fileName, '中文导出测试.txt')
   }],
+  ['TXT 导出：可先生成文件，等待下一次用户点击再分享', async () => {
+    lastShareArgs = null
+    const result = await textFileExport.prepareTextFile('两步导出.txt', '等待用户再次点击')
+    assert.equal(result.ok, true)
+    assert.equal(result.fileName, '两步导出.txt')
+    assert.equal(lastShareArgs, null)
+    assert.equal(virtualFiles.get(result.filePath).data, '等待用户再次点击')
+  }],
   ['TXT 导出：writeFile 失败返回明确失败结果', async () => {
     writeFileShouldFail = true
     const result = await textFileExport.exportTextToFile('失败测试.txt', '有内容但写入失败')
@@ -1028,10 +1040,8 @@ const checks = [
         code.includes("from '../../utils/textFileExport'"),
         `${page} 未从统一工具模块导入 exportTextToFile`
       )
-      assert.ok(
-        code.includes('exportTextToFile'),
-        `${page} 未调用 exportTextToFile`
-      )
+      const exportFunction = page.includes('/index/index.jsx') ? 'prepareTextFile' : 'exportTextToFile'
+      assert.ok(code.includes(exportFunction), `${page} 未调用 ${exportFunction}`)
     }
     // 统一工具确实存在且是函数
     assert.equal(typeof textFileExport.exportTextToFile, 'function')
@@ -2819,7 +2829,11 @@ const checks = [
     assert.match(homeSource, /backupMessage/)
     assert.match(homeSource, /backup-message/)
     assert.match(homeSource, /buildLocalBackupArchive/)
-    assert.match(homeSource, /writeAndShare\('租小审-完整备份\.docx'/)
+    assert.match(homeSource, /writePackageFile\('租小审-完整备份\.docx'/)
+    assert.match(homeSource, /prepareTextFile\('租小审本地数据\.txt'/)
+    assert.match(homeSource, /preparedExports\.word \? '分享备份（Word）'/)
+    assert.match(homeSource, /preparedExports\.txt \? '分享数据 TXT'/)
+    assert.match(homeSource, /Taro\.shareFileMessage\(/)
     assert.match(homeSource, /extension: \['docx', 'zip', 'json'\]/)
     assert.match(homeSource, /if \(result\.ok\)/)
     // 引用了备份/恢复函数

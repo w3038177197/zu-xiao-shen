@@ -252,6 +252,25 @@ function shareFile(filePath, fileName) {
 }
 
 export async function writeAndShare(fileName, bytes) {
+  const prepared = await writePackageFile(fileName, bytes)
+  if (!prepared.ok) return prepared
+  const { filePath } = prepared
+  try {
+    await shareFile(filePath, fileName)
+    return prepared
+  } catch (error) {
+    const message = getMiniappErrorMessage(error)
+    if (/cancel/i.test(message)) return { ...prepared, ok: false, reason: 'share-cancelled' }
+    Taro.showModal({
+      title: '文件已生成，分享未完成',
+      content: '导出文件已保留在小程序本地，但微信没有打开分享面板。请检查微信版本和网络后重试。',
+      showCancel: false,
+    })
+    return { ...prepared, ok: false, reason: 'share-failed', error }
+  }
+}
+
+export async function writePackageFile(fileName, bytes) {
   const filePath = `${Taro.env.USER_DATA_PATH}/${fileName}`
   const fs = Taro.getFileSystemManager()
   try {
@@ -260,19 +279,7 @@ export async function writeAndShare(fileName, bytes) {
     Taro.showToast({ title: /space|quota|disk full/i.test(getMiniappErrorMessage(error)) ? '存储空间不足，请清理后重试' : '导出文件写入失败', icon: 'none' })
     return { ok: false, reason: 'write-failed', error }
   }
-  try {
-    await shareFile(filePath, fileName)
-    return { ok: true, filePath, fileName }
-  } catch (error) {
-    const message = getMiniappErrorMessage(error)
-    if (/cancel/i.test(message)) return { ok: false, reason: 'share-cancelled', filePath, fileName }
-    Taro.showModal({
-      title: '文件已生成，分享未完成',
-      content: '导出文件已保留在小程序本地，但微信没有打开分享面板。请检查微信版本和网络后重试。',
-      showCancel: false,
-    })
-    return { ok: false, reason: 'share-failed', filePath, fileName, error }
-  }
+  return { ok: true, filePath, fileName }
 }
 
 export async function exportEvidencePdf(reportText) {

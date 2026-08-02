@@ -22,9 +22,7 @@ export function sanitizeFileName(name, extension = TXT_EXT) {
   return safe + safeExt
 }
 
-// 统一 TXT 文件导出：写入 -> 微信分享
-// 返回 { ok: true, filePath } 或 { ok: false, reason, filePath?, error? }
-export async function exportTextToFile(fileName, content, { extension = TXT_EXT } = {}) {
+export async function prepareTextFile(fileName, content, { extension = TXT_EXT } = {}) {
   if (content == null || String(content).trim() === '') {
     Taro.showToast({ title: '内容为空，无法导出', icon: 'none' })
     return { ok: false, reason: 'empty-content' }
@@ -54,22 +52,29 @@ export async function exportTextToFile(fileName, content, { extension = TXT_EXT 
     return { ok: false, reason: 'write-failed', error }
   }
 
-  // 写入成功后通过微信文件分享界面发送或保存
+  return { ok: true, filePath, fileName: safeName }
+}
+
+// 其他页面仍可一次调用完成导出；首页使用 prepareTextFile 后由第二次点击直接分享。
+export async function exportTextToFile(fileName, content, options = {}) {
+  const prepared = await prepareTextFile(fileName, content, options)
+  if (!prepared.ok) return prepared
+
   try {
     await new Promise((resolve, reject) => {
       Taro.shareFileMessage({
-        filePath,
-        fileName: safeName,
+        filePath: prepared.filePath,
+        fileName: prepared.fileName,
         success: resolve,
         fail: reject,
       })
     })
-    return { ok: true, filePath }
+    return prepared
   } catch (error) {
     const msg = getMiniappErrorMessage(error)
     // 用户取消分享
     if (msg.includes('cancel') || msg.includes('user cancel') || msg.includes('share:cancel')) {
-      return { ok: false, reason: 'share-cancelled', filePath }
+      return { ...prepared, ok: false, reason: 'share-cancelled' }
     }
     console.error('shareFileMessage failed:', error)
     Taro.showModal({
@@ -79,6 +84,6 @@ export async function exportTextToFile(fileName, content, { extension = TXT_EXT 
         : '文件已保留在小程序本地，但微信没有打开分享面板。请检查微信版本和网络后重试，也可以使用页面上的“复制文本”。',
       showCancel: false,
     })
-    return { ok: false, reason: 'share-failed', filePath, error }
+    return { ...prepared, ok: false, reason: 'share-failed', error }
   }
 }
