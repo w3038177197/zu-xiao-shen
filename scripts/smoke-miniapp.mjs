@@ -30,13 +30,13 @@ function readPage(pageName) {
 }
 
 // ---------- 1. 首页首次进入：入口与空数据/有数据分支 ----------
-check('首页：品牌、三步走、AI 入口、补贴入口、隐私与数据入口齐全', () => {
+check('首页：品牌、三步走、AI、补贴和报告导出入口齐全', () => {
   const home = readPage('index')
   assert.match(home, /租小审/, '首页应显示品牌名')
   assert.match(home, /租房三步走/, '首页应有三步走区域')
   assert.match(home, /问租房 AI/, '首页应有 AI 入口')
   assert.match(home, /住房补贴匹配/, '首页应有补贴入口')
-  assert.match(home, /隐私与数据/, '首页应有隐私与数据入口')
+  assert.match(home, /报告导出中心/, '首页应有报告导出中心')
 })
 
 check('首页：空数据首次进入显示"开始审查合同"', () => {
@@ -53,12 +53,14 @@ check('首页：有数据时显示继续审查/继续验房/继续整理', () =>
   assert.match(home, /继续整理退租证据|继续整理/, '有证据数据时应显示继续整理')
 })
 
-check('首页：导出备份与导入备份入口存在', () => {
+check('首页：业务 Word 报告与恢复用备份入口存在', () => {
   const home = readPage('index')
-  assert.match(home, /导出备份/, '首页应有导出备份按钮')
-  assert.match(home, /导入备份/, '首页应有导入备份按钮')
-  // 导出备份调用 backupLocalData，导入调用 restoreLocalData
-  assert.match(home, /backupLocalData/, '导出备份应调用 backupLocalData')
+  assert.match(home, /报告导出中心/, '首页应有报告导出中心')
+  assert.match(home, /导出所选 Word/, '首页应有所选报告导出按钮')
+  assert.match(home, /一键导出全部/, '首页应有全量报告导出按钮')
+  assert.match(home, /buildBusinessReportDocx/, '业务报告应调用统一 Word 生成器')
+  assert.match(home, /生成恢复用备份/, '高级数据管理应保留备份按钮')
+  assert.match(home, /导入恢复用备份/, '高级数据管理应保留恢复按钮')
   assert.match(home, /restoreLocalData/, '导入备份应调用 restoreLocalData')
 })
 
@@ -120,12 +122,14 @@ check('AI 页面：默认优先联网、首次授权、拒绝/未授权/不可�
 })
 
 // ---------- 7. 数据备份导出/导入入口 ----------
-check('数据管理：导出备份、导入备份、导出 TXT、复制数据、清理无用文件、清除全部数据入口齐全', () => {
+check('数据管理：主区只放 Word 报告，高级区保留恢复、清理和清除入口', () => {
   const home = readPage('index')
-  assert.match(home, /导出备份/, '应有导出备份按钮')
-  assert.match(home, /导入备份/, '应有导入备份按钮')
-  assert.match(home, /导出数据 TXT/, '应有导出 TXT 按钮')
-  assert.match(home, /复制数据/, '应有复制数据按钮')
+  assert.match(home, /合同分析报告/, '应有合同报告选项')
+  assert.match(home, /入住验房报告/, '应有验房报告选项')
+  assert.match(home, /证据包汇总/, '应有证据包选项')
+  assert.doesNotMatch(home, /导出数据 TXT/, '首页主区不应再导出原始 TXT 数据')
+  assert.doesNotMatch(home, /复制数据/, '首页主区不应再复制原始数据')
+  assert.match(home, /高级数据管理/, '应有高级数据管理入口')
   assert.match(home, /清理无用文件/, '应有清理无用文件按钮')
   assert.match(home, /清除全部数据/, '应有清除全部数据按钮')
 })

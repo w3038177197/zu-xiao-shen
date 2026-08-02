@@ -30,11 +30,12 @@ const [{
   hasModuleReference,
   addModuleReference,
   importModuleReferences,
-}, { createDebouncedSaver }, localDataManager, subsidyData, clipboard, attachmentUtils, textFileExport, evidencePackageExport, evidenceImport, contractReview, demoContractsData, reviewHistory, workflowContext, aiAssistant, contractTextImport, privacyAuth] = await Promise.all([
+}, { createDebouncedSaver }, localDataManager, businessReportExport, subsidyData, clipboard, attachmentUtils, textFileExport, evidencePackageExport, evidenceImport, contractReview, demoContractsData, reviewHistory, workflowContext, aiAssistant, contractTextImport, privacyAuth] = await Promise.all([
   import('../miniapp/src/features/checkinInspection.js'),
   import('../miniapp/src/features/evidencePack.js'),
   import('../miniapp/src/utils/debounceSave.js'),
   import('../miniapp/src/utils/localDataManager.js'),
+  import('../miniapp/src/utils/businessReportExport.js'),
   import('../src/data/subsidyPolicies.js'),
   import('../miniapp/src/utils/copyText.js'),
   import('../miniapp/src/utils/evidenceAttachments.js'),
@@ -1032,11 +1033,10 @@ const checks = [
     // 确认已改用 shareFileMessage
     assert.ok(code.includes('shareFileMessage'), 'textFileExport.js 未使用 shareFileMessage')
   }],
-  ['TXT 导出：四个页面调用同一个统一工具', async () => {
-    // 验证四个页面源码都从同一个模块导入 exportTextToFile，没有各自重复实现
+  ['TXT 导出：保留文本导出的三个业务页调用同一个统一工具', async () => {
+    // 首页已改用业务 Word 报告；其余三个页面继续复用统一文本工具。
     const fs = await import('node:fs')
     const pages = [
-      '../miniapp/src/pages/index/index.jsx',
       '../miniapp/src/pages/checkin/index.jsx',
       '../miniapp/src/pages/evidence/index.jsx',
       '../miniapp/src/pages/contract/index.jsx',
@@ -2831,26 +2831,102 @@ const checks = [
     assert.notEqual(restoredState.living.wall.photos[0], photoPath)
   }],
 
-  ['首页数据管理入口包含导出备份和导入备份按钮', async () => {
+  ['业务 Word 报告：单独导出合同分析时不夹带验房和证据包', async () => {
+    const contractText = '房屋租赁合同：出租方可随时进入房屋，押金一律不退。'
+    const findings = contractReview.analyzeContract(contractText, { contractType: 'lease', partyRole: 'partyB', reviewDepth: 'strict' })
+    const summary = contractReview.getRiskSummary(findings)
+    const entry = reviewHistory.createReviewHistoryEntry({
+      contractText,
+      findings,
+      summary,
+      dimensions: [],
+      adoptedItems: [],
+      revisedDraft: '',
+      activeProfile: { contractType: 'lease', partyRole: 'partyB', reviewDepth: 'strict' },
+      profile: { contractType: 'lease', partyRole: 'partyB', reviewDepth: 'strict' },
+    })
+    const report = await businessReportExport.buildBusinessReportDocx({
+      selectedModules: ['contract'],
+      data: { contractDraft: contractText, reviewHistory: [entry] },
+      now: new Date('2026-08-02T08:30:00.000Z'),
+    })
+    const JSZip = (await import('jszip')).default
+    const zip = await JSZip.loadAsync(report.bytes)
+    const documentXml = await zip.file('word/document.xml').async('string')
+    assert.match(documentXml, /合同分析报告/)
+    assert.match(documentXml, /原文证据/)
+    assert.doesNotMatch(documentXml, /入住验房报告/)
+    assert.doesNotMatch(documentXml, /证据包汇总/)
+    assert.match(report.fileName, /合同分析报告.*\.docx$/)
+  }],
+
+  ['业务 Word 报告：组合导出包含验房分析、真实照片和证据汇总', async () => {
+    virtualFiles.clear()
+    const photoPath = 'wxfile://saved/report-photo.png'
+    virtualFiles.set(photoPath, { data: Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')).buffer })
+    const checkinState = createDefaultCheckinState()
+    checkinState.living.wall = { status: 'defect', defect: '墙面裂缝', note: '入住前已存在', photos: [photoPath] }
+    const evidenceState = createDefaultEvidencePackState()
+    evidenceState.formData.address = '贵阳市测试路1号'
+    evidenceState.evidence.contract[0] = true
+    const report = await businessReportExport.buildBusinessReportDocx({
+      selectedModules: ['checkin', 'evidence'],
+      data: { checkinInspection: checkinState, checkinRoomType: 'studio', evidencePack: evidenceState },
+      now: new Date('2026-08-02T08:30:00.000Z'),
+    })
+    const JSZip = (await import('jszip')).default
+    const zip = await JSZip.loadAsync(report.bytes)
+    const documentXml = await zip.file('word/document.xml').async('string')
+    assert.match(documentXml, /入住验房报告/)
+    assert.match(documentXml, /墙面裂缝/)
+    assert.match(documentXml, /证据包汇总/)
+    assert.match(documentXml, /贵阳市测试路1号/)
+    assert.ok(zip.file('word/media/checkin-1.png'))
+    assert.equal(report.includedPhotos, 1)
+    assert.equal(report.skippedPhotos, 0)
+  }],
+
+  ['业务 Word 报告：验房照片缺失时仍生成并记录跳过数量', async () => {
+    virtualFiles.clear()
+    const checkinState = createDefaultCheckinState()
+    checkinState.kitchen.waterElectric = { status: 'defect', defect: '燃气软管老化', note: '', photos: ['wxfile://saved/missing-report-photo.jpg'] }
+    const report = await businessReportExport.buildBusinessReportDocx({
+      selectedModules: ['checkin'],
+      data: { checkinInspection: checkinState },
+    })
+    assert.ok(report.bytes.length > 0)
+    assert.equal(report.includedPhotos, 0)
+    assert.equal(report.skippedPhotos, 1)
+  }],
+
+  ['首页报告导出中心支持单选、组合和一键全部，备份恢复进入高级区', async () => {
     const fs = await import('node:fs')
     const homeSource = fs.readFileSync(new URL('../miniapp/src/pages/index/index.jsx', import.meta.url), 'utf8')
+    assert.match(homeSource, /报告导出中心/)
+    assert.match(homeSource, /合同分析报告/)
+    assert.match(homeSource, /入住验房报告/)
+    assert.match(homeSource, /证据包汇总/)
+    assert.match(homeSource, /导出所选 Word/)
+    assert.match(homeSource, /一键导出全部/)
+    assert.match(homeSource, /buildBusinessReportDocx/)
+    assert.match(homeSource, /高级数据管理/)
     assert.match(homeSource, /handleExportBackup/)
     assert.match(homeSource, /handleImportBackup/)
-    assert.match(homeSource, /导出备份/)
-    assert.match(homeSource, /导入备份/)
+    assert.match(homeSource, /生成恢复用备份/)
+    assert.match(homeSource, /导入恢复用备份/)
+    assert.doesNotMatch(homeSource, /导出数据 TXT/)
+    assert.doesNotMatch(homeSource, /复制数据/)
     // 稳定提示不只依赖 Toast
     assert.match(homeSource, /backupMessage/)
     assert.match(homeSource, /backup-message/)
     assert.match(homeSource, /buildLocalBackupArchive/)
-    assert.match(homeSource, /writePackageFile\('租小审-完整备份\.docx'/)
-    assert.match(homeSource, /prepareTextFile\('租小审本地数据\.txt'/)
-    assert.match(homeSource, /preparedExports\.word \? '分享备份（Word）'/)
-    assert.match(homeSource, /preparedExports\.txt \? '分享数据 TXT'/)
+    assert.match(homeSource, /writePackageFile\('租小审-恢复用备份\.docx'/)
+    assert.match(homeSource, /preparedExports\.report/)
+    assert.match(homeSource, /preparedExports\.backup/)
     assert.match(homeSource, /Taro\.shareFileMessage\(/)
     assert.match(homeSource, /extension: \['docx', 'zip', 'json'\]/)
     assert.match(homeSource, /if \(result\.ok\)/)
     // 引用了备份/恢复函数
-    assert.match(homeSource, /backupLocalData/)
     assert.match(homeSource, /parseBackupSummary/)
     assert.match(homeSource, /restoreLocalData/)
     // CSS 样式存在

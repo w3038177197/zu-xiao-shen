@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Button, Input, Picker, ScrollView, Text, View } from '@tarojs/components'
+import { Button, Checkbox, CheckboxGroup, Input, Label, Picker, ScrollView, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { calculateDepositReturn } from '../../shared/money.js'
 import { loadWorkflowContext } from '../../features/workflowContext'
@@ -7,18 +7,15 @@ import {
   cleanupUnreferencedSavedFiles,
   clearLocalData,
   formatLocalBytes,
-  formatLocalDataExport,
   getLocalDataUsage,
   getLocalStorageInfo,
-  backupLocalData,
   buildLocalBackupArchive,
   parseBackupPackageSummary,
   parseBackupSummary,
   restoreBackupArchive,
   restoreLocalData,
 } from '../../utils/localDataManager'
-import { copyText } from '../../utils/copyText'
-import { prepareTextFile } from '../../utils/textFileExport'
+import { buildBusinessReportDocx, BUSINESS_REPORT_MODULES } from '../../utils/businessReportExport'
 import { writePackageFile } from '../../utils/evidencePackageExport'
 import './index.css'
 
@@ -26,6 +23,12 @@ const workflowSteps = [
   { id: 'review', number: '1', phase: '签约前', title: '审合同', description: '把押金、涨租、维修等条款过一遍' },
   { id: 'checkin', number: '2', phase: '入住时', title: '入住留证', description: '按房间拍照，留下入住基线' },
   { id: 'evidence', number: '3', phase: '退租时', title: '退租证据', description: '整理照片、费用和沟通记录' },
+]
+
+const reportOptions = [
+  { id: 'contract', title: '合同分析报告', description: '风险评分、原文证据、修改建议与合同正文' },
+  { id: 'checkin', title: '入住验房报告', description: '空间检查、瑕疵分析、备注与验房照片' },
+  { id: 'evidence', title: '证据包汇总', description: '基础信息、附件清单、待补材料与沟通说明' },
 ]
 
 const defaultDeposit = {
@@ -67,12 +70,14 @@ export default function Index() {
   const [deposit, setDeposit] = useState(defaultDeposit)
   const [showDepositDetails, setShowDepositDetails] = useState(false)
   const [showDataDetails, setShowDataDetails] = useState(false)
+  const [showAdvancedData, setShowAdvancedData] = useState(false)
+  const [selectedReports, setSelectedReports] = useState([...BUSINESS_REPORT_MODULES])
   const [storageInfo, setStorageInfo] = useState(getLocalStorageInfo)
   const [dataUsage, setDataUsage] = useState(null)
   const [workflow, setWorkflow] = useState(loadWorkflowContext)
   // 备份/恢复稳定提示（不只依赖 Toast）
   const [backupMessage, setBackupMessage] = useState(null)
-  const [preparedExports, setPreparedExports] = useState({ word: null, txt: null })
+  const [preparedExports, setPreparedExports] = useState({ report: null, backup: null })
   const result = useMemo(() => calculateDeposit(deposit), [deposit])
   const hasDepositAmount = Number(deposit.depositAmount) > 0
   const storageUsageLabel = storageInfo
@@ -102,19 +107,48 @@ export default function Index() {
     setDeposit((current) => ({ ...current, [key]: value }))
   }
 
-  const handleExportLocalData = () => {
-    copyText(formatLocalDataExport(), '本地数据已复制')
+  const handleReportSelection = (values) => {
+    setSelectedReports(values)
+    setPreparedExports((current) => ({ ...current, report: null }))
+    setBackupMessage(null)
   }
 
-  const handleExportTxt = async () => {
-    setBackupMessage(null)
-    const prepared = await prepareTextFile('租小审本地数据.txt', formatLocalDataExport())
-    if (!prepared.ok) {
-      setBackupMessage({ type: 'error', text: 'TXT 生成失败，请重试。' })
+  const handleExportReport = async (modules = selectedReports) => {
+    if (!modules.length) {
+      setBackupMessage({ type: 'warning', text: '请至少勾选一项报告内容。' })
       return
     }
-    setPreparedExports((current) => ({ ...current, txt: prepared }))
-    setBackupMessage({ type: 'success', text: 'TXT 已生成，请再次点击“分享数据 TXT”完成保存或发送。' })
+    setBackupMessage(null)
+    try {
+      const report = await buildBusinessReportDocx({ selectedModules: modules })
+      const result = await writePackageFile(report.fileName, report.bytes)
+      if (!result.ok) {
+        setBackupMessage({ type: 'error', text: 'Word 报告生成失败，请重试。' })
+        return
+      }
+      const skipped = report.skippedPhotos ? `，${report.skippedPhotos} 张照片未能读取` : ''
+      setPreparedExports((current) => ({
+        ...current,
+        report: {
+          ...result,
+          selectedModules: report.selectedModules,
+          includedPhotos: report.includedPhotos,
+          skippedPhotos: report.skippedPhotos,
+        },
+      }))
+      setBackupMessage({
+        type: skipped ? 'warning' : 'success',
+        text: `Word 报告已生成，包含 ${report.selectedModules.length} 个模块、${report.includedPhotos} 张验房照片${skipped}。请点击“分享已生成 Word”。`,
+      })
+    } catch (error) {
+      setBackupMessage({ type: 'error', text: `Word 报告生成失败：${error?.message || '未知错误'}` })
+    }
+  }
+
+  const handleExportAllReports = () => {
+    setSelectedReports([...BUSINESS_REPORT_MODULES])
+    setPreparedExports((current) => ({ ...current, report: null }))
+    handleExportReport(BUSINESS_REPORT_MODULES)
   }
 
   // 导出可用 Word 打开的整包备份，包含本机可读取的照片和附件
@@ -122,11 +156,11 @@ export default function Index() {
     setBackupMessage(null)
     try {
       const archive = await buildLocalBackupArchive({ format: 'docx' })
-      const result = await writePackageFile('租小审-完整备份.docx', archive.bytes)
+      const result = await writePackageFile('租小审-恢复用备份.docx', archive.bytes)
       if (result.ok) {
         const skipped = archive.skipped?.length ? `，${archive.skipped.length} 个文件读取失败` : ''
-        setPreparedExports((current) => ({ ...current, word: { ...result, includedCount: archive.included.length, skippedCount: archive.skipped?.length || 0 } }))
-        setBackupMessage({ type: skipped ? 'warning' : 'success', text: `完整备份已生成，包含 ${archive.included.length} 个照片/附件${skipped}。请再次点击“分享备份（Word）”。` })
+        setPreparedExports((current) => ({ ...current, backup: { ...result, includedCount: archive.included.length, skippedCount: archive.skipped?.length || 0 } }))
+        setBackupMessage({ type: skipped ? 'warning' : 'success', text: `恢复用备份已生成，包含 ${archive.included.length} 个照片/附件${skipped}。请点击“分享恢复用备份”。` })
       } else {
         setBackupMessage({ type: 'error', text: '备份导出失败，请重试。' })
       }
@@ -144,9 +178,9 @@ export default function Index() {
         fileName: prepared.fileName,
         success: () => {
           setPreparedExports((current) => ({ ...current, [type]: null }))
-          setBackupMessage({ type: 'success', text: type === 'word'
-            ? `完整备份已打开分享，包含 ${prepared.includedCount} 个照片/附件。`
-            : 'TXT 已打开微信分享。' })
+          setBackupMessage({ type: 'success', text: type === 'report'
+            ? 'Word 报告已打开微信分享。'
+            : `恢复用备份已打开分享，包含 ${prepared.includedCount} 个照片/附件。` })
         },
         fail: (error) => {
           const cancelled = /cancel/i.test(error?.errMsg || error?.message || '')
@@ -411,35 +445,66 @@ export default function Index() {
       <View className='home-data card'>
         <Button className='data-entry' aria-expanded={showDataDetails} onClick={() => setShowDataDetails((current) => !current)}>
           <View className='data-entry-body'>
-            <Text className='card-title'>隐私与数据</Text>
-            <Text className='caption'>管理本机数据 · {storageUsageLabel}</Text>
+            <Text className='card-title'>报告导出中心</Text>
+            <Text className='caption'>按需组合并导出精排 Word</Text>
           </View>
           <Text className='data-toggle'>{showDataDetails ? '收起' : '展开'}</Text>
         </Button>
         {showDataDetails ? (
           <View className='data-details'>
-            <Text className='body-text'>完整备份会生成 Word 文件，包含合同审查、验房、证据包、AI 对话、补贴资料，以及本机可读取的照片和附件。TXT 和复制只包含文字数据。</Text>
-            <View className='data-usage-row'>
-              <View className='data-usage-item'>
-                <Text className='caption'>记录占用</Text>
-                <Text className='data-usage-value'>{storageInfo ? formatLocalBytes(storageInfo.currentSize * 1024) : '读取失败'}</Text>
-              </View>
-              <View className='data-usage-item'>
-                <Text className='caption'>持久文件</Text>
-                <Text className='data-usage-value'>{dataUsage?.fileListAvailable ? `${dataUsage.savedFileCount} 个 · ${formatLocalBytes(dataUsage.savedFileBytes)}` : '读取失败'}</Text>
-              </View>
-            </View>
-            {dataUsage?.unreferencedCount ? <Text className='cleanup-hint'>发现 {dataUsage.unreferencedCount} 个未引用文件，可安全清理 {formatLocalBytes(dataUsage.unreferencedBytes)}</Text> : null}
-            <View className='data-actions'>
-              <Button className='btn-secondary data-button' onClick={preparedExports.word ? () => handleSharePrepared('word') : handleExportBackup}>{preparedExports.word ? '分享备份（Word）' : '导出备份（Word）'}</Button>
-              <Button className='btn-secondary data-button' onClick={handleImportBackup}>导入备份</Button>
-              <Button className='btn-secondary data-button' onClick={preparedExports.txt ? () => handleSharePrepared('txt') : handleExportTxt}>{preparedExports.txt ? '分享数据 TXT' : '导出数据 TXT'}</Button>
-              <Button className='btn-secondary data-button' onClick={handleExportLocalData}>复制数据</Button>
-              <Button className='btn-secondary data-button' disabled={!dataUsage?.unreferencedCount} onClick={handleCleanupUnusedFiles}>清理无用文件</Button>
-              <Button className='btn-danger data-button' onClick={handleClearLocalData}>清除全部数据</Button>
+            <Text className='body-text'>勾选要整理的内容。合同风险、验房照片与分析、证据包汇总会合并到一份 Word，也可以单独导出。</Text>
+            <CheckboxGroup className='report-options' value={selectedReports} onChange={(event) => handleReportSelection(event.detail.value)}>
+              {reportOptions.map((option) => {
+                const module = workflow.modules[option.id === 'contract' ? 'review' : option.id]
+                return (
+                  <Label className={`report-option ${selectedReports.includes(option.id) ? 'report-option-selected' : ''}`} key={option.id}>
+                    <Checkbox className='report-checkbox' value={option.id} checked={selectedReports.includes(option.id)} color='#1a6b50' />
+                    <View className='report-option-body'>
+                      <View className='report-option-head'>
+                        <Text className='report-option-title'>{option.title}</Text>
+                        <Text className={`status-badge ${module?.hasData ? 'status-badge-done' : 'status-badge-pending'}`}>{module?.hasData ? module.status : '暂无数据'}</Text>
+                      </View>
+                      <Text className='caption'>{option.description}</Text>
+                    </View>
+                  </Label>
+                )
+              })}
+            </CheckboxGroup>
+            <View className='report-actions'>
+              <Button className='btn-primary report-button' disabled={!selectedReports.length} onClick={preparedExports.report ? () => handleSharePrepared('report') : () => handleExportReport()}>{preparedExports.report ? '分享已生成 Word' : `导出所选 Word（${selectedReports.length}）`}</Button>
+              <Button className='btn-secondary report-button' onClick={handleExportAllReports}>一键导出全部</Button>
             </View>
             {backupMessage ? (
               <Text className={`backup-message backup-message-${backupMessage.type}`}>{backupMessage.text}</Text>
+            ) : null}
+            <Button className='advanced-data-entry' aria-expanded={showAdvancedData} onClick={() => setShowAdvancedData((current) => !current)}>
+              <View>
+                <Text className='advanced-data-title'>高级数据管理</Text>
+                <Text className='caption'>恢复备份、存储清理与清除数据 · {storageUsageLabel}</Text>
+              </View>
+              <Text className='data-toggle'>{showAdvancedData ? '收起' : '展开'}</Text>
+            </Button>
+            {showAdvancedData ? (
+              <View className='advanced-data-details'>
+                <Text className='body-text'>恢复用备份用于换机或误删恢复，不是阅读报告。它会保留本机可读取的业务数据、照片和附件。</Text>
+                <View className='data-usage-row'>
+                  <View className='data-usage-item'>
+                    <Text className='caption'>记录占用</Text>
+                    <Text className='data-usage-value'>{storageInfo ? formatLocalBytes(storageInfo.currentSize * 1024) : '读取失败'}</Text>
+                  </View>
+                  <View className='data-usage-item'>
+                    <Text className='caption'>持久文件</Text>
+                    <Text className='data-usage-value'>{dataUsage?.fileListAvailable ? `${dataUsage.savedFileCount} 个 · ${formatLocalBytes(dataUsage.savedFileBytes)}` : '读取失败'}</Text>
+                  </View>
+                </View>
+                {dataUsage?.unreferencedCount ? <Text className='cleanup-hint'>发现 {dataUsage.unreferencedCount} 个未引用文件，可安全清理 {formatLocalBytes(dataUsage.unreferencedBytes)}</Text> : null}
+                <View className='data-actions'>
+                  <Button className='btn-secondary data-button' onClick={preparedExports.backup ? () => handleSharePrepared('backup') : handleExportBackup}>{preparedExports.backup ? '分享恢复用备份' : '生成恢复用备份'}</Button>
+                  <Button className='btn-secondary data-button' onClick={handleImportBackup}>导入恢复用备份</Button>
+                  <Button className='btn-secondary data-button' disabled={!dataUsage?.unreferencedCount} onClick={handleCleanupUnusedFiles}>清理无用文件</Button>
+                  <Button className='btn-danger data-button' onClick={handleClearLocalData}>清除全部数据</Button>
+                </View>
+              </View>
             ) : null}
           </View>
         ) : null}
