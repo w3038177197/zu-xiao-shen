@@ -1,5 +1,6 @@
 export default defineAppConfig({
   __usePrivacyCheck__: true,
+  lazyCodeLoading: 'requiredComponents',
   pages: [
     'pages/index/index',
     'pages/contract/index',
