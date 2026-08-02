@@ -69,7 +69,7 @@ check('接口与页面：文档上传保留，合同页不再提供图片 OCR', 
   assert.doesNotMatch(pageSource, /拍照识别/)
   assert.doesNotMatch(pageSource, /相册识别/)
   assert.match(pageSource, /aria-label='清空合同正文'/)
-  const resetSource = pageSource.slice(pageSource.indexOf('handleReset = () =>'), pageSource.indexOf('handleAiReview = () =>'))
+  const resetSource = pageSource.slice(pageSource.indexOf('handleReset = () =>'), pageSource.indexOf('renderProfilePicker ='))
   assert.match(resetSource, /this\.draftSaver\.cancel\(\)/)
   assert.match(resetSource, /this\.draftSaver\.flush\(\)/)
   assert.match(resetSource, /this\.updateContract\('',/)

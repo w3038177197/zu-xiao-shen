@@ -47,6 +47,27 @@
   font-weight: 700;
 }
 
+.review-data-note {
+  display: block;
+  margin: 20px 24px 0;
+  color: #66746b;
+  font-size: 22px;
+  line-height: 1.55;
+}
+
+.contract-page .operation-notice.is-success {
+  border-color: #c8e6d8;
+  background: #f5fbf8;
+}
+
+.contract-page .operation-notice.is-success text {
+  color: #1a4d3a;
+}
+
+.contract-page .operation-notice.is-success button {
+  background: #1a4d3a;
+}
+
 /* Card header */
 .card-header {
   display: flex;

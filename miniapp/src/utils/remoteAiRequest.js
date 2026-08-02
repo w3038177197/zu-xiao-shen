@@ -34,26 +34,6 @@ export async function confirmRemoteConsent() {
   return true
 }
 
-export async function confirmContractReviewConsent() {
-  try {
-    if (Taro.getStorageSync(STORAGE_KEYS.aiContractReviewConsent) === true) return true
-  } catch { /* 继续显示本次授权 */ }
-  const result = await Taro.showModal({
-    title: '启用综合审查',
-    content: '综合审查会让本地规则先生成风险线索，再将脱敏合同文字和线索发送至租小审服务端与模型服务商，由 AI 结合知识库核验并补漏，最终一次性生成报告；照片和附件原文件不会发送。是否继续？',
-    confirmText: '同意审查',
-    cancelText: '仅本地审查',
-  })
-  if (!result.confirm) return false
-  try {
-    Taro.setStorageSync(STORAGE_KEYS.aiContractReviewConsent, true)
-    return true
-  } catch {
-    Taro.showToast({ title: '无法保存全文复核授权，请清理本地空间后重试', icon: 'none' })
-    return false
-  }
-}
-
 function createRemoteError(message, code, extra = {}) {
   const error = new Error(message)
   error.code = code

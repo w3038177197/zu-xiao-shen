@@ -28,10 +28,8 @@ import {
   startRemoteDocumentImport,
 } from '../../utils/contractTextImport'
 import { exportTextToFile } from '../../utils/textFileExport'
-import { openAiTask } from '../../utils/aiTaskHandoff'
 import { buildRemoteContractReviewPayload } from '../../features/remoteAi'
 import {
-  confirmContractReviewConsent,
   getRemoteAiError,
   startRemoteContractReviewRequest,
 } from '../../utils/remoteAiRequest'
@@ -203,10 +201,7 @@ export default class ContractReview extends Component {
     const run = ++this.reviewRun
     const profile = { ...this.state.profile }
     this.setState({ isAnalyzing: true, analysisStage: 'prepare', operationNotice: '', lastAnalysisFailed: false })
-    let useAi = false
-    try {
-      useAi = contractText.length <= 60_000 && await confirmContractReviewConsent()
-    } catch { /* 授权弹窗异常时继续本地审查 */ }
+    const useAi = contractText.length <= 60_000
     if (run !== this.reviewRun) return
     this.setState({ analysisStage: 'local' })
     let localResult
@@ -251,7 +246,7 @@ export default class ContractReview extends Component {
 
     try {
       if (!useAi) {
-        finishReview(localResult, '已完成本地规则审查；你未授权发送脱敏合同文字，因此未进行 AI 全文复核。')
+        finishReview(localResult, '合同超过 60000 字，本次已保留本地规则审查结果；请按章节拆分后进行综合审查。')
         return
       }
       if (run !== this.reviewRun) return
@@ -489,11 +484,6 @@ export default class ContractReview extends Component {
     })
   }
 
-  handleAiReview = () => {
-    this.draftSaver.flush()
-    openAiTask('review')
-  }
-
   renderProfilePicker = (label, options, key) => {
     const index = Math.max(0, options.findIndex((item) => item.value === this.state.profile[key]))
     return (
@@ -511,6 +501,7 @@ export default class ContractReview extends Component {
     const lowCount = Math.max(0, findings.length - (summary?.highCount || 0) - (summary?.mediumCount || 0))
     const groupedFindings = groupFindingsByTheme(findings)
     const reviewDepthHint = reviewDepthOptions.find((item) => item.value === profile.reviewDepth)?.desc
+    const operationNoticeIsError = lastAnalysisFailed || Boolean(lastImportSource) || /失败|未完成|已取消|超过 60000 字/.test(operationNotice)
 
     return (
       <ScrollView scrollY enableFlex className='page contract-page'>
@@ -520,7 +511,7 @@ export default class ContractReview extends Component {
           <Text className='body-text'>标出押金、涨租、维修、入户和违约责任，把风险翻译成可直接沟通的修改建议。</Text>
           <View className='privacy-note'>
             <View className='privacy-indicator'>✓</View>
-            <Text>先在本机规则审查；单独授权后，AI 仅复核脱敏合同文字</Text>
+            <Text>本地规则与 AI 一次协作审查；合同文字双重脱敏，照片和附件原文件不发送</Text>
           </View>
         </View>
 
@@ -548,7 +539,7 @@ export default class ContractReview extends Component {
           />
           {contractText.length > 60000 ? <Text className='caption contract-size-warning'>合同超过 60000 字，本地规则仍可审查，但 AI 全文复核需按章节分段。</Text> : null}
           {operationNotice ? (
-            <View className='operation-notice' aria-live='polite'>
+            <View className={`operation-notice ${operationNoticeIsError ? 'is-error' : 'is-success'}`} aria-live='polite'>
               <Text>{operationNotice}</Text>
               <View className='operation-notice-actions'>
                 {lastAnalysisFailed ? <Button aria-label='重试混合审查' disabled={isAnalyzing} onClick={this.retryAnalyze}>重试审查</Button> : null}
@@ -583,6 +574,7 @@ export default class ContractReview extends Component {
           {reviewDepthHint ? <Text className='caption review-depth-hint'>当前档位：{reviewDepthHint}</Text> : null}
         </View>
 
+        <Text className='review-data-note'>点击“开始综合审查”即同意将双重脱敏后的合同文字发送至租小审服务端和模型服务商进行 AI 核验。</Text>
         <View className='sticky-actions'>
           <Button className='btn-primary' onClick={this.handleAnalyze} disabled={isAnalyzing || !contractText.trim()}>{isAnalyzing ? (analysisStage === 'prepare' ? '准备综合审查…' : analysisStage === 'ai' ? 'AI 协作核验中…' : '本地规则扫描中…') : '开始综合审查'}</Button>
           {isAnalyzing && analysisStage === 'ai' && this.activeReviewTask ? <Button className='btn-danger' onClick={this.cancelAiReview}>取消 AI 复核</Button> : null}
@@ -651,7 +643,6 @@ export default class ContractReview extends Component {
               <Button className='btn-secondary' onClick={this.copyReport}>复制审查报告</Button>
               <Button className='btn-secondary' onClick={this.exportFeedback}>导出反馈 JSON</Button>
             </View>
-            <Button className='ai-task-btn' onClick={this.handleAiReview}>让 AI 解读审查结果</Button>
           </View>
         ) : null}
 
