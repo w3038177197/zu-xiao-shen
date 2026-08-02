@@ -8,6 +8,7 @@ export const STORAGE_KEYS = {
   aiFeedback: 'zu-xiao-shen-ai-feedback',
   aiSession: 'zu-xiao-shen-ai-session',
   aiRemoteConsent: 'zu-xiao-shen-ai-remote-consent',
+  aiContractReviewConsent: 'zu-xiao-shen-ai-contract-review-consent',
   aiMode: 'zu-xiao-shen-ai-mode',
   aiTaskHandoff: 'zu-xiao-shen-ai-task-handoff',
   evidencePack: 'zu-xiao-shen-evidence-pack',
@@ -23,6 +24,7 @@ export const REMOTE_AI_CONFIG = {
   transport: 'cloud',
   apiBaseUrl: 'https://express-kqoh-288630-10-1435338026.sh.run.tcloudbase.com',
   requestTimeoutMs: 45_000,
+  contractReviewTimeoutMs: 120_000,
 }
 
 export const CLOUD_CONTAINER_CONFIG = {

@@ -22,10 +22,14 @@ import {
   AI_GENERATED_NOTICE,
   buildMiniappAiMessages,
   buildMiniappCitations,
+  buildMiniappContractReviewMessages,
   extractAiReply,
+  extractMiniappContractReviewFindings,
   getMiniappAiRequestFingerprint,
   isCasualMiniappPrompt,
+  mergeMiniappContractReviewFindings,
   normalizeMiniappAiRequest,
+  splitMiniappContractForReview,
 } from './miniapp-ai.mjs'
 import { parseContractDocument } from './contract-document-parser.mjs'
 import { createMiniappUsageStore } from './miniapp-usage-store.mjs'
@@ -506,7 +510,7 @@ app.get('/api/health', async (_request, response) => {
   const usageHealth = await miniappUsageStore.checkHealth()
   response.json({
     ok: true,
-    miniappApiVersion: 1,
+    miniappApiVersion: 2,
     provider: config.provider,
     model: config.model,
     hasApiKey: Boolean(config.apiKey),
@@ -696,14 +700,59 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
   }
   const reservation = { quota: claim.quota }
 
-  const knowledge = isCasualMiniappPrompt(input.prompt)
-    ? []
-    : searchKnowledge(`${input.prompt} ${input.contextSummary}`, 4)
-  const messages = buildMiniappAiMessages({ ...input, knowledge })
   const config = resolveProviderConfig()
   // work 返回 { result, upstreamUsage }：result 是纯净的客户端结果，不含 _upstreamUsage；
   // upstreamUsage 只用于结构化日志，绝不进入内存缓存、Redis 幂等缓存或客户端响应。
   const work = (async () => {
+    if (input.task === 'contract-review') {
+      const chunks = splitMiniappContractForReview(input.contractText)
+      const knowledge = searchKnowledge('房屋租赁合同 押金 维修 解约 入户 违约责任 格式条款', 4)
+      const results = await Promise.all(chunks.map(async (chunk, chunkIndex) => {
+        const data = await requestAiCompletion({
+          config,
+          messages: buildMiniappContractReviewMessages({
+            chunk,
+            chunkIndex,
+            chunkCount: chunks.length,
+            profile: input.profile,
+            knowledge,
+          }),
+          temperature: 0.1,
+          maxTokens: 1_600,
+        })
+        const findings = extractMiniappContractReviewFindings(data, chunk).filter((finding) => (
+          input.profile.reviewDepth === 'strict'
+          || (input.profile.reviewDepth === 'business' ? finding.level === 'high' : finding.level !== 'low')
+        ))
+        return {
+          findings,
+          usage: data?.usage,
+        }
+      }))
+      const upstreamUsage = results.reduce((total, item) => ({
+        prompt_tokens: total.prompt_tokens + (Number(item.usage?.prompt_tokens) || 0),
+        completion_tokens: total.completion_tokens + (Number(item.usage?.completion_tokens) || 0),
+        total_tokens: total.total_tokens + (Number(item.usage?.total_tokens) || 0),
+      }), { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 })
+      return {
+        result: {
+          ok: true,
+          requestId: input.requestId,
+          findings: mergeMiniappContractReviewFindings(results.map((item) => item.findings)),
+          reviewedChars: input.contractText.length,
+          chunksReviewed: chunks.length,
+          aiGenerated: true,
+          notice: AI_GENERATED_NOTICE,
+          quota: toPublicQuota(reservation.quota),
+        },
+        upstreamUsage,
+      }
+    }
+
+    const knowledge = isCasualMiniappPrompt(input.prompt)
+      ? []
+      : searchKnowledge(`${input.prompt} ${input.contextSummary}`, 4)
+    const messages = buildMiniappAiMessages({ ...input, knowledge })
     const data = await requestAiCompletion({ config, messages, temperature: 0.2, maxTokens: 900 })
     const result = {
       ok: true,

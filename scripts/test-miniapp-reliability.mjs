@@ -416,9 +416,15 @@ const checks = [
     assert.match(aiType.purpose, /首次发送联网请求前单独征得用户同意/)
     assert.match(aiType.purpose, /拒绝、未授权或服务不可用时使用本地分析/)
     assert.match(aiType.purpose, /默认不发送合同全文、照片和附件/)
+    const contractReviewType = privacyChecklist.privacyTypes.find((t) => t.name === 'AI 合同全文复核')
+    assert.ok(contractReviewType)
+    assert.match(contractReviewType.purpose, /单独授权/)
+    assert.match(contractReviewType.purpose, /隐藏姓名、地址、手机号、证件号、银行卡号和邮箱/)
+    assert.match(contractReviewType.purpose, /不写盘、不持久化合同正文/)
     assert.match(privacyChecklist.dataHandling.remoteAiConsent, /首次发送联网请求前单独征得用户同意/)
-    assert.match(privacyChecklist.dataHandling.remoteAiConsent, /拒绝、未授权或服务不可用时使用本地分析/)
-    assert.match(privacyChecklist.dataHandling.remoteUpload, /联网 AI 默认不发送合同全文、照片和附件/)
+    assert.match(privacyChecklist.dataHandling.remoteAiConsent, /拒绝全文复核、未授权或服务不可用时保留本地规则审查结果/)
+    assert.match(privacyChecklist.dataHandling.remoteUpload, /普通联网 AI 问答默认不发送合同全文、照片和附件/)
+    assert.match(privacyChecklist.dataHandling.remoteUpload, /单独授权后发送双重脱敏的合同文字/)
 
     // 5. 实际上传逻辑确实存在（contractTextImport.js 有 uploadFile 调用）
     assert.match(importSource, /uploadFile|startCloudContainerRequest/)
@@ -533,7 +539,7 @@ const checks = [
     assert.doesNotMatch(appSource, /agreePrivacyAuthorization/)
     assert.deepEqual(
       privacyChecklist.privacyTypes.map((item) => item.name),
-      ['剪切板', '选中的照片或视频信息', '摄像头', '选中的文件', '联网 AI 问题与可选资料摘要']
+      ['剪切板', '选中的照片或视频信息', '摄像头', '选中的文件', '联网 AI 问题与可选资料摘要', 'AI 合同全文复核']
     )
     assert.equal(JSON.stringify(privacyChecklist).includes('scope.album'), false)
   }],
@@ -1655,12 +1661,11 @@ const checks = [
     const path = await import('node:path')
     const filePath = path.resolve('miniapp/src/pages/contract/index.jsx')
     const source = await fs.readFile(filePath, 'utf-8')
-    // 确认 pushHistory 调用时传入的是包含本次计算结果的对象，而非 summary + count 参数
-    assert.ok(source.includes('this.pushHistory({'), 'pushHistory 应接收对象参数')
-    assert.ok(source.includes('contractText,'), 'pushHistory 参数应包含 contractText')
-    assert.ok(source.includes('findings,'), 'pushHistory 参数应包含 findings')
-    assert.ok(source.includes('summary,'), 'pushHistory 参数应包含 summary')
-    assert.ok(source.includes('dimensions,'), 'pushHistory 参数应包含 dimensions')
+    // 混合审查完成后统一保存 result，避免本地和 AI 阶段生成两条历史。
+    assert.ok(source.includes('this.pushHistory(result)'), 'pushHistory 应接收本次混合审查结果对象')
+    assert.ok(source.includes('localResult = { contractText, findings, summary, dimensions'), '本地结果应包含完整快照字段')
+    assert.ok(source.includes('summary: getRiskSummary(findings)'), 'AI 合并后应重新计算 summary')
+    assert.ok(source.includes('dimensions: getDimensionScores(findings)'), 'AI 合并后应重新计算 dimensions')
     // 确认不再使用旧的 (summary, count) 签名
     assert.ok(!source.includes('this.pushHistory(summary, findings.length)'), '不应再使用旧的 pushHistory(summary, count) 调用')
   }],

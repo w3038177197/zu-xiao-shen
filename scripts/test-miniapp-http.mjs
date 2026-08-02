@@ -29,12 +29,26 @@ function startMockUpstream(port) {
     req.on('data', (chunk) => { body += chunk })
     req.on('end', () => {
       const respond = () => {
+        let requestBody = {}
+        try { requestBody = JSON.parse(body || '{}') } catch { /* 返回普通 mock 响应 */ }
+        const isContractReview = requestBody.messages?.some((message) => String(message?.content || '').includes('合同全文复核模型'))
+        const content = isContractReview
+          ? JSON.stringify({ findings: [{
+            title: '出租方未经同意入户',
+            level: 'high',
+            dimension: '居住权',
+            evidence: '甲方可随时进入房屋，无需乙方同意',
+            explain: '可能影响承租人的居住安宁。',
+            suggestion: '改为提前预约并取得同意。',
+            replacement: '甲方确需入户时，应提前与乙方协商时间并取得同意。',
+          }] })
+          : '这是来自测试模型的回答，建议先核对合同条款后再沟通。'
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
           id: 'mock-completion-1',
           choices: [{
             index: 0,
-            message: { role: 'assistant', content: '这是来自测试模型的回答，建议先核对合同条款后再沟通。' },
+            message: { role: 'assistant', content },
             finish_reason: 'stop',
           }],
           usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
@@ -331,6 +345,7 @@ check('健康检查：服务端正确暴露鉴权与额度配置', async ({ base
   assert.equal(data.miniappUsageStore, 'memory')
   assert.equal(data.contractDocumentParsing, true)
   assert.equal(data.ocrMode, 'offline-tesseract')
+  assert.equal(data.miniappApiVersion, 2)
 })
 
 check('鉴权失败：无 Authorization 头返回 401', async ({ baseUrl }) => {
@@ -463,6 +478,38 @@ check('超时清理：上游超时后返回 504 且额度回滚', async ({ baseU
   })
   const quota = await quotaResponse.json()
   assert.equal(quota.used, 1, '超时回滚后额度应保持 1')
+})
+
+check('混合审查：AI 返回逐字证据且幂等重放不重复扣额度', async ({ baseUrl, token, sensitiveProbe }) => {
+  const payload = {
+    task: 'contract-review',
+    requestId: 'contract-review-http-0001',
+    contractText: `出租人姓名：${sensitiveProbe.userName}\n身份证号：${sensitiveProbe.idCard}\n电话：${sensitiveProbe.phone}\n第六条 甲方可随时进入房屋，无需乙方同意。`,
+    profile: { contractType: 'lease', partyRole: 'partyB', reviewDepth: 'strict' },
+  }
+  const send = () => fetch(`${baseUrl}/api/miniapp/ai/chat`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const firstResponse = await send()
+  const first = await firstResponse.json()
+  assert.equal(firstResponse.status, 200)
+  assert.equal(first.findings.length, 1)
+  assert.equal(first.findings[0].source, 'ai')
+  assert.equal(first.findings[0].evidence, '甲方可随时进入房屋，无需乙方同意')
+  assert.equal(first.reviewedChars > 0, true)
+  assert.equal(first._upstreamUsage, undefined)
+
+  const replayResponse = await send()
+  const replay = await replayResponse.json()
+  assert.equal(replayResponse.status, 200)
+  assert.equal(replay.replayed, true)
+  const quotaResponse = await fetch(`${baseUrl}/api/miniapp/ai/quota`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const quota = await quotaResponse.json()
+  assert.equal(quota.used, 2, '合同复核重放不应重复扣额度')
 })
 
 check('DOCX 上传：真实文档解析出合同正文（含敏感数据不泄露）', async ({ baseUrl, token, sensitiveProbe }) => {

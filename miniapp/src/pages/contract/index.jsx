@@ -11,6 +11,7 @@ import {
   getDimensionScores,
   getRiskSummary,
   groupFindingsByTheme,
+  mergeFindings,
   mergeRevisionItems,
   resolveReviewProfile,
 } from '../../features/contractReview'
@@ -28,6 +29,12 @@ import {
 } from '../../utils/contractTextImport'
 import { exportTextToFile } from '../../utils/textFileExport'
 import { openAiTask } from '../../utils/aiTaskHandoff'
+import { buildRemoteContractReviewPayload } from '../../features/remoteAi'
+import {
+  confirmContractReviewConsent,
+  getRemoteAiError,
+  startRemoteContractReviewRequest,
+} from '../../utils/remoteAiRequest'
 import './index.css'
 
 const STORAGE_KEY = 'zu-xiao-shen-contract-draft'
@@ -51,6 +58,10 @@ export default class ContractReview extends Component {
 
   activeImportTask = null
 
+  activeReviewTask = null
+
+  reviewRun = 0
+
   state = {
     contractText: '',
     findings: [],
@@ -62,6 +73,7 @@ export default class ContractReview extends Component {
     profile: { ...DEFAULT_PROFILE },
     history: [],
     isAnalyzing: false,
+    analysisStage: 'idle',
     isImporting: false,
     importProgress: null,
     expandedIndex: 0,
@@ -87,6 +99,7 @@ export default class ContractReview extends Component {
 
   componentWillUnmount() {
     this.activeImportTask?.cancel?.()
+    this.activeReviewTask?.cancel?.()
     this.draftSaver.flush()
   }
 
@@ -95,7 +108,10 @@ export default class ContractReview extends Component {
   }
 
   updateContract = (contractText, extra = {}) => {
-    this.setState({ contractText, findings: [], summary: null, dimensions: [], adoptedItems: [], revisedDraft: '', activeProfile: null, lastAnalysisFailed: false, ...extra })
+    this.reviewRun += 1
+    this.activeReviewTask?.cancel?.()
+    this.activeReviewTask = null
+    this.setState({ contractText, findings: [], summary: null, dimensions: [], adoptedItems: [], revisedDraft: '', activeProfile: null, isAnalyzing: false, analysisStage: 'idle', lastAnalysisFailed: false, ...extra })
     this.draftSaver.schedule(contractText)
   }
 
@@ -169,60 +185,103 @@ export default class ContractReview extends Component {
     })
   }
 
-  handleAnalyze = () => {
+  handleAnalyze = async () => {
     const contractText = this.state.contractText.trim()
     if (!contractText) {
       Taro.showToast({ title: '请先粘贴或导入合同', icon: 'none' })
       return
     }
 
-    this.setState({ isAnalyzing: true, operationNotice: '', lastAnalysisFailed: false })
+    const run = ++this.reviewRun
+    const profile = { ...this.state.profile }
+    this.setState({ isAnalyzing: true, analysisStage: 'local', operationNotice: '', lastAnalysisFailed: false })
+    let localResult
     try {
       const cleanText = cleanContractTextForReview(contractText)
-      const activeProfile = resolveReviewProfile(this.state.profile, cleanText)
+      const activeProfile = resolveReviewProfile(profile, cleanText)
       const findings = analyzeContract(cleanText, activeProfile)
       const summary = getRiskSummary(findings)
       const dimensions = getDimensionScores(findings).filter((item) => item.score > 0)
-      const adoptedItems = []
-      const revisedDraft = ''
+      localResult = { contractText, findings, summary, dimensions, adoptedItems: [], revisedDraft: '', activeProfile, profile }
       this.setState({
         findings,
         summary,
         dimensions,
-        adoptedItems,
-        revisedDraft,
+        adoptedItems: [],
+        revisedDraft: '',
         activeProfile,
-        isAnalyzing: false,
+        analysisStage: 'ai',
         operationNotice: '',
         lastAnalysisFailed: false,
         expandedIndex: 0,
       })
-      // 直接传本次计算出的完整结果，不依赖 this.state（setState 异步，this.state 此时仍是旧值）
-      const historyStatus = this.pushHistory({
-        contractText,
-        findings,
-        summary,
-        dimensions,
-        adoptedItems,
-        revisedDraft,
-        activeProfile,
-        profile: { ...this.state.profile },
-      })
-      const title = historyStatus === 'failed'
-        ? '审查完成，但历史未保存'
-        : historyStatus === 'summary'
-          ? '审查完成，仅保存历史摘要'
-          : `发现 ${findings.length} 个风险点`
-      Taro.showToast({ title, icon: findings.length || historyStatus !== 'saved' ? 'none' : 'success' })
     } catch (error) {
-      console.error('审查失败:', error)
+      console.error('本地审查失败:', error)
+      if (run !== this.reviewRun) return
       this.setState({
         isAnalyzing: false,
+        analysisStage: 'idle',
         operationNotice: '本地审查失败，当前合同内容没有被修改。请重试；如果仍失败，可先导出或复制合同正文。',
         lastAnalysisFailed: true,
       })
       Taro.showToast({ title: '审查失败，请重试', icon: 'none' })
+      return
     }
+
+    const finishReview = (result, operationNotice = '') => {
+      if (run !== this.reviewRun) return
+      this.setState({
+        ...result,
+        isAnalyzing: false,
+        analysisStage: 'idle',
+        operationNotice,
+        lastAnalysisFailed: false,
+        expandedIndex: 0,
+      })
+      const historyStatus = this.pushHistory(result)
+      const title = historyStatus === 'failed'
+        ? '审查完成，但历史未保存'
+        : historyStatus === 'summary'
+          ? '审查完成，仅保存历史摘要'
+          : `发现 ${result.findings.length} 个风险点`
+      Taro.showToast({ title, icon: result.findings.length || historyStatus !== 'saved' ? 'none' : 'success' })
+    }
+
+    try {
+      if (!await confirmContractReviewConsent()) {
+        finishReview(localResult, '已完成本地规则审查；你未授权发送脱敏合同文字，因此未进行 AI 全文复核。')
+        return
+      }
+      if (run !== this.reviewRun) return
+      const payload = buildRemoteContractReviewPayload({ contractText, profile: localResult.activeProfile })
+      const request = startRemoteContractReviewRequest(payload)
+      this.activeReviewTask = request
+      this.setState({ analysisStage: 'ai' })
+      const remoteResult = await request.promise
+      if (run !== this.reviewRun || this.activeReviewTask !== request) return
+      const findings = mergeFindings(localResult.findings, remoteResult.findings)
+      const result = {
+        ...localResult,
+        findings,
+        summary: getRiskSummary(findings),
+        dimensions: getDimensionScores(findings).filter((item) => item.score > 0),
+      }
+      finishReview(result, remoteResult.findings.length
+        ? `AI 全文复核补充 ${Math.max(0, findings.length - localResult.findings.length)} 个风险点，所有 AI 证据均已回查合同原文。`
+        : 'AI 全文复核已完成，未补充有可靠原文证据的新风险。')
+    } catch (error) {
+      if (run !== this.reviewRun) return
+      const failure = getRemoteAiError(error)
+      finishReview(localResult, failure.cancelled
+        ? 'AI 全文复核已取消，本地规则审查结果已保留。'
+        : `AI 全文复核未完成：${failure.message}。本地规则审查结果已保留。`)
+    } finally {
+      if (run === this.reviewRun) this.activeReviewTask = null
+    }
+  }
+
+  cancelAiReview = () => {
+    this.activeReviewTask?.cancel?.()
   }
 
   retryAnalyze = () => {
@@ -444,7 +503,7 @@ export default class ContractReview extends Component {
   }
 
   render() {
-    const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, isImporting, importProgress, expandedIndex, showHistory, operationNotice, lastImportSource, lastAnalysisFailed } = this.state
+    const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, analysisStage, isImporting, importProgress, expandedIndex, showHistory, operationNotice, lastImportSource, lastAnalysisFailed } = this.state
     const lowCount = Math.max(0, findings.length - (summary?.highCount || 0) - (summary?.mediumCount || 0))
     const groupedFindings = groupFindingsByTheme(findings)
     const reviewDepthHint = reviewDepthOptions.find((item) => item.value === profile.reviewDepth)?.desc
@@ -457,7 +516,7 @@ export default class ContractReview extends Component {
           <Text className='body-text'>标出押金、涨租、维修、入户和违约责任，把风险翻译成可直接沟通的修改建议。</Text>
           <View className='privacy-note'>
             <View className='privacy-indicator'>✓</View>
-            <Text>审查在本机完成；PDF、DOCX 仅在你确认后上传提取文字</Text>
+            <Text>先在本机规则审查；单独授权后，AI 仅复核脱敏合同文字</Text>
           </View>
         </View>
 
@@ -483,12 +542,12 @@ export default class ContractReview extends Component {
             onInput={(event) => this.updateContract(event.detail.value)}
             maxlength={-1}
           />
-          {contractText.length > 120000 ? <Text className='caption contract-size-warning'>合同较长，本地审查可能需要更久。建议按章节分段导入或先删除重复页眉页脚，避免遗漏重点条款。</Text> : null}
+          {contractText.length > 60000 ? <Text className='caption contract-size-warning'>合同超过 60000 字，本地规则仍可审查，但 AI 全文复核需按章节分段。</Text> : null}
           {operationNotice ? (
             <View className='operation-notice' aria-live='polite'>
               <Text>{operationNotice}</Text>
               <View className='operation-notice-actions'>
-                {lastAnalysisFailed ? <Button aria-label='重试本地审查' disabled={isAnalyzing} onClick={this.retryAnalyze}>重试审查</Button> : null}
+                {lastAnalysisFailed ? <Button aria-label='重试混合审查' disabled={isAnalyzing} onClick={this.retryAnalyze}>重试审查</Button> : null}
                 {lastImportSource ? <Button aria-label='重试上次导入' disabled={isImporting} onClick={this.retryLastImport}>重试</Button> : null}
                 <Button aria-label='关闭错误提示' onClick={() => this.setState({ operationNotice: '' })}>关闭</Button>
               </View>
@@ -521,7 +580,8 @@ export default class ContractReview extends Component {
         </View>
 
         <View className='sticky-actions'>
-          <Button className='btn-primary' onClick={this.handleAnalyze} disabled={isAnalyzing || !contractText.trim()}>{isAnalyzing ? '审查中…' : '开始本地审查'}</Button>
+          <Button className='btn-primary' onClick={this.handleAnalyze} disabled={isAnalyzing || !contractText.trim()}>{isAnalyzing ? (analysisStage === 'ai' ? 'AI 全文复核中…' : '本地规则审查中…') : '开始混合审查'}</Button>
+          {isAnalyzing && analysisStage === 'ai' && this.activeReviewTask ? <Button className='btn-danger' onClick={this.cancelAiReview}>取消 AI 复核</Button> : null}
         </View>
 
         {summary ? (
@@ -617,6 +677,7 @@ export default class ContractReview extends Component {
                       <Text className='finding-title'>{finding.title}</Text>
                     </View>
                     <View className='finding-meta'>
+                      <Text className='finding-source'>{finding.source === 'ai' ? 'AI 补充' : '本地规则'}</Text>
                       <Text className={`status-badge status-badge-${finding.level === 'high' ? 'error' : finding.level === 'medium' ? 'warning' : 'done'}`}>{levelText(finding.level)}</Text>
                       <Text className='chevron'>{expanded ? '⌃' : '⌄'}</Text>
                     </View>

@@ -215,6 +215,26 @@ export function buildRemoteAiPayload({
   }
 }
 
+export function buildRemoteContractReviewPayload({
+  contractText,
+  profile,
+  requestId = createRemoteAiRequestId(),
+}) {
+  const source = String(contractText || '').replace(/\r\n?/g, '\n').trim()
+  if (!source) throw new Error('请先提供需要复核的合同正文')
+  if (source.length > 60_000) throw new Error('合同超过 60000 字，请按章节分段审查')
+  return {
+    task: 'contract-review',
+    requestId,
+    contractText: redactRemoteContext(source),
+    profile: {
+      contractType: profile?.contractType || 'lease',
+      partyRole: profile?.partyRole || 'partyB',
+      reviewDepth: profile?.reviewDepth || 'strict',
+    },
+  }
+}
+
 export function normalizeRemoteAiResponse(value) {
   const reply = typeof value?.reply === 'string' ? value.reply.trim() : ''
   if (!value?.ok || !reply) throw new Error('联网 AI 没有返回有效内容')
@@ -222,6 +242,19 @@ export function normalizeRemoteAiResponse(value) {
     requestId: String(value.requestId || ''),
     reply,
     citations: Array.isArray(value.citations) ? value.citations.slice(0, 4) : [],
+    quota: value.quota || null,
+    notice: String(value.notice || '内容由 AI 生成，仅供参考。'),
+    replayed: Boolean(value.replayed),
+  }
+}
+
+export function normalizeRemoteContractReviewResponse(value) {
+  if (!value?.ok || !Array.isArray(value.findings)) throw new Error('联网 AI 没有返回有效审查结果')
+  return {
+    requestId: String(value.requestId || ''),
+    findings: value.findings.slice(0, 40),
+    reviewedChars: Number(value.reviewedChars) || 0,
+    chunksReviewed: Number(value.chunksReviewed) || 0,
     quota: value.quota || null,
     notice: String(value.notice || '内容由 AI 生成，仅供参考。'),
     replayed: Boolean(value.replayed),

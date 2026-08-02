@@ -16,11 +16,12 @@ const DATA_KEYS = [
 // 备份中会带上授权状态，但不带任何 token/openid/密钥
 const AUTH_STATE_KEYS = [
   ['aiRemoteConsent', '联网 AI 授权状态'],
+  ['aiContractReviewConsent', 'AI 全文复核授权状态'],
 ]
 
 const CLEAR_ONLY_KEYS = [
   // 联网 AI 会话与同意状态（含旧版本遗留 key）
-  'aiSession', 'aiRemoteConsent', 'aiMode', 'aiTaskHandoff',
+  'aiSession', 'aiRemoteConsent', 'aiContractReviewConsent', 'aiMode', 'aiTaskHandoff',
   'aiConfig', 'aiFeedback',
   // 旧版本遗留的本地历史与本地模式开关
   'history', 'localOnlyMode',

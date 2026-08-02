@@ -378,6 +378,8 @@ export function mergeFindings(baseFindings, extraFindings) {
     }
   })
 
+  if (baseFindings.analysisMeta) merged.analysisMeta = baseFindings.analysisMeta
+
   return merged
 }
 
@@ -2103,6 +2105,7 @@ export function createReportText({ summary, findings, revisionItems, contractTex
         const negotiation = finding.negotiation || details?.negotiation || '建议结合交易背景与对方协商。'
         return [
           `${index + 1}. ${finding.title}（${finding.levelText}，${priority}）`,
+          `发现来源：${finding.source === 'ai' ? 'AI 全文复核补充' : '本地规则'}`,
           `风险解释：${finding.explain}`,
           `证据片段：${evidence}`,
           `修改建议：${finding.suggestion}`,

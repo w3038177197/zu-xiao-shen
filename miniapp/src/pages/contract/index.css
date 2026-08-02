@@ -548,6 +548,12 @@
   gap: 10px;
 }
 
+.finding-source {
+  color: #526158;
+  font-size: 20px;
+  white-space: nowrap;
+}
+
 .finding-meta .chevron {
   color: #66746b;
   font-size: 28px;

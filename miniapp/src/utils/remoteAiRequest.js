@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro'
 import { REMOTE_AI_CONFIG, STORAGE_KEYS } from '../constants/appConfig.js'
-import { normalizeRemoteAiResponse } from '../features/remoteAi.js'
+import { normalizeRemoteAiResponse, normalizeRemoteContractReviewResponse } from '../features/remoteAi.js'
 import { isCloudContainerAvailable, startCloudContainerRequest } from './cloudContainer.js'
 
 let sessionPromise = null
@@ -32,6 +32,26 @@ export async function confirmRemoteConsent() {
     return false
   }
   return true
+}
+
+export async function confirmContractReviewConsent() {
+  try {
+    if (Taro.getStorageSync(STORAGE_KEYS.aiContractReviewConsent) === true) return true
+  } catch { /* 继续显示本次授权 */ }
+  const result = await Taro.showModal({
+    title: '启用 AI 全文复核',
+    content: '本地规则会先完成审查。继续后，合同文字将在本机隐藏姓名、地址、手机号、证件号等信息，再发送至租小审服务端和模型服务商进行语义复核；照片和附件原文件不会发送。是否继续？',
+    confirmText: '同意复核',
+    cancelText: '仅本地审查',
+  })
+  if (!result.confirm) return false
+  try {
+    Taro.setStorageSync(STORAGE_KEYS.aiContractReviewConsent, true)
+    return true
+  } catch {
+    Taro.showToast({ title: '无法保存全文复核授权，请清理本地空间后重试', icon: 'none' })
+    return false
+  }
 }
 
 function createRemoteError(message, code, extra = {}) {
@@ -242,7 +262,7 @@ export async function ensureMiniappSession({ force = false } = {}) {
   }
 }
 
-export function startRemoteAiRequest(payload, { force = false } = {}) {
+function startAuthenticatedAiRequest(payload, { force = false, timeoutMs, normalize = normalizeRemoteAiResponse } = {}) {
   let activeRequest = null
   let cancelled = false
   let rejectCancellation = null
@@ -269,9 +289,10 @@ export function startRemoteAiRequest(payload, { force = false } = {}) {
         method: 'POST',
         data: payload,
         token: session.token,
+        timeoutMs,
       })
       try {
-        const result = normalizeRemoteAiResponse(await waitUntilCancelled(activeRequest.promise))
+        const result = normalize(await waitUntilCancelled(activeRequest.promise))
         recordRemoteSuccess()
         saveSession({ ...session, quota: result.quota || session.quota })
         return result
@@ -296,6 +317,19 @@ export function startRemoteAiRequest(payload, { force = false } = {}) {
       rejectCancellation?.(createRemoteError('已取消联网回答', 'cancelled'))
     },
   }
+}
+
+
+export function startRemoteAiRequest(payload, options = {}) {
+  return startAuthenticatedAiRequest(payload, options)
+}
+
+export function startRemoteContractReviewRequest(payload, options = {}) {
+  return startAuthenticatedAiRequest(payload, {
+    ...options,
+    timeoutMs: REMOTE_AI_CONFIG.contractReviewTimeoutMs,
+    normalize: normalizeRemoteContractReviewResponse,
+  })
 }
 
 export function getStoredRemoteAiQuota() {
