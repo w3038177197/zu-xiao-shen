@@ -461,20 +461,6 @@
   background: #c9372d;
 }
 
-/* Report export */
-.report-export-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  margin-top: 24px;
-}
-
-.report-export-row .btn-secondary {
-  min-height: 72px;
-  font-size: 24px;
-  line-height: 70px;
-}
-
 /* Findings */
 .findings-card .card-header {
   align-items: center;
@@ -768,7 +754,6 @@
     grid-template-columns: 1fr;
   }
 
-  .report-export-row,
   .revised-actions,
   .history-actions {
     grid-template-columns: 1fr;

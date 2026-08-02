@@ -6,7 +6,6 @@ import { contractTypeOptions, partyRoleOptions, reviewDepthOptions } from '../..
 import {
   analyzeContract,
   cleanContractTextForReview,
-  createReportText,
   createRevisedContractDraft,
   getDimensionScores,
   getRiskSummary,
@@ -16,7 +15,7 @@ import {
   resolveReviewProfile,
 } from '../../features/contractReview'
 import { createReviewHistoryEntry, saveReviewHistory } from '../../features/reviewHistory'
-import { formatReviewFeedbackExport, saveReviewFeedback } from '../../features/reviewFeedback'
+import { saveReviewFeedback } from '../../features/reviewFeedback'
 import { createDebouncedSaver } from '../../utils/debounceSave'
 import { copyText as copyToClipboard } from '../../utils/copyText'
 import {
@@ -27,7 +26,6 @@ import {
   importLocalContractFile,
   startRemoteDocumentImport,
 } from '../../utils/contractTextImport'
-import { exportTextToFile } from '../../utils/textFileExport'
 import { buildRemoteContractReviewPayload } from '../../features/remoteAi'
 import {
   getRemoteAiError,
@@ -442,23 +440,6 @@ export default class ContractReview extends Component {
     copyToClipboard(data, title)
   }
 
-  copyReport = () => {
-    const { summary, findings, adoptedItems, contractText, activeProfile, profile } = this.state
-    if (!summary) return
-    this.copyText(createReportText({ summary, findings, revisionItems: adoptedItems, contractText, reviewProfile: activeProfile || profile }), '报告已复制')
-  }
-
-  exportReportTxt = () => {
-    const { summary, findings, adoptedItems, contractText, activeProfile, profile } = this.state
-    if (!summary) return
-    exportTextToFile('合同审查报告.txt', createReportText({ summary, findings, revisionItems: adoptedItems, contractText, reviewProfile: activeProfile || profile }))
-  }
-
-  exportFeedback = () => {
-    const content = formatReviewFeedbackExport()
-    exportTextToFile('合同审查反馈.json', content)
-  }
-
   clearHistory = () => {
     Taro.showModal({
       title: '清空审查记录',
@@ -638,11 +619,6 @@ export default class ContractReview extends Component {
                 ))}
               </View>
             ) : null}
-            <View className='report-export-row'>
-              <Button className='btn-secondary' onClick={this.exportReportTxt}>导出审查报告 TXT</Button>
-              <Button className='btn-secondary' onClick={this.copyReport}>复制审查报告</Button>
-              <Button className='btn-secondary' onClick={this.exportFeedback}>导出反馈 JSON</Button>
-            </View>
           </View>
         ) : null}
 

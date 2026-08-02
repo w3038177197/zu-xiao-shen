@@ -1033,13 +1033,12 @@ const checks = [
     // 确认已改用 shareFileMessage
     assert.ok(code.includes('shareFileMessage'), 'textFileExport.js 未使用 shareFileMessage')
   }],
-  ['TXT 导出：保留文本导出的三个业务页调用同一个统一工具', async () => {
-    // 首页已改用业务 Word 报告；其余三个页面继续复用统一文本工具。
+  ['TXT 导出：保留文本导出的两个业务页调用同一个统一工具', async () => {
+    // 首页和合同页已改用首页业务 Word 报告；其余两个页面继续复用统一文本工具。
     const fs = await import('node:fs')
     const pages = [
       '../miniapp/src/pages/checkin/index.jsx',
       '../miniapp/src/pages/evidence/index.jsx',
-      '../miniapp/src/pages/contract/index.jsx',
     ]
     for (const page of pages) {
       const code = fs.readFileSync(new URL(page, import.meta.url), 'utf-8')
@@ -2398,6 +2397,7 @@ const checks = [
     assert.match(contractSource, /startRemoteContractReviewRequest\(payload\)/)
     assert.match(contractSource, /点击“开始综合审查”即同意将双重脱敏后的合同文字发送/)
     assert.doesNotMatch(contractSource, /confirmContractReviewConsent|让 AI 解读审查结果|openAiTask/)
+    assert.doesNotMatch(contractSource, /导出审查报告 TXT|复制审查报告|导出反馈 JSON|textFileExport/)
     assert.doesNotMatch(contractSource, /expandedIndex:\s*0/)
     assert.match(contractSource, /expandedIndex:\s*expanded \? -1 : index/)
     assert.match(contractSource, /operationNoticeIsError/)
