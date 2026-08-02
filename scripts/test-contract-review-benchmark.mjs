@@ -302,6 +302,50 @@ const delayEvidence = comprehensiveFindings.find((item) => item.id === 'lease-de
 assert.match(delayEvidence, /30个工作日/, '押金退还风险证据应定位到实际期限条款')
 assert.ok(delayEvidence.length < 220, '风险证据不应从合同前部第一个同名关键词开始截取大段正文')
 
+const seventyDayTrapContract = [
+  '月租金2000元，押金2000元。',
+  '租期内乙方提前退租，押金及剩余租金全部不退，并额外支付2个月房租作为违约金。',
+  '周边房价上涨时，甲方可单次最低上调150元月租，乙方不补缴即解除合同收回房屋，全部钱款扣除。',
+  '欠费每日按总金额2.8%收取滞纳金。',
+  '甲方出售、抵押房屋，可随时要求乙方限期搬离，无需支付违约金；逾期搬离按三倍房租收取。',
+  '乙方留宿超过3天、饲养宠物或被投诉噪音，每次扣除押金260元，累计三次甲方可解除合同。',
+  '退房时墙面轻微污渍、地板划痕、家电外壳磨损、水龙头轻微滴水均算乙方损坏，赔付金额由甲方核定；退房后甲方70个工作日审核押金，存在分歧可暂扣押金。',
+  '甲方可任意时段上门查房、带人看房，无需提前通知，乙方阻拦即违约。',
+  '欠租超过5日、逾期搬离超过7日，屋内私人物品视为遗弃，甲方可随意丢弃处置。',
+  '房屋墙体漏水、电路老化、水管爆裂等原生质量问题维修、人身财产损失全部由乙方承担，甲方完全免责；家电故障损耗均由乙方维保。',
+  '公摊水电费、物业费、垃圾费等所有杂费全部由乙方承担。',
+  '纠纷只能向甲方户籍地法院起诉。',
+  '本合同所有条款最终解释权归甲方所有，乙方不得提出异议。',
+].join('\n')
+const seventyDayFindings = analyzeContract(seventyDayTrapContract, profile)
+const seventyDayIds = new Set(seventyDayFindings.map((item) => item.id))
+const seventyDayExpectedIds = [
+  'lease-early-exit-stacked-penalty',
+  'lease-unilateral-rent-adjustment',
+  'lease-daily-late-fee-5-percent',
+  'lease-arbitrary-deposit-deduction',
+  'lease-deposit-return-delay',
+  'lease-all-maintenance-tenant',
+  'lease-landlord-entry-no-consent',
+  'lease-normal-use-fixed-penalty',
+  'lease-landlord-loss-exclusion',
+  'lease-unfavorable-jurisdiction',
+  'lease-format-clause-waiver',
+  'lease-sale-terminates-tenancy',
+  'lease-abandoned-property-disposal',
+  'lease-excessive-holdover-rent',
+  'lease-deposit-indefinite-hold',
+  'lease-safety-liability-waiver',
+  'lease-common-area-fee-transfer',
+]
+for (const id of seventyDayExpectedIds) {
+  assert.ok(seventyDayIds.has(id), `70日押金陷阱合同应识别：${id}`)
+}
+expectedTotal += seventyDayExpectedIds.length
+matchedTotal += seventyDayExpectedIds.filter((id) => seventyDayIds.has(id)).length
+assert.equal(analyzeContract('押金争议时，无争议部分应先行返还。', profile).some((item) => item.id === 'lease-deposit-indefinite-hold'), false, '正常争议处理不得误报为无限期暂扣')
+assert.equal(analyzeContract('乙方逾期搬离时，按原日租金据实结算。', profile).some((item) => item.id === 'lease-excessive-holdover-rent'), false, '原日租金据实结算不得误报为多倍计费')
+
 const grouped = groupFindingsByTheme(amountAudit)
 assert.deepEqual(grouped.flatMap((group) => group.items.map((item) => item.index)).sort((a, b) => a - b), amountAudit.map((_, index) => index), '主题分组不得丢失或重复风险')
 const groupedReport = createReportText({
