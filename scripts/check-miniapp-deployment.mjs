@@ -23,7 +23,7 @@ try {
 }
 
 if (health.status !== 200 || health.data?.ok !== true) failures.push('健康检查未返回可用状态')
-if (Number(health.data?.miniappApiVersion) < 1) failures.push('线上仍是旧后端，缺少 miniappApiVersion')
+if (Number(health.data?.miniappApiVersion) < 3) failures.push(`线上后端版本过旧，需要 miniappApiVersion 3，实际为 ${health.data?.miniappApiVersion || '未知'}`)
 if (health.data?.miniappAuthConfigured !== true) failures.push('微信登录环境变量尚未完整配置')
 if (health.data?.hasApiKey !== true) failures.push('模型服务密钥尚未配置')
 if (health.data?.contractDocumentParsing !== true) failures.push('合同 DOCX/PDF 解析尚未部署')
