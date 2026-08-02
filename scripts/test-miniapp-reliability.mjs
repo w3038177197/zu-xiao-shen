@@ -2398,6 +2398,8 @@ const checks = [
     assert.match(contractSource, /点击“开始综合审查”即同意将双重脱敏后的合同文字发送/)
     assert.doesNotMatch(contractSource, /confirmContractReviewConsent|让 AI 解读审查结果|openAiTask/)
     assert.doesNotMatch(contractSource, /导出审查报告 TXT|复制审查报告|导出反馈 JSON|textFileExport/)
+    assert.match(contractSource, /evidence-location'>\{`\$\{finding\.evidenceLocation\.clause/)
+    assert.doesNotMatch(contractSource, />第\$\{finding\.evidenceLocation\.line\}/)
     assert.doesNotMatch(contractSource, /expandedIndex:\s*0/)
     assert.match(contractSource, /expandedIndex:\s*expanded \? -1 : index/)
     assert.match(contractSource, /operationNoticeIsError/)

@@ -663,7 +663,7 @@ export default class ContractReview extends Component {
                         <View className='finding-content'>
                           <Text className='finding-label'>合同原文</Text>
                           <Text className='body-text evidence-text'>{finding.evidence}</Text>
-                          {finding.evidenceLocation ? <Text className='caption evidence-location'>{finding.evidenceLocation.clause ? `${finding.evidenceLocation.clause} · ` : ''}第${finding.evidenceLocation.line}行 · 置信度 ${Math.round((finding.confidence || 0) * 100)}%</Text> : null}
+                          {finding.evidenceLocation ? <Text className='caption evidence-location'>{`${finding.evidenceLocation.clause ? `${finding.evidenceLocation.clause} · ` : ''}第${finding.evidenceLocation.line}行 · 置信度 ${Math.round((finding.confidence || 0) * 100)}%`}</Text> : null}
                         </View>
                       ) : null}
                       {finding.suggestion ? (
