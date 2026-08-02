@@ -55,7 +55,7 @@ const PHONE_PATTERN = /1[3-9]\d{9}/g
 const ID_CARD_PATTERN = /(?:\d{17}[0-9Xx]|\d{15})/g
 const BANK_CARD_PATTERN = /(?:\d[ -]?){15,18}\d/g
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
-const LABELED_NAME_PATTERN = /((?:姓名|房东|出租人|承租人|联系人)\s*[：:]\s*)[\p{Script=Han}·]{2,8}/gu
+const LABELED_NAME_PATTERN = /((?:姓名|房东|联系人|(?:甲方|乙方|出租方|承租方|出租人|承租人)(?:\s*[（(](?:甲方|乙方|出租方|承租方|出租人|承租人)[）)])?)\s*[：:]\s*)[\p{Script=Han}·]{2,8}/gu
 const LABELED_ADDRESS_PATTERN = /((?:住址|地址|房屋地址|租赁地址)\s*[：:]\s*)[^\n，。;；]{4,100}/gu
 
 function compact(value, maxLength = 240) {
@@ -218,6 +218,7 @@ export function buildRemoteAiPayload({
 export function buildRemoteContractReviewPayload({
   contractText,
   profile,
+  localFindings = [],
   requestId = createRemoteAiRequestId(),
 }) {
   const source = String(contractText || '').replace(/\r\n?/g, '\n').trim()
@@ -232,6 +233,12 @@ export function buildRemoteContractReviewPayload({
       partyRole: profile?.partyRole || 'partyB',
       reviewDepth: profile?.reviewDepth || 'strict',
     },
+    localFindings: localFindings.slice(0, 24).map((finding) => ({
+      title: redactRemoteContext(String(finding?.title || '').slice(0, 80)),
+      level: ['high', 'medium', 'low'].includes(finding?.level) ? finding.level : 'medium',
+      dimension: redactRemoteContext(String(finding?.dimension || '').slice(0, 40)),
+      evidence: redactRemoteContext(String(finding?.evidence || '').slice(0, 240)),
+    })).filter((finding) => finding.title && finding.evidence),
   }
 }
 
@@ -255,6 +262,8 @@ export function normalizeRemoteContractReviewResponse(value) {
     findings: value.findings.slice(0, 40),
     reviewedChars: Number(value.reviewedChars) || 0,
     chunksReviewed: Number(value.chunksReviewed) || 0,
+    chunksTotal: Number(value.chunksTotal) || Number(value.chunksReviewed) || 0,
+    partial: Boolean(value.partial),
     quota: value.quota || null,
     notice: String(value.notice || '内容由 AI 生成，仅供参考。'),
     replayed: Boolean(value.replayed),

@@ -16,7 +16,7 @@ const DATA_KEYS = [
 // 备份中会带上授权状态，但不带任何 token/openid/密钥
 const AUTH_STATE_KEYS = [
   ['aiRemoteConsent', '联网 AI 授权状态'],
-  ['aiContractReviewConsent', 'AI 全文复核授权状态'],
+  ['aiContractReviewConsent', '合同综合审查授权状态'],
 ]
 
 const CLEAR_ONLY_KEYS = [

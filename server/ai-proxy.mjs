@@ -25,6 +25,7 @@ import {
   buildMiniappContractReviewMessages,
   extractAiReply,
   extractMiniappContractReviewFindings,
+  getContractReviewKnowledgeQuery,
   getMiniappAiRequestFingerprint,
   isCasualMiniappPrompt,
   mergeMiniappContractReviewFindings,
@@ -94,6 +95,7 @@ const rateWindowMs = 60_000
 const rateBuckets = new Map()
 const quotaBuckets = new Map()
 const miniappAiRequestCache = new Map()
+const miniappAiAbortControllers = new Map()
 const dailyQuota = Math.max(1, Number(process.env.AI_DAILY_QUOTA || 40))
 const miniappUsageStore = createMiniappUsageStore({
   redisUrl: process.env.UPSTASH_REDIS_REST_URL,
@@ -444,7 +446,7 @@ function resolveProviderConfig({ provider, baseUrl, model } = {}) {
   }
 }
 
-async function requestAiCompletion({ config, messages, temperature = 0.2, maxTokens = 2_200 }) {
+async function requestAiCompletion({ config, messages, temperature = 0.2, maxTokens = 2_200, signal }) {
   if (!config.endpoint) {
     const error = new Error('AI 服务地址尚未配置')
     error.status = 503
@@ -457,6 +459,9 @@ async function requestAiCompletion({ config, messages, temperature = 0.2, maxTok
   }
 
   const controller = new AbortController()
+  const abortFromCaller = () => controller.abort()
+  if (signal?.aborted) abortFromCaller()
+  else signal?.addEventListener('abort', abortFromCaller, { once: true })
   const timeout = setTimeout(() => controller.abort(), upstreamTimeoutMs)
   try {
     const upstreamResponse = await fetch(config.endpoint, {
@@ -483,6 +488,12 @@ async function requestAiCompletion({ config, messages, temperature = 0.2, maxTok
     return data
   } catch (error) {
     if (error?.name === 'AbortError') {
+      if (signal?.aborted) {
+        const cancelledError = new Error('AI 请求已取消')
+        cancelledError.status = 499
+        cancelledError.code = 'client-aborted'
+        throw cancelledError
+      }
       const timeoutError = new Error('AI 响应超时，请稍后重试')
       timeoutError.status = 504
       throw timeoutError
@@ -490,6 +501,7 @@ async function requestAiCompletion({ config, messages, temperature = 0.2, maxTok
     throw error
   } finally {
     clearTimeout(timeout)
+    signal?.removeEventListener('abort', abortFromCaller)
   }
 }
 
@@ -510,7 +522,7 @@ app.get('/api/health', async (_request, response) => {
   const usageHealth = await miniappUsageStore.checkHealth()
   response.json({
     ok: true,
-    miniappApiVersion: 2,
+    miniappApiVersion: 3,
     provider: config.provider,
     model: config.model,
     hasApiKey: Boolean(config.apiKey),
@@ -554,6 +566,17 @@ app.post('/api/auth/wx-login', rateLimit('wx-login', 12), async (request, respon
     logStructured({ requestId, route, statusCode: error?.status || 502, elapsedMs: Date.now() - startedAt, errorCode: 'wx-login-failed', storeMode: miniappUsageStore.mode })
     response.status(error?.status || 502).json({ message: error?.message || '微信登录失败，请稍后重试' })
   }
+})
+
+app.post('/api/miniapp/ai/cancel', authenticateMiniappSession, rateLimit('miniapp-cancel', 30), (request, response) => {
+  const requestId = String(request.body?.requestId || '').trim()
+  if (!/^[A-Za-z0-9_-]{12,96}$/.test(requestId)) {
+    response.status(400).json({ message: 'AI 请求标识无效' })
+    return
+  }
+  const controller = miniappAiAbortControllers.get(`${getAccountId(request)}:${requestId}`)
+  controller?.abort()
+  response.json({ ok: true, cancelled: Boolean(controller) })
 })
 
 app.get('/api/miniapp/ai/quota', authenticateMiniappSession, rateLimit('miniapp-quota', 60), async (request, response) => {
@@ -648,6 +671,22 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
   }
   if (claim.status === 'cached') {
     const persistedResult = claim.value?.result || claim.value
+    if (persistedResult?.privateResultOmitted) {
+      logStructured({
+        requestId: input.requestId,
+        route: '/api/miniapp/ai/chat',
+        statusCode: 409,
+        elapsedMs: Date.now() - startedAt,
+        replayed: true,
+        errorCode: 'private-result-not-cached',
+        storeMode: miniappUsageStore.mode,
+      })
+      response.status(409).json({
+        message: '该合同审查已完成；为保护合同隐私，服务端不缓存逐字证据，请重新点击综合审查获取新报告',
+        code: 'private-result-not-cached',
+      })
+      return
+    }
     miniappAiRequestCache.set(cacheKey, { createdAt: Date.now(), requestHash, result: persistedResult })
     logStructured({
       requestId: input.requestId,
@@ -701,13 +740,19 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
   const reservation = { quota: claim.quota }
 
   const config = resolveProviderConfig()
+  const workController = new AbortController()
+  const abortOnDisconnect = () => {
+    if (!response.writableEnded) workController.abort()
+  }
+  miniappAiAbortControllers.set(cacheKey, workController)
+  response.once('close', abortOnDisconnect)
   // work 返回 { result, upstreamUsage }：result 是纯净的客户端结果，不含 _upstreamUsage；
   // upstreamUsage 只用于结构化日志，绝不进入内存缓存、Redis 幂等缓存或客户端响应。
   const work = (async () => {
     if (input.task === 'contract-review') {
       const chunks = splitMiniappContractForReview(input.contractText)
-      const knowledge = searchKnowledge('房屋租赁合同 押金 维修 解约 入户 违约责任 格式条款', 4)
-      const results = await Promise.all(chunks.map(async (chunk, chunkIndex) => {
+      const knowledge = searchKnowledge(getContractReviewKnowledgeQuery(input.profile.contractType), 4)
+      const settledResults = await Promise.allSettled(chunks.map(async (chunk, chunkIndex) => {
         const data = await requestAiCompletion({
           config,
           messages: buildMiniappContractReviewMessages({
@@ -716,9 +761,11 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
             chunkCount: chunks.length,
             profile: input.profile,
             knowledge,
+            localFindings: input.localFindings,
           }),
           temperature: 0.1,
           maxTokens: 1_600,
+          signal: workController.signal,
         })
         const findings = extractMiniappContractReviewFindings(data, chunk).filter((finding) => (
           input.profile.reviewDepth === 'strict'
@@ -729,6 +776,15 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
           usage: data?.usage,
         }
       }))
+      if (workController.signal.aborted) {
+        const error = new Error('AI 请求已取消')
+        error.status = 499
+        error.code = 'client-aborted'
+        throw error
+      }
+      const results = settledResults.filter((item) => item.status === 'fulfilled').map((item) => item.value)
+      if (!results.length) throw settledResults.find((item) => item.status === 'rejected')?.reason || new Error('AI 分段复核失败')
+      const failedChunks = settledResults.length - results.length
       const upstreamUsage = results.reduce((total, item) => ({
         prompt_tokens: total.prompt_tokens + (Number(item.usage?.prompt_tokens) || 0),
         completion_tokens: total.completion_tokens + (Number(item.usage?.completion_tokens) || 0),
@@ -740,7 +796,9 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
           requestId: input.requestId,
           findings: mergeMiniappContractReviewFindings(results.map((item) => item.findings)),
           reviewedChars: input.contractText.length,
-          chunksReviewed: chunks.length,
+          chunksReviewed: results.length,
+          chunksTotal: chunks.length,
+          partial: failedChunks > 0,
           aiGenerated: true,
           notice: AI_GENERATED_NOTICE,
           quota: toPublicQuota(reservation.quota),
@@ -753,7 +811,7 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
       ? []
       : searchKnowledge(`${input.prompt} ${input.contextSummary}`, 4)
     const messages = buildMiniappAiMessages({ ...input, knowledge })
-    const data = await requestAiCompletion({ config, messages, temperature: 0.2, maxTokens: 900 })
+    const data = await requestAiCompletion({ config, messages, temperature: 0.2, maxTokens: 900, signal: workController.signal })
     const result = {
       ok: true,
       requestId: input.requestId,
@@ -771,13 +829,20 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
 
   try {
     const { result, upstreamUsage } = await work
-    miniappAiRequestCache.set(cacheKey, { createdAt: Date.now(), requestHash, result })
+    const persistedResult = input.task === 'contract-review'
+      ? { requestId: input.requestId, privateResultOmitted: true }
+      : result
+    if (input.task === 'contract-review') miniappAiRequestCache.delete(cacheKey)
+    else miniappAiRequestCache.set(cacheKey, { createdAt: Date.now(), requestHash, result })
     try {
-      await miniappUsageStore.completeRequest(accountId, input.requestId, requestHash, result)
+      await miniappUsageStore.completeRequest(accountId, input.requestId, requestHash, persistedResult)
     } catch (cacheError) {
-      console.error('miniapp AI idempotency cache write failed', {
+      logStructured({
         requestId: input.requestId,
-        message: cacheError?.message || 'unknown error',
+        route: '/api/miniapp/ai/chat',
+        statusCode: 500,
+        errorCode: 'idempotency-cache-write-failed',
+        storeMode: miniappUsageStore.mode,
       })
     }
     logStructured({
@@ -797,9 +862,12 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
     try {
       await miniappUsageStore.rollbackRequest(accountId, input.requestId, requestHash, dailyQuota)
     } catch (rollbackError) {
-      console.error('miniapp AI quota rollback failed', {
+      logStructured({
         requestId: input.requestId,
-        message: rollbackError?.message || 'unknown error',
+        route: '/api/miniapp/ai/chat',
+        statusCode: 500,
+        errorCode: 'quota-rollback-failed',
+        storeMode: miniappUsageStore.mode,
       })
     }
     const errorCode = error?.status === 504 ? 'upstream-timeout' : 'upstream-failed'
@@ -813,8 +881,10 @@ app.post('/api/miniapp/ai/chat', authenticateMiniappSession, rateLimit('miniapp-
       errorCode,
       storeMode: miniappUsageStore.mode,
     })
-    response.status(error?.status || 502).json({ message: error?.message || 'AI 请求失败，请稍后重试' })
+    if (!response.destroyed) response.status(error?.status || 502).json({ message: error?.message || 'AI 请求失败，请稍后重试' })
   }
+  response.off('close', abortOnDisconnect)
+  if (miniappAiAbortControllers.get(cacheKey) === workController) miniappAiAbortControllers.delete(cacheKey)
 })
 
 function sendRagSearchResponse(response, { query, limit }) {

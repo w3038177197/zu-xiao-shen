@@ -99,7 +99,7 @@ export default class ContractReview extends Component {
 
   componentWillUnmount() {
     this.activeImportTask?.cancel?.()
-    this.activeReviewTask?.cancel?.()
+    this.cancelActiveReview()
     this.draftSaver.flush()
   }
 
@@ -107,19 +107,24 @@ export default class ContractReview extends Component {
     return { title: '租小审：签合同前，先把押金和涨租条款过一遍', path: '/pages/contract/index' }
   }
 
-  updateContract = (contractText, extra = {}) => {
+  cancelActiveReview = () => {
     this.reviewRun += 1
     this.activeReviewTask?.cancel?.()
     this.activeReviewTask = null
+  }
+
+  updateContract = (contractText, extra = {}) => {
+    this.cancelActiveReview()
     this.setState({ contractText, findings: [], summary: null, dimensions: [], adoptedItems: [], revisedDraft: '', activeProfile: null, isAnalyzing: false, analysisStage: 'idle', lastAnalysisFailed: false, ...extra })
     this.draftSaver.schedule(contractText)
   }
 
   updateProfile = (key, value) => {
+    this.cancelActiveReview()
     this.setState((previous) => {
       const profile = { ...previous.profile, [key]: value }
       Taro.setStorageSync(PROFILE_KEY, profile)
-      return { profile }
+      return { profile, findings: [], summary: null, dimensions: [], adoptedItems: [], revisedDraft: '', activeProfile: null, isAnalyzing: false, analysisStage: 'idle', lastAnalysisFailed: false }
     })
   }
 
@@ -136,6 +141,7 @@ export default class ContractReview extends Component {
       Taro.showToast({ title: '该记录无快照，无法恢复', icon: 'none' })
       return
     }
+    this.cancelActiveReview()
     const snap = entry.snapshot
     const currentDraft = this.state.contractText
     // 先取消尚未执行的 draftSaver，避免它把恢复前的旧草稿写入 Storage
@@ -164,6 +170,8 @@ export default class ContractReview extends Component {
       revisedDraft: snap.revisedDraft || '',
       activeProfile: snap.activeProfile || null,
       profile: { ...DEFAULT_PROFILE, ...(snap.profile || {}) },
+      isAnalyzing: false,
+      analysisStage: 'idle',
       expandedIndex: 0,
     })
     Taro.showToast({ title: `已恢复 ${entry.time} 的审查`, icon: 'none' })
@@ -194,7 +202,13 @@ export default class ContractReview extends Component {
 
     const run = ++this.reviewRun
     const profile = { ...this.state.profile }
-    this.setState({ isAnalyzing: true, analysisStage: 'local', operationNotice: '', lastAnalysisFailed: false })
+    this.setState({ isAnalyzing: true, analysisStage: 'prepare', operationNotice: '', lastAnalysisFailed: false })
+    let useAi = false
+    try {
+      useAi = contractText.length <= 60_000 && await confirmContractReviewConsent()
+    } catch { /* 授权弹窗异常时继续本地审查 */ }
+    if (run !== this.reviewRun) return
+    this.setState({ analysisStage: 'local' })
     let localResult
     try {
       const cleanText = cleanContractTextForReview(contractText)
@@ -203,18 +217,6 @@ export default class ContractReview extends Component {
       const summary = getRiskSummary(findings)
       const dimensions = getDimensionScores(findings).filter((item) => item.score > 0)
       localResult = { contractText, findings, summary, dimensions, adoptedItems: [], revisedDraft: '', activeProfile, profile }
-      this.setState({
-        findings,
-        summary,
-        dimensions,
-        adoptedItems: [],
-        revisedDraft: '',
-        activeProfile,
-        analysisStage: 'ai',
-        operationNotice: '',
-        lastAnalysisFailed: false,
-        expandedIndex: 0,
-      })
     } catch (error) {
       console.error('本地审查失败:', error)
       if (run !== this.reviewRun) return
@@ -248,12 +250,12 @@ export default class ContractReview extends Component {
     }
 
     try {
-      if (!await confirmContractReviewConsent()) {
+      if (!useAi) {
         finishReview(localResult, '已完成本地规则审查；你未授权发送脱敏合同文字，因此未进行 AI 全文复核。')
         return
       }
       if (run !== this.reviewRun) return
-      const payload = buildRemoteContractReviewPayload({ contractText, profile: localResult.activeProfile })
+      const payload = buildRemoteContractReviewPayload({ contractText, profile: localResult.activeProfile, localFindings: localResult.findings })
       const request = startRemoteContractReviewRequest(payload)
       this.activeReviewTask = request
       this.setState({ analysisStage: 'ai' })
@@ -266,15 +268,17 @@ export default class ContractReview extends Component {
         summary: getRiskSummary(findings),
         dimensions: getDimensionScores(findings).filter((item) => item.score > 0),
       }
-      finishReview(result, remoteResult.findings.length
-        ? `AI 全文复核补充 ${Math.max(0, findings.length - localResult.findings.length)} 个风险点，所有 AI 证据均已回查合同原文。`
-        : 'AI 全文复核已完成，未补充有可靠原文证据的新风险。')
+      finishReview(result, remoteResult.partial
+        ? `综合审查已完成 ${remoteResult.chunksReviewed}/${remoteResult.chunksTotal} 个 AI 分段，其余分段暂时失败；已合并成功分段和本地结果。`
+        : remoteResult.findings.length
+          ? `综合审查完成：本地规则与 AI 已协作核验，AI 补充 ${Math.max(0, findings.length - localResult.findings.length)} 个风险点。`
+        : '综合审查完成：AI 已结合本地线索和知识库核验，未补充有可靠原文证据的新风险。')
     } catch (error) {
       if (run !== this.reviewRun) return
       const failure = getRemoteAiError(error)
       finishReview(localResult, failure.cancelled
-        ? 'AI 全文复核已取消，本地规则审查结果已保留。'
-        : `AI 全文复核未完成：${failure.message}。本地规则审查结果已保留。`)
+        ? '综合审查已取消，本地规则审查结果已保留。'
+        : `AI 协作核验未完成：${failure.message}。本地规则审查结果已保留。`)
     } finally {
       if (run === this.reviewRun) this.activeReviewTask = null
     }
@@ -580,7 +584,7 @@ export default class ContractReview extends Component {
         </View>
 
         <View className='sticky-actions'>
-          <Button className='btn-primary' onClick={this.handleAnalyze} disabled={isAnalyzing || !contractText.trim()}>{isAnalyzing ? (analysisStage === 'ai' ? 'AI 全文复核中…' : '本地规则审查中…') : '开始混合审查'}</Button>
+          <Button className='btn-primary' onClick={this.handleAnalyze} disabled={isAnalyzing || !contractText.trim()}>{isAnalyzing ? (analysisStage === 'prepare' ? '准备综合审查…' : analysisStage === 'ai' ? 'AI 协作核验中…' : '本地规则扫描中…') : '开始综合审查'}</Button>
           {isAnalyzing && analysisStage === 'ai' && this.activeReviewTask ? <Button className='btn-danger' onClick={this.cancelAiReview}>取消 AI 复核</Button> : null}
         </View>
 

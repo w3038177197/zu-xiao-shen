@@ -39,9 +39,9 @@ export async function confirmContractReviewConsent() {
     if (Taro.getStorageSync(STORAGE_KEYS.aiContractReviewConsent) === true) return true
   } catch { /* 继续显示本次授权 */ }
   const result = await Taro.showModal({
-    title: '启用 AI 全文复核',
-    content: '本地规则会先完成审查。继续后，合同文字将在本机隐藏姓名、地址、手机号、证件号等信息，再发送至租小审服务端和模型服务商进行语义复核；照片和附件原文件不会发送。是否继续？',
-    confirmText: '同意复核',
+    title: '启用综合审查',
+    content: '综合审查会让本地规则先生成风险线索，再将脱敏合同文字和线索发送至租小审服务端与模型服务商，由 AI 结合知识库核验并补漏，最终一次性生成报告；照片和附件原文件不会发送。是否继续？',
+    confirmText: '同意审查',
     cancelText: '仅本地审查',
   })
   if (!result.confirm) return false
@@ -264,6 +264,7 @@ export async function ensureMiniappSession({ force = false } = {}) {
 
 function startAuthenticatedAiRequest(payload, { force = false, timeoutMs, normalize = normalizeRemoteAiResponse } = {}) {
   let activeRequest = null
+  let session = null
   let cancelled = false
   let rejectCancellation = null
   const cancellation = new Promise((_, reject) => {
@@ -280,7 +281,7 @@ function startAuthenticatedAiRequest(payload, { force = false, timeoutMs, normal
         { retryAfterSeconds: currentService.retryAfterSeconds },
       )
     }
-    let session = await waitUntilCancelled(ensureMiniappSession())
+    session = await waitUntilCancelled(ensureMiniappSession())
     if (cancelled) throw createRemoteError('已取消联网回答', 'cancelled')
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -314,6 +315,15 @@ function startAuthenticatedAiRequest(payload, { force = false, timeoutMs, normal
       if (cancelled) return
       cancelled = true
       activeRequest?.cancel()
+      if (session?.token && payload?.requestId) {
+        startJsonRequest({
+          path: '/api/miniapp/ai/cancel',
+          method: 'POST',
+          data: { requestId: payload.requestId },
+          token: session.token,
+          timeoutMs: 5_000,
+        }).promise.catch(() => {})
+      }
       rejectCancellation?.(createRemoteError('已取消联网回答', 'cancelled'))
     },
   }
@@ -340,7 +350,7 @@ export async function fetchRemoteAiServiceHealth() {
   const request = startJsonRequest({ path: '/api/health', timeoutMs: 15_000 })
   try {
     const data = await request.promise
-    const supportsMiniappApi = Number(data?.miniappApiVersion) >= 1
+    const supportsMiniappApi = Number(data?.miniappApiVersion) >= 3
       || typeof data?.miniappAuthConfigured === 'boolean'
     const status = {
       reachable: data?.ok === true,

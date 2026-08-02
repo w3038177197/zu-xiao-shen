@@ -23,12 +23,16 @@ function getAvailablePort() {
 }
 
 function startMockUpstream(port) {
-  const state = { mode: 'success', delay: 0 }
+  const state = { mode: 'success', delay: 0, failNext: 0, aborted: 0 }
   const server = http.createServer((req, res) => {
+    res.on('close', () => {
+      if (!res.writableEnded) state.aborted += 1
+    })
     let body = ''
     req.on('data', (chunk) => { body += chunk })
     req.on('end', () => {
       const respond = () => {
+        if (res.destroyed) return
         let requestBody = {}
         try { requestBody = JSON.parse(body || '{}') } catch { /* 返回普通 mock 响应 */ }
         const isContractReview = requestBody.messages?.some((message) => String(message?.content || '').includes('合同全文复核模型'))
@@ -57,6 +61,12 @@ function startMockUpstream(port) {
       if (state.mode === 'error') {
         res.writeHead(500, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ error: { message: 'mock upstream error' } }))
+        return
+      }
+      if (state.failNext > 0) {
+        state.failNext -= 1
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: { message: 'mock partial failure' } }))
         return
       }
       if (state.delay > 0) {
@@ -345,7 +355,7 @@ check('健康检查：服务端正确暴露鉴权与额度配置', async ({ base
   assert.equal(data.miniappUsageStore, 'memory')
   assert.equal(data.contractDocumentParsing, true)
   assert.equal(data.ocrMode, 'offline-tesseract')
-  assert.equal(data.miniappApiVersion, 2)
+  assert.equal(data.miniappApiVersion, 3)
 })
 
 check('鉴权失败：无 Authorization 头返回 401', async ({ baseUrl }) => {
@@ -480,7 +490,7 @@ check('超时清理：上游超时后返回 504 且额度回滚', async ({ baseU
   assert.equal(quota.used, 1, '超时回滚后额度应保持 1')
 })
 
-check('混合审查：AI 返回逐字证据且幂等重放不重复扣额度', async ({ baseUrl, token, sensitiveProbe }) => {
+check('综合审查：AI 返回逐字证据，幂等缓存只保留无正文完成标记', async ({ baseUrl, token, sensitiveProbe }) => {
   const payload = {
     task: 'contract-review',
     requestId: 'contract-review-http-0001',
@@ -503,13 +513,69 @@ check('混合审查：AI 返回逐字证据且幂等重放不重复扣额度', a
 
   const replayResponse = await send()
   const replay = await replayResponse.json()
-  assert.equal(replayResponse.status, 200)
-  assert.equal(replay.replayed, true)
+  assert.equal(replayResponse.status, 409)
+  assert.equal(replay.code, 'private-result-not-cached')
+  assert.doesNotMatch(JSON.stringify(replay), /甲方可随时进入房屋|张三丰|110101199001011234/)
   const quotaResponse = await fetch(`${baseUrl}/api/miniapp/ai/quota`, {
     headers: { Authorization: `Bearer ${token}` },
   })
   const quota = await quotaResponse.json()
   assert.equal(quota.used, 2, '合同复核重放不应重复扣额度')
+})
+
+check('综合审查取消：服务端中止上游调用并回滚额度', async ({ baseUrl, token, upstreamState }) => {
+  upstreamState.mode = 'success'
+  upstreamState.delay = 6_000
+  const abortedBefore = upstreamState.aborted
+  const requestId = 'contract-cancel-http-0001'
+  const reviewPromise = fetch(`${baseUrl}/api/miniapp/ai/chat`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      task: 'contract-review',
+      requestId,
+      contractText: '第六条 甲方可随时进入房屋，无需乙方同意。',
+      profile: { contractType: 'lease', partyRole: 'partyB', reviewDepth: 'strict' },
+    }),
+  })
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  const cancelResponse = await fetch(`${baseUrl}/api/miniapp/ai/cancel`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId }),
+  })
+  const cancellation = await cancelResponse.json()
+  assert.equal(cancelResponse.status, 200)
+  assert.equal(cancellation.cancelled, true)
+  const reviewResponse = await reviewPromise
+  assert.equal(reviewResponse.status, 499)
+  upstreamState.delay = 0
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.ok(upstreamState.aborted > abortedBefore, '上游连接应在取消后中止')
+  const quota = await (await fetch(`${baseUrl}/api/miniapp/ai/quota`, { headers: { Authorization: `Bearer ${token}` } })).json()
+  assert.equal(quota.used, 2, '取消后应回滚额度')
+})
+
+check('综合审查分段容错：单个分段失败仍返回成功分段', async ({ baseUrl, token, upstreamState }) => {
+  upstreamState.mode = 'success'
+  upstreamState.failNext = 1
+  const contractText = '甲方可随时进入房屋，无需乙方同意。\n'.repeat(900)
+  const response = await fetch(`${baseUrl}/api/miniapp/ai/chat`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      task: 'contract-review',
+      requestId: 'contract-partial-http-0001',
+      contractText,
+      profile: { contractType: 'lease', partyRole: 'partyB', reviewDepth: 'strict' },
+    }),
+  })
+  const result = await response.json()
+  assert.equal(response.status, 200)
+  assert.equal(result.partial, true)
+  assert.ok(result.chunksTotal > result.chunksReviewed)
+  assert.ok(result.chunksReviewed > 0)
+  assert.equal(result.findings.length, 1)
 })
 
 check('DOCX 上传：真实文档解析出合同正文（含敏感数据不泄露）', async ({ baseUrl, token, sensitiveProbe }) => {

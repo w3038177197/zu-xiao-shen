@@ -422,7 +422,7 @@ const checks = [
     assert.match(contractReviewType.purpose, /隐藏姓名、地址、手机号、证件号、银行卡号和邮箱/)
     assert.match(contractReviewType.purpose, /不写盘、不持久化合同正文/)
     assert.match(privacyChecklist.dataHandling.remoteAiConsent, /首次发送联网请求前单独征得用户同意/)
-    assert.match(privacyChecklist.dataHandling.remoteAiConsent, /拒绝全文复核、未授权或服务不可用时保留本地规则审查结果/)
+    assert.match(privacyChecklist.dataHandling.remoteAiConsent, /拒绝授权或服务不可用时保留本地规则审查结果/)
     assert.match(privacyChecklist.dataHandling.remoteUpload, /普通联网 AI 问答默认不发送合同全文、照片和附件/)
     assert.match(privacyChecklist.dataHandling.remoteUpload, /单独授权后发送双重脱敏的合同文字/)
 
