@@ -61,7 +61,7 @@ const storage = new Map()
 Taro.getStorageSync = (key) => storage.get(key)
 Taro.setStorageSync = (key, value) => storage.set(key, value)
 Taro.removeStorageSync = (key) => storage.delete(key)
-Taro.getStorageInfoSync = () => ({ currentSize: 12, limit: 10240 })
+Taro.getStorageInfoSync = () => ({ currentSize: 12, limit: 10240, keys: [...storage.keys()] })
 let copied = ''
 Taro.setClipboardData = ({ data, success }) => {
   copied = data
@@ -134,6 +134,25 @@ Taro.getFileSystemManager = () => ({
       return
     }
     success({ data: file.data, errMsg: 'readFile:ok' })
+  },
+  readdir: ({ dirPath, success }) => {
+    const prefix = `${dirPath}/`
+    const files = [...new Set([...virtualFiles.keys()]
+      .filter((filePath) => filePath.startsWith(prefix))
+      .map((filePath) => filePath.slice(prefix.length).split('/')[0]))]
+    success({ files, errMsg: 'readdir:ok' })
+  },
+  unlink: ({ filePath, success, fail }) => {
+    if (!virtualFiles.delete(filePath)) {
+      fail({ errMsg: 'unlink:fail not exist' })
+      return
+    }
+    success({ errMsg: 'unlink:ok' })
+  },
+  rmdir: ({ dirPath, success }) => {
+    const prefix = `${dirPath}/`
+    ;[...virtualFiles.keys()].filter((filePath) => filePath.startsWith(prefix)).forEach((filePath) => virtualFiles.delete(filePath))
+    success({ errMsg: 'rmdir:ok' })
   },
 })
 let messageFileResult = null
@@ -371,6 +390,9 @@ const checks = [
     // 同时写入当前版本 key，确认也会被清除
     storage.set(STORAGE_KEYS.aiSession, { token: 'session-token' })
     storage.set(STORAGE_KEYS.aiRemoteConsent, true)
+    storage.set('checkin_inspection_data', { livingRoom: {} })
+    storage.set('evidence_pack_data', { formData: {} })
+    storage.set('future-app-cache', '也应清除')
 
     const result = await localDataManager.clearLocalData({ removePhotos: false })
     assert.equal(result.ok, true)
@@ -383,6 +405,23 @@ const checks = [
     // 当前版本 key 也被清除
     assert.equal(storage.has(STORAGE_KEYS.aiSession), false)
     assert.equal(storage.has(STORAGE_KEYS.aiRemoteConsent), false)
+    assert.equal(storage.size, 0, '仍有 Storage 使用痕迹未清除')
+  }],
+
+  ['清除全部数据会删除验房照片、证据附件和导出文件', async () => {
+    savedFiles.clear()
+    virtualFiles.clear()
+    savedFiles.set('wxfile://saved/checkin-photo.jpg', { size: 2048 })
+    savedFiles.set('wxfile://saved/evidence-file.pdf', { size: 4096 })
+    virtualFiles.set('wxfile://userdata/租小审-恢复用备份.docx', { data: new Uint8Array([1]) })
+    virtualFiles.set('wxfile://userdata/exports/合同分析报告.docx', { data: new Uint8Array([2]) })
+
+    const result = await localDataManager.clearLocalData()
+    assert.equal(result.ok, true)
+    assert.equal(result.removedFiles, 2)
+    assert.equal(result.removedGeneratedFiles, 2)
+    assert.equal(savedFiles.size, 0)
+    assert.equal([...virtualFiles.keys()].some((filePath) => filePath.startsWith('wxfile://userdata/')), false)
   }],
   ['隐私说明与实际上传行为一致：区分本机保存与服务端上传，且服务端仅内存处理', async () => {
     const fs = await import('node:fs')
@@ -2375,6 +2414,16 @@ const checks = [
     assert.match(checkinSource, /aria-label='验房报告'/)
   }],
 
+  ['彻底清除：页面销毁时不把旧合同、验房和证据数据重新写回', async () => {
+    const fs = await import('node:fs')
+    const contractSource = fs.readFileSync(new URL('../miniapp/src/pages/contract/index.jsx', import.meta.url), 'utf8')
+    const checkinSource = fs.readFileSync(new URL('../miniapp/src/pages/checkin/index.jsx', import.meta.url), 'utf8')
+    const evidenceSource = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.jsx', import.meta.url), 'utf8')
+    assert.match(contractSource, /__ZU_XIAO_SHEN_CLEARING__.*draftSaver\.cancel\(\)/)
+    assert.match(checkinSource, /__ZU_XIAO_SHEN_CLEARING__.*autoSaver\.cancel\(\)/)
+    assert.match(evidenceSource, /__ZU_XIAO_SHEN_CLEARING__.*autoSaver\.cancel\(\)/)
+  }],
+
   ['深层交互体验：欢迎语不误导模式，长内容与高频按钮适合真机操作', async () => {
     const fs = await import('node:fs')
     const aiSource = fs.readFileSync(new URL('../miniapp/src/pages/ai/index.jsx', import.meta.url), 'utf8')
@@ -2959,6 +3008,11 @@ const checks = [
     assert.match(homeSource, /preparedExports\.report/)
     assert.match(homeSource, /preparedExports\.backup/)
     assert.match(homeSource, /Taro\.shareFileMessage\(/)
+    assert.match(homeSource, /先导出完整备份，再清除/)
+    assert.match(homeSource, /不备份，直接彻底清除/)
+    assert.match(homeSource, /writeAndShare\('租小审-恢复用备份\.docx'/)
+    assert.match(homeSource, /__ZU_XIAO_SHEN_CLEARING__/)
+    assert.match(homeSource, /Taro\.reLaunch\(\{ url: '\/pages\/index\/index' \}\)/)
     assert.match(homeSource, /extension: \['docx', 'zip', 'json'\]/)
     assert.match(homeSource, /if \(result\.ok\)/)
     // 引用了备份/恢复函数

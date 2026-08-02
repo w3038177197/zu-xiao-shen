@@ -58,7 +58,8 @@ export default class CheckinInspection extends Component {
   }
 
   componentWillUnmount() {
-    this.autoSaver.flush()
+    if (globalThis.__ZU_XIAO_SHEN_CLEARING__) this.autoSaver.cancel()
+    else this.autoSaver.flush()
   }
 
   onShareAppMessage() {

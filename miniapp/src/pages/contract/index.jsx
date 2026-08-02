@@ -98,7 +98,8 @@ export default class ContractReview extends Component {
   componentWillUnmount() {
     this.activeImportTask?.cancel?.()
     this.cancelActiveReview()
-    this.draftSaver.flush()
+    if (globalThis.__ZU_XIAO_SHEN_CLEARING__) this.draftSaver.cancel()
+    else this.draftSaver.flush()
   }
 
   onShareAppMessage() {

@@ -16,7 +16,7 @@ import {
   restoreLocalData,
 } from '../../utils/localDataManager'
 import { buildBusinessReportDocx, BUSINESS_REPORT_MODULES } from '../../utils/businessReportExport'
-import { writePackageFile } from '../../utils/evidencePackageExport'
+import { writeAndShare, writePackageFile } from '../../utils/evidencePackageExport'
 import './index.css'
 
 const workflowSteps = [
@@ -269,17 +269,68 @@ export default function Index() {
     })
   }
 
-  const handleClearLocalData = () => {
-    Taro.showModal({
-      title: '清除本机数据',
-      content: '将清除合同草稿、审查记录、AI 对话、验房记录、证据包和补贴资料，并删除本机持久保存的照片与附件。此操作不可恢复。',
-      success: async ({ confirm }) => {
-        if (!confirm) return
-        const result = await clearLocalData()
-        await refreshLocalState()
-        Taro.showToast({ title: result.ok ? '本地数据已清除' : '部分数据清除失败', icon: result.ok ? 'success' : 'none' })
-      },
+  const handleClearLocalData = async () => {
+    let choice
+    try {
+      choice = await Taro.showActionSheet({
+        alertText: '清除前是否保存当前工作状态？',
+        itemList: ['先导出完整备份，再清除', '不备份，直接彻底清除'],
+      })
+    } catch {
+      return
+    }
+
+    if (choice.tapIndex === 0) {
+      setBackupMessage({ type: 'warning', text: '正在生成恢复用备份，请稍候。' })
+      try {
+        const archive = await buildLocalBackupArchive({ format: 'docx' })
+        if (archive.skipped?.length) {
+          const warning = await Taro.showModal({
+            title: '备份中有文件缺失',
+            content: `${archive.skipped.length} 个照片或附件无法读取。继续后这些文件不能从备份恢复，是否仍要保存其余数据？`,
+            confirmText: '继续备份',
+            cancelText: '停止清除',
+          })
+          if (!warning.confirm) {
+            setBackupMessage({ type: 'warning', text: '已停止清除，请补齐缺失文件后重试。' })
+            return
+          }
+        }
+        const shared = await writeAndShare('租小审-恢复用备份.docx', archive.bytes)
+        if (!shared.ok) {
+          setBackupMessage({ type: 'error', text: '备份尚未成功分享，数据不会被清除。' })
+          return
+        }
+        setBackupMessage({ type: 'success', text: `当前工作状态已分享保存，包含 ${archive.included.length} 个照片/附件。` })
+      } catch (error) {
+        setBackupMessage({ type: 'error', text: `备份失败，数据不会被清除：${error?.message || '未知错误'}` })
+        return
+      }
+    }
+
+    const confirmation = await Taro.showModal({
+      title: choice.tapIndex === 0 ? '备份已保存，确认清除？' : '确认彻底清除？',
+      content: '将删除合同原文与审查记录、AI 对话、验房记录和照片、证据包与附件、补贴资料、登录会话以及小程序生成的本地文件。清除后需通过恢复用备份才能找回。',
+      confirmText: '彻底清除',
+      confirmColor: '#c9372d',
+      cancelText: '取消',
     })
+    if (!confirmation.confirm) return
+
+    globalThis.__ZU_XIAO_SHEN_CLEARING__ = true
+    const result = await clearLocalData()
+    setPreparedExports({ report: null, backup: null })
+    setBackupMessage({
+      type: result.ok ? 'success' : 'warning',
+      text: result.ok ? '全部本机使用痕迹已清除。' : '记录已清除，但部分本地文件删除失败，请再次清除。',
+    })
+    await refreshLocalState()
+    try {
+      await Taro.reLaunch({ url: '/pages/index/index' })
+    } finally {
+      setTimeout(() => { globalThis.__ZU_XIAO_SHEN_CLEARING__ = false }, 0)
+    }
+    Taro.showToast({ title: result.ok ? '已彻底清除' : '部分文件未删除', icon: result.ok ? 'success' : 'none' })
   }
 
   const handleCleanupUnusedFiles = () => {

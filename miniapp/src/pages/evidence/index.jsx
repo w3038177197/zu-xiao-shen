@@ -85,7 +85,8 @@ export default class EvidencePack extends Component {
   componentWillUnmount() {
     this.aiRunId += 1
     this.pendingAiRequest?.cancel()
-    this.autoSaver.flush()
+    if (globalThis.__ZU_XIAO_SHEN_CLEARING__) this.autoSaver.cancel()
+    else this.autoSaver.flush()
   }
 
   onShareAppMessage() {

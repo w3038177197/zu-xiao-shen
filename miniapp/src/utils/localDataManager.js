@@ -28,6 +28,8 @@ const CLEAR_ONLY_KEYS = [
   'accountId',
 ]
 
+const LEGACY_STORAGE_KEYS = ['checkin_inspection_data', 'evidence_pack_data']
+
 // 备份文件当前 schema 版本
 const BACKUP_SCHEMA_VERSION = 1
 // 支持恢复的最低版本（低于此版本需明确提示）
@@ -167,11 +169,19 @@ export function formatLocalDataExport() {
 export async function clearLocalData({ removePhotos = true } = {}) {
   const errors = []
   let removedFiles = 0
-  DATA_KEYS.forEach(([key]) => {
-    try { Taro.removeStorageSync(STORAGE_KEYS[key]) } catch (error) { errors.push(error) }
-  })
-  CLEAR_ONLY_KEYS.forEach((key) => {
-    try { Taro.removeStorageSync(STORAGE_KEYS[key]) } catch (error) { errors.push(error) }
+  let removedGeneratedFiles = 0
+  let storageKeys = [
+    ...DATA_KEYS.map(([key]) => STORAGE_KEYS[key]),
+    ...CLEAR_ONLY_KEYS.map((key) => STORAGE_KEYS[key]),
+    ...LEGACY_STORAGE_KEYS,
+  ]
+  try {
+    storageKeys = [...storageKeys, ...(Taro.getStorageInfoSync()?.keys || [])]
+  } catch (error) {
+    errors.push(error)
+  }
+  ;[...new Set(storageKeys.filter(Boolean))].forEach((key) => {
+    try { Taro.removeStorageSync(key) } catch (error) { errors.push(error) }
   })
 
   if (removePhotos) {
@@ -188,8 +198,38 @@ export async function clearLocalData({ removePhotos = true } = {}) {
     } catch (error) {
       errors.push(error)
     }
+
+    const userDataPath = Taro.env?.USER_DATA_PATH
+    const fs = globalThis.wx?.getFileSystemManager?.() || Taro.getFileSystemManager?.()
+    if (userDataPath && typeof fs?.readdir === 'function' && typeof fs?.unlink === 'function') {
+      try {
+        const files = await new Promise((resolve, reject) => {
+          fs.readdir({ dirPath: userDataPath, success: ({ files: entries = [] }) => resolve(entries), fail: reject })
+        })
+        await Promise.all(files.map((name) => new Promise((resolve) => {
+          const filePath = `${userDataPath}/${name}`
+          fs.unlink({
+            filePath,
+            success: () => { removedGeneratedFiles += 1; resolve() },
+            fail: (unlinkError) => {
+              if (typeof fs.rmdir !== 'function') { errors.push(unlinkError); resolve(); return }
+              fs.rmdir({
+                dirPath: filePath,
+                recursive: true,
+                success: () => { removedGeneratedFiles += 1; resolve() },
+                fail: (rmdirError) => { errors.push(rmdirError); resolve() },
+              })
+            },
+          })
+        })))
+      } catch (error) {
+        errors.push(error)
+      }
+    } else {
+      errors.push(new Error('当前基础库不支持清理小程序文件目录'))
+    }
   }
-  return { ok: errors.length === 0, errors, removedFiles }
+  return { ok: errors.length === 0, errors, removedFiles, removedGeneratedFiles }
 }
 
 export function getLocalStorageInfo() {
