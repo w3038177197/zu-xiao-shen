@@ -842,17 +842,19 @@ function getLeaseFindings(text) {
           .filter(Boolean)
         const matchedByGroups = finding.matchGroups.length > 0 && groupedHits.length === finding.matchGroups.length
         const matchedByPredicate = typeof finding.matchPredicate === 'function' && finding.matchPredicate(window)
-        return { keywordHits, groupedHits, matchedByGroups, matchedByPredicate }
+        return { window, keywordHits, groupedHits, matchedByGroups, matchedByPredicate }
       })
       .find(({ keywordHits, matchedByGroups, matchedByPredicate }) => keywordHits.length >= minHits || matchedByGroups || matchedByPredicate)
 
     if (!match) return
 
-    const { keywordHits, groupedHits, matchedByGroups, matchedByPredicate } = match
+    const { window, keywordHits, groupedHits, matchedByGroups, matchedByPredicate } = match
     const hits = [...new Set([...keywordHits, ...groupedHits])]
     const hasExactEvidence = text.includes(finding.evidence)
-    const fallbackClause = hasExactEvidence ? '' : extractClauseAroundKeyword(text, hits)
-    const resolvedEvidence = hasExactEvidence ? finding.evidence : fallbackClause || extractEvidenceSnippet(text, hits)
+    const matchedRange = findLooseTextRange(text, window)
+    const matchedSource = matchedRange ? text.slice(matchedRange.start, matchedRange.end) : text
+    const fallbackClause = hasExactEvidence ? '' : extractClauseAroundKeyword(matchedSource, hits)
+    const resolvedEvidence = hasExactEvidence ? finding.evidence : fallbackClause || (matchedByPredicate ? matchedSource : '') || extractEvidenceSnippet(text, hits)
     findings.push({
       ...finding,
       evidence: resolvedEvidence,
@@ -903,6 +905,47 @@ function getLeaseFindings(text) {
   }))
 
   add(makeLeaseFinding({
+    id: 'lease-early-exit-stacked-penalty',
+    title: '提前退租同时没收多项款项并追加违约金',
+    level: 'high',
+    score: 18,
+    dimension: '解除',
+    priority: 'P0',
+    keywords: ['全部租金、押金不予退还', '额外向甲方支付1个月房租'],
+    minHits: 99,
+    matchGroups: [
+      ['不得以任何理由提前退租', '不得提前退租', '禁止提前退租', '中途退房'],
+      ['全部租金、押金不予退还', '租金押金概不退还', '剩余租金、押金全部没收', '已付租金和押金不退'],
+      ['额外支付1个月房租', '额外向甲方支付1个月房租', '另付一个月租金', '另行支付一个月房租'],
+    ],
+    evidence: '乙方不得以任何理由提前退租；中途退房时已支付全部租金、押金不予退还，并额外支付1个月房租作为违约金。',
+    explain: '提前退租同时不退已付租金、没收押金并追加违约金，责任发生叠加，可能明显超过出租方实际损失。',
+    suggestion: '分别约定未发生租金的结算、押金返还和合理违约金；违约责任应与可证明的实际损失相当。',
+    negotiation: '可接受合理提前通知和违约金，但不接受未发生租金、押金和额外违约金同时全部丧失。',
+    replacement: '乙方因自身原因提前退租的，应提前30日书面通知甲方，并承担双方约定且与实际损失相当的违约责任；未实际发生的租金和扣除合理费用后的押金应据实返还。',
+  }))
+
+  add(makeLeaseFinding({
+    id: 'lease-annual-rent-prepayment',
+    title: '一次性预付全年租金资金风险较高',
+    level: 'medium',
+    score: 10,
+    dimension: '租金',
+    priority: 'P1',
+    keywords: ['一次性付清全年房租', '不接受月付、季付'],
+    minHits: 99,
+    matchGroups: [
+      ['一次性付清全年房租', '一次性支付全年租金', '全年租金一次付清', '一次性交清一年租金'],
+      ['不接受月付', '不接受季付', '不得分期', '不接受分期'],
+    ],
+    evidence: '乙方须一次性付清全年房租，不接受月付、季付等分期支付方式。',
+    explain: '年付并非当然无效，但会显著增加承租人的预付资金和出租方履约风险，发生提前解除或房屋权属争议时追款成本更高。',
+    suggestion: '优先协商月付或季付；如确需年付，应核验出租权、收款账户，并写明提前解除后的未发生租金退还规则。',
+    negotiation: '先提出押一付三；若只能年付，要求同步降低押金并补充未发生租金的明确退款期限。',
+    replacement: '租金按季度支付，每期开始前支付当期租金。合同提前解除的，双方按实际居住天数据实结算，甲方应在结算完成后7个工作日内退还未发生租金。',
+  }))
+
+  add(makeLeaseFinding({
     id: 'lease-unilateral-rent-adjustment',
     title: '出租方单方调价并没收押金',
     level: 'high',
@@ -912,9 +955,9 @@ function getLeaseFindings(text) {
     minHits: 99,
     keywords: ['上涨超过20%', '相应调整租金', '15日内搬离', '押金不予返还'],
     matchGroups: [
-      ['市场行情', '市场情况', '周边租金', '经营需要', '平台调价'],
-      ['调整租金', '提高租金', '上浮租金', '变更租金'],
-      ['不接受', '不同意', '乙方不同意', '拒绝调整'],
+      ['市场行情', '市场情况', '周边租金', '周边房价行情', '房价行情', '经营需要', '平台调价'],
+      ['调整租金', '提高租金', '上浮租金', '变更租金', '上调房租', '涨价'],
+      ['不接受', '不同意', '乙方不同意', '拒绝调整', '拒绝涨价'],
     ],
     evidence: '租赁期间如周边同户型租金均价上涨超过20%，甲方有权要求乙方按上涨比例相应调整租金。乙方如不接受调整，须在15日内搬离，押金不予返还。',
     explain: '租期内赋予出租方单方涨租权，且承租人不同意就要搬离并损失押金，风险很高。',
@@ -993,7 +1036,7 @@ function getLeaseFindings(text) {
     keywords: ['全屋保洁费（不低于400元）', '家具家电折旧补偿', '甲方认定的其他合理扣款'],
     matchGroups: [
       ['押金', '保证金'],
-      ['甲方酌情扣除', '出租人认定', '无需提供票据', '固定保洁费', '折旧费', '统一扣除', '固定扣除', '清洁费', '管理费'],
+      ['甲方酌情扣除', '酌情退还', '出租人认定', '无需提供票据', '固定保洁费', '折旧费', '统一扣除', '固定扣除', '清洁费', '管理费'],
     ],
     evidence: '退还时甲方可扣除以下费用：房屋及设施维修费、全屋保洁费（不低于400元）、墙面修补粉刷费、家具家电折旧补偿、以及甲方认定的其他合理扣款。',
     explain: '扣款项目包含固定保洁费、折旧补偿和出租方单方认定事项，押金可能被任意扣减。',
@@ -1032,8 +1075,8 @@ function getLeaseFindings(text) {
     keywords: ['家具家电折旧补偿', '押金', '扣除'],
     minHits: 99,
     matchGroups: [
-      ['家具折旧', '家电折旧', '设备折旧', '折旧费'],
-      ['押金', '保证金', '承租人承担', '乙方承担'],
+      ['家具折旧', '家电折旧', '设备折旧', '家电老化', '老化损耗', '正常磨损', '自然磨损', '轻微发黄', '折旧费'],
+      ['押金', '保证金', '承租人承担', '乙方承担', '人为损坏', '全额赔付'],
     ],
     evidence: '退还时甲方可扣除以下费用：房屋及设施维修费、全屋保洁费（不低于400元）、墙面修补粉刷费、家具家电折旧补偿、以及甲方认定的其他合理扣款。',
     explain: '家具家电正常折旧属于租赁使用中的自然损耗，不应当然由承租人从押金中补偿。',
@@ -1070,8 +1113,8 @@ function getLeaseFindings(text) {
     priority: 'P0',
     keywords: ['任何问题的，由乙方自行维修并承担费用', '自然原因造成的损坏，同样由乙方负责'],
     matchGroups: [
-      ['不论原因', '无论何种原因', '一律', '包括自然老化', '水管老化', '管道老化', '线路故障', '墙体开裂'],
-      ['乙方维修', '承租人负责维修', '租客承担维修', '由乙方承担', '维修费用均由乙方'],
+      ['不论原因', '无论何种原因', '一律', '一切故障', '所有故障', '包括自然老化', '水管老化', '管道老化', '线路故障', '墙体开裂'],
+      ['乙方维修', '乙方负责维修', '承租人负责维修', '租客承担维修', '由乙方承担', '维修费用均由乙方'],
     ],
     evidence: '租赁期内房屋及附属设施出现任何问题的，由乙方自行维修并承担费用。因水管老化、墙体开裂等自然原因造成的损坏，同样由乙方负责。',
     explain: '水管老化、墙体开裂等非承租人原因造成的问题也由承租人承担，明显加重承租人责任。',
@@ -1089,8 +1132,8 @@ function getLeaseFindings(text) {
     priority: 'P0',
     keywords: ['进入房屋进行检查', '带人看房', '无需另行征得乙方同意'],
     matchGroups: [
-      ['进入房屋', '进入租赁房屋', '入室检查', '开门检查'],
-      ['无需通知', '不必征得', '随时进入', '自行进入'],
+      ['进入房屋', '进入租赁房屋', '入室检查', '开门检查', '开门进入房屋'],
+      ['无需通知', '无需征得', '不必征得', '随时进入', '自行进入'],
     ],
     evidence: '甲方及中介人员有权在合理时间进入房屋进行检查、维修或带人看房，无需另行征得乙方同意。',
     explain: '租赁期间承租人享有房屋占有和安宁居住利益，出租方未经同意进入房屋风险很高。',
@@ -1129,7 +1172,7 @@ function getLeaseFindings(text) {
     keywords: ['不得以任何形式转租', '与他人合住', '视为严重违约'],
     minHits: 2,
     matchGroups: [
-      ['合住', '共同居住', '亲友留宿', '留宿外人', '留宿访客', '访客留宿', '增加居住人', '连续超过12小时', '单次不能超过20小时'],
+      ['合住', '共同居住', '亲友留宿', '朋友留宿', '邀请朋友留宿', '留宿外人', '留宿访客', '访客留宿', '增加居住人', '连续超过12小时', '单次不能超过20小时'],
       ['一律禁止', '不得', '严重违约', '立即解除', '罚款', '占用费', '违规一次', '扣除押金'],
     ],
     evidence: '乙方不得以任何形式转租、转借或与他人合住，否则视为严重违约。',
@@ -1173,6 +1216,26 @@ function getLeaseFindings(text) {
     suggestion: '建议把限制范围收窄到结构改造、破坏性装修和不可恢复行为。',
     negotiation: '可承诺退租恢复原状，但希望保留合理布置家具和非破坏性使用空间。',
     replacement: '未经甲方书面同意，乙方不得进行改变房屋结构、损坏墙体或影响安全的装修改造。乙方可在不损坏房屋和设施的前提下合理摆放家具；退租时按交接清单返还。',
+  }))
+
+  add(makeLeaseFinding({
+    id: 'lease-normal-use-fixed-penalty',
+    title: '正常居住使用被限制并设置固定扣款',
+    level: 'medium',
+    score: 9,
+    dimension: '居住权',
+    priority: 'P1',
+    keywords: ['晾晒衣物', '挂钩贴纸', '扣除押金200元'],
+    minHits: 99,
+    matchGroups: [
+      ['晾晒衣物', '粘贴挂钩', '挂钩贴纸', '贴贴纸'],
+      ['扣除押金', '从押金扣除', '每次罚款', '每次扣款'],
+    ],
+    evidence: '禁止乙方晾晒衣物、在墙面粘贴挂钩贴纸，违者每次扣除押金200元。',
+    explain: '可以限制造成实际损坏的使用行为，但将一般居住行为一概禁止并设置固定扣款，未区分是否损坏及实际损失。',
+    suggestion: '只限制破坏结构或留下明显损坏的行为；发生损坏时按照片、维修清单和实际费用处理。',
+    negotiation: '可承诺不破坏墙体并在退租时恢复，但不接受没有实际损失仍固定扣押金。',
+    replacement: '乙方应合理使用房屋，不得实施破坏结构或造成明显损坏的行为；因乙方原因产生实际损坏的，按有效维修凭证承担费用，正常居住使用不作固定扣款。',
   }))
 
   add(makeLeaseFinding({
@@ -1238,8 +1301,8 @@ function getLeaseFindings(text) {
     priority: 'P1',
     keywords: ['甲方债务纠纷', '邻居投诉', '物业公司干涉', '甲方不承担违约责任'],
     matchGroups: [
-      ['抵押', '债务纠纷', '司法查封', '邻居投诉', '物业干涉'],
-      ['甲方免责', '不承担责任', '不构成违约', '不构成甲方违约', '互不追责'],
+      ['抵押', '债务纠纷', '司法查封', '邻居投诉', '邻里噪音', '物业干涉', '物业纠纷', '墙体漏水', '管道老化', '房屋固有问题'],
+      ['甲方免责', '不承担责任', '无需承担责任', '不构成违约', '不构成甲方违约', '不得要求减租', '不得以此要求减租', '互不追责'],
     ],
     evidence: '因政府征收、拆迁、房屋被司法查封、甲方债务纠纷、邻居投诉、物业公司干涉等非甲方主观意愿所能控制的原因，造成合同无法继续履行的，甲方不承担违约责任，仅按乙方实际居住天数结算应退租金。',
     explain: '把甲方债务纠纷、邻居投诉、物业干涉等都列为免责，范围明显过宽。',
@@ -1255,9 +1318,9 @@ function getLeaseFindings(text) {
     score: 7,
     dimension: '管辖',
     priority: 'P2',
-    keywords: ['甲方户籍所在地人民法院'],
+    keywords: ['甲方户籍所在地人民法院', '甲方户籍所在地法院'],
     matchGroups: [
-      ['甲方住所地', '甲方所在地', '出租方所在地', '甲方注册地', '出租人户籍地', '甲方户籍地'],
+      ['甲方住所地', '甲方所在地', '出租方所在地', '甲方注册地', '出租人户籍地', '甲方户籍地', '甲方户籍所在地'],
       ['人民法院', '法院起诉', '提起诉讼', '仲裁委员会'],
     ],
     evidence: '双方发生争议协商不成的，应向甲方户籍所在地人民法院起诉。',
@@ -1269,14 +1332,14 @@ function getLeaseFindings(text) {
 
   add(makeLeaseFinding({
     id: 'lease-format-clause-waiver',
-    title: '签字即放弃异议且解释权归出租方',
+    title: '单方解释权及放弃异议条款',
     level: 'medium',
     score: 12,
     dimension: '格式条款',
     priority: 'P1',
-    keywords: ['不得以"未注意"或"不理解"', '本合同解释权归甲方'],
+    keywords: ['不得以"未注意"或"不理解"', '本合同解释权归甲方', '解释权归甲方'],
     matchGroups: [
-      ['最终解释权', '不得提出异议', '放弃抗辩', '不得以未阅读'],
+      ['最终解释权', '所有解释权', '解释权归甲方', '不得提出异议', '放弃抗辩', '不得以未阅读'],
     ],
     evidence: '乙方签字即视为已充分阅读并完全同意本合同全部内容，此后不得以"未注意"或"不理解"为由对任何条款提出异议。本合同解释权归甲方。',
     replaceFrom: '乙方签字即视为已充分阅读并完全同意本合同全部内容，此后不得以"未注意"或"不理解"为由对任何条款提出异议。本合同解释权归甲方。',
@@ -1314,8 +1377,8 @@ function getLeaseFindings(text) {
     priority: 'P0',
     keywords: ['出售房屋时本合同自动终止', '乙方应无条件搬离'],
     matchGroups: [
-      ['出售房屋', '房屋出售', '产权转让', '转卖房屋'],
-      ['合同自动终止', '租约立即终止', '乙方无条件搬离', '承租人限期腾退'],
+      ['出售房屋', '出售、抵押房屋', '出售或抵押房屋', '房屋出售', '产权转让', '转卖房屋'],
+      ['合同自动终止', '租约立即终止', '乙方无条件搬离', '承租人限期腾退', '通知乙方限期搬离', '限期搬离'],
     ],
     evidence: '甲方出售房屋时本合同自动终止，乙方应无条件搬离。',
     explain: '租赁期间房屋所有权发生变动，通常不当然使原租赁合同终止。该条款会削弱承租人的租期稳定性。',
@@ -1334,8 +1397,8 @@ function getLeaseFindings(text) {
     priority: 'P0',
     keywords: ['甲方有权自行清理乙方遗留物品', '无需承担赔偿责任'],
     matchGroups: [
-      ['遗留物品', '屋内财物', '个人物品', '承租人物品'],
-      ['自行处置', '直接丢弃', '视为放弃', '清理变卖'],
+      ['遗留物品', '屋内财物', '个人物品', '私人物品', '承租人物品'],
+      ['自行处置', '直接丢弃', '视为放弃', '视为遗弃', '遗弃物品', '清理丢弃', '清理变卖'],
     ],
     evidence: '乙方逾期搬离的，甲方有权自行清理乙方遗留物品，无需承担赔偿责任。',
     explain: '出租方自行丢弃或变卖承租人财物，容易造成财产权和证据争议。',
@@ -1485,9 +1548,9 @@ function getLeaseFindings(text) {
     priority: 'P0',
     keywords: ['逾期超过3日', '逾期超过三日', '逾期满4日'],
     matchGroups: [
-      ['逾期超过3日', '逾期超过三日', '逾期三日', '逾期满4日'],
-      ['直接解除合同', '解除合同', '终止合同', '合同终止', '租赁合同终止'],
-      ['押金全部没收', '押金全额没收', '没收押金', '押金不予返还'],
+      ['逾期超过3日', '逾期超过三日', '逾期三日', '逾期3日', '逾期满4日'],
+      ['直接解除合同', '解除合同', '终止合同', '合同终止', '租赁合同终止', '直接收房'],
+      ['押金全部没收', '押金全额没收', '没收押金', '押金不予返还', '全部费用没收', '全部款项没收'],
     ],
     evidence: '租金逾期超过三日即解除合同并没收全部押金，未区分催告、实际损失和补救期限。',
     explain: '短期逾期同时触发解除和押金全部没收，责任可能明显超过实际损失，也没有给承租人补救机会。',

@@ -255,6 +255,53 @@ assert.ok(balancedDepth.some((item) => item.level === 'medium'), '标准审查�
 assert.ok(businessDepth.length > 0 && businessDepth.every((item) => item.level === 'high'), '宽松友好应只显示高风险和签署阻断项')
 assert.equal(getRiskSummary(businessDepth).missingCount, 0, '宽松友好不应显示一般完整性提示')
 
+const comprehensiveTrapContract = [
+  '租期未满一年，乙方不得以任何理由提前退租；中途退房时已支付全部租金、押金不予退还，同时额外向甲方支付1个月房租作为违约金。',
+  '乙方须一次性付清全年房租，不接受月付、季付等分期支付方式。',
+  '租赁期间甲方可根据周边房价行情随时上调房租，乙方拒绝涨价视为违约，押金租金概不返还。',
+  '墙面轻微发黄、地板正常磨损、家电老化损耗均算作乙方人为损坏，需要乙方全额赔付维修费。',
+  '退房后甲方扣押押金30个工作日，逾期无问题才酌情退还。',
+  '屋内所有家电、家具一切故障、损坏均由乙方负责维修、更换，甲方不承担任何维修费用。',
+  '乙方不得邀请朋友留宿超过2次，一经发现甲方可无条件解除合同，钱款不退。',
+  '禁止乙方晾晒衣物、粘贴挂钩贴纸，违者每次扣除押金200元。',
+  '甲方如需出售、抵押房屋，可随时通知乙方限期搬离，无需提前告知，无需赔付违约金。',
+  '甲方有权在任意时间无需征得乙方同意，开门进入房屋巡检、看房。',
+  '因墙体漏水、管道老化、邻里噪音、物业纠纷等房屋固有问题影响居住，甲方无需承担责任，乙方不得要求减租或退租。',
+  '乙方逾期缴费按日收取总租金5%滞纳金，逾期3日甲方直接收房，全部费用没收。',
+  '滞留超过7天，屋内私人物品全部视为遗弃物品，甲方可自行清理丢弃。',
+  '本合同所有解释权归甲方单独所有。',
+  '双方产生纠纷，仅可在甲方户籍所在地法院提起诉讼。',
+].join('\n')
+const comprehensiveFindings = analyzeContract(comprehensiveTrapContract, profile)
+const comprehensiveIds = new Set(comprehensiveFindings.map((item) => item.id))
+const comprehensiveExpectedIds = [
+  'lease-early-exit-stacked-penalty',
+  'lease-annual-rent-prepayment',
+  'lease-unilateral-rent-adjustment',
+  'lease-appliance-depreciation-deduction',
+  'lease-arbitrary-deposit-deduction',
+  'lease-deposit-return-delay',
+  'lease-all-maintenance-tenant',
+  'lease-sublet-share-overbroad',
+  'lease-normal-use-fixed-penalty',
+  'lease-sale-terminates-tenancy',
+  'lease-landlord-entry-no-consent',
+  'lease-overbroad-exemption',
+  'lease-daily-late-fee-5-percent',
+  'lease-overdue-termination-forfeiture',
+  'lease-abandoned-property-disposal',
+  'lease-format-clause-waiver',
+  'lease-unfavorable-jurisdiction',
+]
+for (const id of comprehensiveExpectedIds) {
+  assert.ok(comprehensiveIds.has(id), `完整陷阱合同应识别：${id}`)
+}
+expectedTotal += comprehensiveExpectedIds.length
+matchedTotal += comprehensiveExpectedIds.filter((id) => comprehensiveIds.has(id)).length
+const delayEvidence = comprehensiveFindings.find((item) => item.id === 'lease-deposit-return-delay')?.evidence || ''
+assert.match(delayEvidence, /30个工作日/, '押金退还风险证据应定位到实际期限条款')
+assert.ok(delayEvidence.length < 220, '风险证据不应从合同前部第一个同名关键词开始截取大段正文')
+
 const grouped = groupFindingsByTheme(amountAudit)
 assert.deepEqual(grouped.flatMap((group) => group.items.map((item) => item.index)).sort((a, b) => a - b), amountAudit.map((_, index) => index), '主题分组不得丢失或重复风险')
 const groupedReport = createReportText({
