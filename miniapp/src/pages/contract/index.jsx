@@ -74,7 +74,7 @@ export default class ContractReview extends Component {
     analysisStage: 'idle',
     isImporting: false,
     importProgress: null,
-    expandedIndex: 0,
+    expandedIndex: -1,
     showHistory: false,
     operationNotice: '',
     lastImportSource: '',
@@ -170,7 +170,7 @@ export default class ContractReview extends Component {
       profile: { ...DEFAULT_PROFILE, ...(snap.profile || {}) },
       isAnalyzing: false,
       analysisStage: 'idle',
-      expandedIndex: 0,
+      expandedIndex: -1,
     })
     Taro.showToast({ title: `已恢复 ${entry.time} 的审查`, icon: 'none' })
   }
@@ -233,7 +233,7 @@ export default class ContractReview extends Component {
         analysisStage: 'idle',
         operationNotice,
         lastAnalysisFailed: false,
-        expandedIndex: 0,
+        expandedIndex: -1,
       })
       const historyStatus = this.pushHistory(result)
       const title = historyStatus === 'failed'
@@ -478,7 +478,7 @@ export default class ContractReview extends Component {
       success: ({ confirm }) => {
         if (!confirm) return
         this.draftSaver.cancel()
-        this.updateContract('', { expandedIndex: 0, operationNotice: '', lastImportSource: '' })
+        this.updateContract('', { expandedIndex: -1, operationNotice: '', lastImportSource: '' })
         this.draftSaver.flush()
       },
     })

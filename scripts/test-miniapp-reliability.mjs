@@ -2398,6 +2398,8 @@ const checks = [
     assert.match(contractSource, /startRemoteContractReviewRequest\(payload\)/)
     assert.match(contractSource, /点击“开始综合审查”即同意将双重脱敏后的合同文字发送/)
     assert.doesNotMatch(contractSource, /confirmContractReviewConsent|让 AI 解读审查结果|openAiTask/)
+    assert.doesNotMatch(contractSource, /expandedIndex:\s*0/)
+    assert.match(contractSource, /expandedIndex:\s*expanded \? -1 : index/)
     assert.match(contractSource, /operationNoticeIsError/)
     assert.match(contractStyles, /\.operation-notice\.is-success/)
     assert.match(appStyles, /touch-action:\s*manipulation/)
