@@ -142,6 +142,9 @@ const SENSITIVE_ENV_TO_OVERRIDE = [
   'OPENAI_BASE_URL',
   'AI_PROXY_API_KEY',
   'AI_PROXY_BASE_URL',
+  'ZHIPU_API_KEY',
+  'BIGMODEL_API_KEY',
+  'ZHIPU_VISION_MODEL',
   'WX_SECRET',
   'WX_APPID',
   'MINIAPP_SESSION_SECRET',
@@ -162,6 +165,9 @@ function buildIsolatedEnv(mockPort, aiProxyPort) {
   env.OPENAI_BASE_URL = `http://localhost:${mockPort}`
   env.AI_PROXY_API_KEY = 'test-api-key'
   env.AI_PROXY_BASE_URL = `http://localhost:${mockPort}`
+  env.ZHIPU_API_KEY = ''
+  env.BIGMODEL_API_KEY = ''
+  env.ZHIPU_VISION_MODEL = ''
   env.WX_SECRET = 'test-wx-secret-value'
   env.WX_APPID = TEST_APPID
   env.MINIAPP_SESSION_SECRET = SESSION_SECRET

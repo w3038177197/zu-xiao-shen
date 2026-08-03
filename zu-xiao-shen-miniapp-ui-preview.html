@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>租小审小程序 UI 设计稿</title>
+  <style>
+    :root {
+      --primary: #1a4d3a;
+      --primary-light: #e8f5ef;
+      --primary-border: #c8e6d8;
+      --primary-soft: #a8d4bd;
+      --warning: #b86e00;
+      --warning-bg: #fff4e0;
+      --warning-border: #f5d9a8;
+      --error: #c9372d;
+      --error-bg: #fdecea;
+      --error-border: #f5c4c0;
+      --danger-bg: #fdf3f1;
+      --danger-border: #e8d0cb;
+      --danger-text: #a53f32;
+      --bg: #f6f7f6;
+      --surface: #ffffff;
+      --text: #1a211c;
+      --text-secondary: #5c6a60;
+      --text-tertiary: #8a968d;
+      --border: #e1e6e2;
+      --divider: #eef1ee;
+      --disabled: #dbe3de;
+      --disabled-text: #8a968d;
+      --radius: 8px;
+      --radius-pill: 999px;
+      --page-padding: 24px;
+      --touch-min: 44px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #eef0ee;
+      color: var(--text);
+      line-height: 1.55;
+      padding: 40px 20px;
+    }
+
+    .design-header {
+      max-width: 1200px;
+      margin: 0 auto 32px;
+      text-align: center;
+    }
+
+    .design-header h1 {
+      font-size: 40px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+
+    .design-header p {
+      font-size: 18px;
+      color: var(--text-secondary);
+    }
+
+    .design-grid {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(390px, 1fr));
+      gap: 32px;
+    }
+
+    .phone-frame {
+      background: var(--surface);
+      border-radius: 24px;
+      box-shadow: 0 12px 40px rgba(26, 33, 28, 0.12);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 760px;
+    }
+
+    .phone-header {
+      padding: 14px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--divider);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .phone-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .phone-time {
+      font-size: 13px;
+      color: var(--text-tertiary);
+    }
+
+    .phone-screen {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--bg);
+      position: relative;
+    }
+
+    /* ===== 小程序组件 ===== */
+    .page {
+      min-height: 100%;
+      padding: var(--page-padding) var(--page-padding) 48px;
+    }
+
+    .card {
+      margin: 20px 0 0;
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .card:first-child { margin-top: 0; }
+
+    .hero-card {
+      background: var(--primary-light);
+      border-color: var(--primary-border);
+    }
+
+    .page-title {
+      display: block;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.3;
+      color: var(--primary);
+    }
+
+    .section-title {
+      display: block;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.35;
+      color: var(--text);
+    }
+
+    .card-title {
+      display: block;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.4;
+      color: var(--text);
+    }
+
+    .eyebrow {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .body-text {
+      display: block;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--text-secondary);
+    }
+
+    .caption {
+      display: block;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-tertiary);
+    }
+
+    .btn-primary {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: var(--radius);
+      background: var(--primary);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 44px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .btn-secondary {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 16px;
+      border: 1px solid var(--primary);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--primary);
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 42px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .btn-danger {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 16px;
+      border: 1px solid var(--danger-border);
+      border-radius: var(--radius);
+      background: var(--danger-bg);
+      color: var(--danger-text);
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 42px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    .status-badge-done { background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-border); }
+    .status-badge-pending { background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border); }
+    .status-badge-warning { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+    .status-badge-error { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+
+    .input {
+      width: 100%;
+      min-height: 44px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .legal-note {
+      display: block;
+      margin: 24px 0 0;
+      color: var(--text-tertiary);
+      font-size: 12px;
+      line-height: 1.55;
+      text-align: center;
+    }
+
+    .sticky-actions {
+      position: sticky;
+      bottom: 0;
+      display: flex;
+      gap: 12px;
+      padding: 12px 0 0;
+      background: rgba(246, 247, 246, 0.96);
+    }
+
+    .sticky-actions .btn-primary,
+    .sticky-actions .btn-secondary { flex: 1; }
+
+    /* ===== 首页 ===== */
+    .home-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .home-brand { display: flex; align-items: baseline; gap: 8px; }
+    .home-brand-name { font-size: 24px; font-weight: 700; }
+    .home-brand-tag { font-size: 13px; color: var(--text-secondary); }
+
+    .home-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-pill);
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+    }
+
+    .home-current {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .home-current .page-title { color: #fff; }
+    .home-current .body-text { color: #cce8d8; }
+    .home-current .btn-primary { background: #fff; color: var(--primary); }
+
+    .step-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      margin-bottom: 10px;
+    }
+
+    .step-number {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .step-body { flex: 1; min-width: 0; }
+    .step-phase { font-size: 12px; color: var(--text-tertiary); }
+    .step-name { font-size: 16px; font-weight: 700; }
+    .step-detail { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+    .step-arrow { color: var(--text-tertiary); font-size: 20px; }
+
+    .ai-entry {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .ai-icon {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius);
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .tool-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      margin-bottom: 10px;
+    }
+
+    .tool-icon {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius);
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .tool-icon.deposit { background: var(--warning-bg); color: var(--warning); }
+
+    /* ===== 合同 ===== */
+    .privacy-note {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: var(--radius);
+      background: var(--primary);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .privacy-indicator {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .contract-input {
+      width: 100%;
+      height: 180px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.6;
+      resize: none;
+    }
+
+    .secondary-actions {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .secondary-actions .btn-secondary {
+      min-height: 36px;
+      font-size: 13px;
+      line-height: 34px;
+    }
+
+    .summary-card {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      border-radius: var(--radius);
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .summary-card.warning { background: var(--warning); }
+    .summary-card.danger { background: var(--error); }
+
+    .risk-score { font-size: 36px; font-weight: 700; line-height: 1; }
+    .risk-label { font-size: 12px; opacity: 0.9; margin-top: 4px; }
+    .risk-level { font-size: 18px; font-weight: 700; }
+    .risk-description { font-size: 13px; opacity: 0.92; }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      margin-top: 12px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--border);
+    }
+
+    .stat-item {
+      padding: 12px 4px;
+      text-align: center;
+      background: var(--bg);
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .stat-item strong { display: block; font-size: 18px; color: var(--primary); }
+    .stat-item.high strong { color: var(--error); }
+    .stat-item.medium strong { color: var(--warning); }
+
+    .finding-card {
+      margin-bottom: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .finding-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px;
+      cursor: pointer;
+    }
+
+    .finding-number { font-size: 12px; color: var(--primary); font-weight: 700; }
+    .finding-title { font-size: 15px; font-weight: 700; margin-top: 2px; }
+    .finding-meta { display: flex; align-items: center; gap: 8px; }
+
+    .finding-details { padding: 0 14px 14px; border-top: 1px solid var(--divider); }
+    .finding-content { margin-top: 12px; }
+    .finding-label { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .evidence-text { padding: 10px; border-radius: var(--radius); background: var(--warning-bg); color: var(--warning); }
+    .suggestion-text { padding: 10px; border-radius: var(--radius); background: var(--bg); }
+    .replacement-text { padding: 10px; border-radius: var(--radius); background: var(--primary-light); color: var(--primary); }
+
+    .finding-actions { display: flex; gap: 10px; margin-top: 12px; }
+    .finding-actions .btn-primary,
+    .finding-actions .btn-secondary { flex: 1; min-height: 36px; line-height: 34px; font-size: 13px; }
+
+    /* ===== 验房 ===== */
+    .room-type-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .room-type-item {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      cursor: pointer;
+    }
+
+    .room-type-item.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .room-type-item.active .room-type-desc { color: var(--primary-soft); }
+    .room-type-label { font-size: 15px; font-weight: 700; }
+    .room-type-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+    .checkin-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      margin-bottom: 14px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--border);
+    }
+
+    .checkin-stats > div {
+      padding: 12px 4px;
+      text-align: center;
+      background: var(--bg);
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .checkin-stats strong { display: block; font-size: 18px; color: var(--primary); margin-bottom: 2px; }
+
+    .room-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .room-tab {
+      padding: 8px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      background: var(--bg);
+      color: var(--text-secondary);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .room-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+    .inspection-item {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      margin-bottom: 10px;
+    }
+
+    .inspection-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .item-name { margin-bottom: 2px; }
+    .item-desc { color: var(--text-secondary); font-size: 12px; }
+    .item-expand { flex-shrink: 0; min-height: 28px; padding: 0 10px; font-size: 12px; line-height: 26px; }
+    .item-summary { font-size: 13px; color: var(--text-secondary); margin-top: 8px; }
+    .item-summary.good { color: var(--primary); }
+    .item-summary.defect { color: var(--error); }
+
+    .status-buttons {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin: 10px 0;
+    }
+
+    .status-btn {
+      min-height: 36px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text-secondary);
+      font-size: 14px;
+      text-align: center;
+      line-height: 34px;
+      cursor: pointer;
+    }
+
+    .status-btn.active.good { background: var(--primary-light); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+    .status-btn.active.poor { background: var(--error-bg); border-color: var(--error); color: var(--error); font-weight: 600; }
+
+    .item-notes {
+      width: 100%;
+      min-height: 64px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      resize: none;
+      margin-bottom: 10px;
+    }
+
+    .photo-list { display: flex; flex-wrap: wrap; gap: 10px; }
+    .photo-item {
+      position: relative;
+      width: 72px;
+      height: 72px;
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+
+    .photo-placeholder {
+      width: 100%;
+      height: 100%;
+      border-radius: var(--radius);
+      background: linear-gradient(135deg, #e1e6e2 0%, #d0d8d2 100%);
+    }
+
+    .photo-actions { display: flex; gap: 8px; }
+    .photo-btn { min-height: 36px; padding: 0 12px; font-size: 13px; line-height: 34px; }
+
+    /* ===== 证据包 ===== */
+    .progress-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .progress-text { font-size: 13px; color: var(--text-secondary); }
+
+    .step-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 0 0 16px;
+    }
+
+    .step-tabs button {
+      min-height: 36px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text-secondary);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .step-tabs button.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+    .form-item { margin-bottom: 12px; }
+    .form-label { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+
+    .category-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .category-tab {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      background: var(--bg);
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .category-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+    .evidence-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 8px;
+      overflow: hidden;
+    }
+
+    .item-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      cursor: pointer;
+    }
+
+    .checkbox {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border: 1px solid var(--text-tertiary);
+      border-radius: 4px;
+      background: var(--surface);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .checkbox.checked { border-color: var(--primary); background: var(--primary); }
+
+    .attachment-area {
+      margin-top: 16px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+
+    .attachment-card {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      margin-bottom: 8px;
+    }
+
+    .attachment-card.module { border-left: 4px solid var(--warning); background: #fffdfb; }
+    .attachment-name { font-size: 14px; font-weight: 700; }
+    .attachment-meta { font-size: 12px; color: var(--text-tertiary); margin-top: 2px; }
+
+    .attachment-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .attachment-actions button { min-height: 28px; padding: 0 10px; font-size: 12px; line-height: 26px; }
+
+    .action-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 8px;
+      background: var(--surface);
+    }
+
+    .action-text { flex: 1; }
+    .action-text .item-desc { color: var(--text-secondary); font-size: 12px; }
+
+    /* ===== AI ===== */
+    .ai-page {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      background: var(--bg);
+    }
+
+    .context-strip {
+      flex: 0 0 auto;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .context-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .context-mode {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .context-scope,
+    .context-clear {
+      flex-shrink: 0;
+      min-height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 26px;
+      cursor: pointer;
+    }
+
+    .context-clear { border-color: transparent; background: transparent; color: var(--text-tertiary); }
+
+    .remote-options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--divider);
+    }
+
+    .remote-options-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .summary-toggle {
+      min-height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      background: var(--bg);
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 26px;
+      cursor: pointer;
+    }
+
+    .summary-toggle.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+
+    .chat-thread {
+      flex: 1;
+      min-height: 0;
+      margin: 10px 0;
+      overflow-y: auto;
+    }
+
+    .message { margin-bottom: 12px; }
+    .message.assistant { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    .message.user {
+      max-width: 82%;
+      margin-left: auto;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 14px;
+    }
+
+    .message-role { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+    .message-content { font-size: 14px; line-height: 1.6; }
+    .block-title {
+      display: inline-block;
+      margin-bottom: 4px;
+      padding: 3px 8px;
+      border-radius: var(--radius);
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .block-line { font-size: 14px; line-height: 1.6; margin-bottom: 3px; }
+    .message-actions { margin-top: 8px; }
+    .message-copy { min-height: 28px; padding: 0 10px; font-size: 12px; line-height: 26px; }
+
+    .pending-message { background: var(--bg) !important; }
+    .pending-copy { font-size: 13px; color: var(--text-secondary); }
+
+    .quick-panel { margin-bottom: 12px; }
+    .quick-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px; }
+    .quick-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .quick-list button {
+      min-height: 52px;
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.4;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .retry-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex: 0 0 auto;
+      margin-bottom: 8px;
+      padding: 10px;
+      border: 1px solid var(--warning-border);
+      border-radius: var(--radius);
+      background: var(--warning-bg);
+    }
+
+    .retry-strip span { flex: 1; font-size: 12px; color: var(--warning); }
+    .retry-strip button { flex-shrink: 0; min-height: 28px; padding: 0 10px; font-size: 12px; }
+
+    .composer {
+      flex: 0 0 auto;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .composer-row { display: flex; align-items: center; gap: 8px; }
+    .composer-input {
+      flex: 1;
+      min-width: 0;
+      height: 44px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .send-button {
+      width: 44px;
+      height: 44px;
+      flex: 0 0 44px;
+      border: 0;
+      border-radius: var(--radius);
+      background: var(--primary);
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .composer-note {
+      display: block;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-tertiary);
+      text-align: center;
+    }
+
+    /* ===== 补贴 ===== */
+    .score-box {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 6px 12px;
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: var(--radius);
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .score-box strong { font-size: 24px; }
+    .score-box span { font-size: 13px; opacity: 0.9; }
+
+    .picker-field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .profile-input {
+      width: 100%;
+      min-height: 100px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 14px;
+      resize: none;
+    }
+
+    .match-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .match-pill { padding: 4px 10px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 600; }
+    .match-pill.satisfied { background: var(--primary-light); color: var(--primary); border: 1px solid var(--primary-border); }
+    .match-pill.pending { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+    .match-pill.unsatisfied { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+
+    .policy-card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      margin: 10px 0 0;
+    }
+
+    .policy-head,
+    .policy-foot {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .policy-title { display: block; margin: 10px 0 4px; font-size: 16px; font-weight: 700; }
+    .policy-amount { font-size: 14px; color: var(--text-secondary); }
+
+    .criteria-list {
+      margin: 12px 0;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+
+    .criterion { padding: 8px 0; border-top: 1px solid var(--divider); }
+    .criterion:first-of-type { border-top: 0; }
+
+    .criterion-head { display: flex; align-items: flex-start; gap: 8px; }
+    .criterion-icon {
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .criterion-icon-satisfied { background: var(--primary); }
+    .criterion-icon-pending { background: var(--warning); }
+    .criterion-icon-unsatisfied { background: var(--error); }
+    .criterion-label { flex: 1; font-size: 13px; font-weight: 600; }
+
+    .criterion-status {
+      flex-shrink: 0;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .criterion-status-satisfied { background: var(--primary-light); color: var(--primary); }
+    .criterion-status-pending { background: var(--warning-bg); color: var(--warning); }
+    .criterion-status-unsatisfied { background: var(--error-bg); color: var(--error); }
+
+    .materials { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+    .materials span {
+      padding: 4px 10px;
+      border: 1px solid var(--primary-border);
+      border-radius: var(--radius-pill);
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 12px;
+    }
+
+    .freshness {
+      display: block;
+      padding: 10px;
+      border-radius: var(--radius);
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 12px;
+    }
+
+    .copy-url-btn {
+      flex-shrink: 0;
+      min-height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--primary-border);
+      border-radius: var(--radius);
+      background: var(--primary-light);
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 26px;
+      cursor: pointer;
+    }
+
+    @media (max-width: 420px) {
+      .design-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="design-header">
+    <h1>租小审 · 微信小程序 UI 设计稿</h1>
+    <p>可信、克制、清晰的租房风险管理工具（Taro 4 + React）</p>
+  </div>
+
+  <div class="design-grid">
+    <!-- 首页 -->
+    <div class="phone-frame">
+      <div class="phone-header"><span class="phone-title">租小审</span><span class="phone-time">09:41</span></div>
+      <div class="phone-screen">
+        <div class="page">
+          <div class="home-header">
+            <div class="home-brand"><span class="home-brand-name">租小审</span><span class="home-brand-tag">租房风险助手</span></div>
+            <div class="home-status-badge"><span class="status-dot"></span>资料本地保存</div>
+          </div>
+
+          <div class="card home-current">
+            <span class="eyebrow">当前步骤</span>
+            <span class="page-title">开始审查合同</span>
+            <span class="body-text">先把合同风险看懂，再决定怎么租</span>
+            <button class="btn-primary" style="margin-top:16px">开始审查合同</button>
+          </div>
+
+          <div class="card home-steps">
+            <span class="section-title">租房三步走</span>
+            <div class="steps-list" style="margin-top:14px">
+              <div class="step-row">
+                <div class="step-number">1</div>
+                <div class="step-body">
+                  <div class="step-head" style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div><span class="step-phase">签约前</span><span class="step-name">审合同</span></div>
+                    <span class="status-badge status-badge-pending">未开始</span>
+                  </div>
+                  <span class="step-detail">把押金、涨租、维修等条款过一遍</span>
+                </div>
+                <span class="step-arrow">›</span>
+              </div>
+              <div class="step-row">
+                <div class="step-number">2</div>
+                <div class="step-body">
+                  <div class="step-head" style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div><span class="step-phase">入住时</span><span class="step-name">入住留证</span></div>
+                    <span class="status-badge status-badge-pending">未开始</span>
+                  </div>
+                  <span class="step-detail">按房间拍照，留下入住基线</span>
+                </div>
+                <span class="step-arrow">›</span>
+              </div>
+              <div class="step-row">
+                <div class="step-number">3</div>
+                <div class="step-body">
+                  <div class="step-head" style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div><span class="step-phase">退租时</span><span class="step-name">退租证据</span></div>
+                    <span class="status-badge status-badge-pending">未开始</span>
+                  </div>
+                  <span class="step-detail">整理照片、费用和沟通记录</span>
+                </div>
+                <span class="step-arrow">›</span>
+              </div>
+            </div>
+          </div>
+
+          <button class="card ai-entry">
+            <div class="ai-icon">AI</div>
+            <div class="ai-body"><span class="card-title">问租房 AI</span><span class="body-text">合同、押金、验房和退租问题直接问</span></div>
+            <span class="step-arrow">›</span>
+          </button>
+
+          <div class="card home-tools">
+            <span class="section-title">更多工具</span>
+            <div class="tool-row">
+              <div class="tool-icon">补</div>
+              <div class="tool-body"><span class="tool-name">住房补贴匹配</span><span class="body-text">按城市和个人情况匹配政策线索</span></div>
+              <span class="step-arrow">›</span>
+            </div>
+            <div class="tool-row">
+              <div class="tool-icon deposit">押</div>
+              <div class="tool-body"><span class="tool-name">押金估算</span><span class="body-text">填写金额后计算应退押金</span></div>
+              <span class="step-arrow">⌄</span>
+            </div>
+          </div>
+
+          <div class="card home-data">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div><span class="card-title">隐私与数据</span><span class="caption">管理本机数据 · 0 B / 10 MB</span></div>
+              <span style="color:var(--primary);font-size:13px;font-weight:600">展开</span>
+            </div>
+          </div>
+
+          <span class="legal-note">风险提示仅供租房自查参考，不构成法律意见。</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 合同审查 -->
+    <div class="phone-frame">
+      <div class="phone-header"><span class="phone-title">合同审查</span><span class="phone-time">09:41</span></div>
+      <div class="phone-screen">
+        <div class="page">
+          <div class="card hero-card">
+            <span class="eyebrow">合同审查</span>
+            <span class="page-title">先看懂合同，再决定怎么签</span>
+            <span class="body-text">标出押金、涨租、维修、入户和违约责任，把风险翻译成可直接沟通的修改建议。</span>
+            <div class="privacy-note">
+              <div class="privacy-indicator">✓</div>
+              <span>审查在本机完成；PDF、DOCX 与图片仅在你确认后上传提取文字</span>
+            </div>
+          </div>
+
+          <div class="card input-card">
+            <div class="card-header">
+              <div><span class="eyebrow">审查材料</span><span class="section-title">合同正文</span></div>
+              <span class="caption">0 字</span>
+            </div>
+            <textarea class="contract-input" placeholder="粘贴正文，或导入 TXT、MD、DOCX、PDF 与合同照片…"></textarea>
+            <div class="secondary-actions">
+              <button class="btn-secondary">手机粘贴</button>
+              <button class="btn-secondary">微信文件</button>
+              <button class="btn-secondary">拍照识别</button>
+              <button class="btn-secondary">相册识别</button>
+              <button class="btn-secondary" style="grid-column:1/-1">载入演示合同</button>
+            </div>
+            <div class="card-header" style="margin-top:16px;margin-bottom:10px;padding-top:16px;border-top:1px solid var(--divider)">
+              <span class="section-title" style="font-size:14px">审查画像</span>
+            </div>
+            <div class="secondary-actions" style="grid-template-columns:repeat(3,1fr)">
+              <button class="btn-secondary" style="font-size:12px">房屋租赁</button>
+              <button class="btn-secondary" style="font-size:12px">承租方</button>
+              <button class="btn-secondary" style="font-size:12px">严格</button>
+            </div>
+          </div>
+
+          <div class="sticky-actions">
+            <button class="btn-primary">开始本地审查</button>
+          </div>
+
+          <div class="card result-card">
+            <span class="eyebrow">风险总览</span>
+            <span class="section-title">审查结果</span>
+            <div class="summary-card warning" style="margin-top:10px">
+              <div><span class="risk-score">62</span><span class="risk-label">风险评分</span></div>
+              <div class="summary-copy"><span class="risk-level">中风险</span><span class="risk-description">建议重点修改押金、涨租和维修条款后再签约。</span></div>
+            </div>
+            <div class="stats-row">
+              <div class="stat-item"><strong>5</strong>风险点</div>
+              <div class="stat-item high"><strong>2</strong>高风险</div>
+              <div class="stat-item medium"><strong>2</strong>中风险</div>
+              <div class="stat-item"><strong>1</strong>低风险</div>
+            </div>
+          </div>
+
+          <div class="card findings-card">
+            <div class="card-header"><div><span class="eyebrow">逐条建议</span><span class="section-title">修改与沟通方案</span></div><button class="btn-secondary" style="width:auto;padding:0 12px;min-height:32px;line-height:30px;font-size:12px">全部采纳</button></div>
+            <div class="finding-card risk-medium" style="border-left:4px solid var(--warning)">
+              <div class="finding-header">
+                <div><span class="finding-number">01</span><span class="finding-title">押金退还条件模糊</span></div>
+                <div class="finding-meta"><span class="status-badge status-badge-warning">中风险</span><span class="step-arrow">⌃</span></div>
+              </div>
+              <div class="finding-details">
+                <div class="finding-content"><span class="finding-label">为什么有风险</span><span class="body-text">合同仅写“按约定退还”，未明确扣除标准和举证责任。</span></div>
+                <div class="finding-content"><span class="finding-label">修改建议</span><span class="suggestion-text">建议补充：退租时房东应在 7 日内退还押金，并逐项列明扣除费用及凭证。</span></div>
+                <div class="finding-actions"><button class="btn-primary">采纳并改写</button><button class="btn-secondary">复制话术</button></div>
+              </div>
+            </div>
+          </div>
+
+          <span class="legal-note">免责声明：风险提示仅供租房风险自查参考，不构成法律意见或维权结果承诺。</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 入住验房 -->
+    <div class="phone-frame">
+      <div class="phone-header"><span class="phone-title">入住验房</span><span class="phone-time">09:41</span></div>
+      <div class="phone-screen">
+        <div class="page">
+          <div class="card hero-card">
+            <span class="eyebrow">入住验房</span>
+            <span class="page-title">入住先留证，退租少扯皮</span>
+            <span class="body-text">按房间逐项记录设施状态、瑕疵描述和现场照片，形成可追溯的入住基线。照片仅保存在本机。</span>
+          </div>
+
+          <div class="card">
+            <span class="section-title">选择房屋类型</span>
+            <div class="room-type-grid" style="margin-top:12px">
+              <div class="room-type-item active"><span class="room-type-label">整租</span><span class="room-type-desc">独立一居/公寓</span></div>
+              <div class="room-type-item"><span class="room-type-label">合租</span><span class="room-type-desc">单间/主卧/次卧</span></div>
+              <div class="room-type-item"><span class="room-type-label">一室一厅</span><span class="room-type-desc">独立厨卫</span></div>
+              <div class="room-type-item"><span class="room-type-label">两室及以上</span><span class="room-type-desc">家庭租住</span></div>
+            </div>
+
+            <div class="card-header" style="margin-bottom:10px"><span class="section-title" style="font-size:15px">本次验房进度</span><span style="color:var(--text-tertiary);font-size:13px">重置记录</span></div>
+            <div class="checkin-stats">
+              <div><strong>12%</strong>完成度</div>
+              <div><strong>2/16</strong>已检查</div>
+              <div><strong>1</strong>瑕疵</div>
+              <div><strong>3</strong>照片</div>
+            </div>
+
+            <div class="room-tabs">
+              <button class="room-tab active">客厅</button>
+              <button class="room-tab">卧室</button>
+              <button class="room-tab">厨卫</button>
+              <button class="room-tab">阳台</button>
+            </div>
+
+            <div class="inspection-item">
+              <div class="inspection-head">
+                <div><span class="card-title item-name">墙面 / 地面</span><span class="item-desc">检查裂缝、污渍、起皮</span></div>
+                <button class="btn-secondary item-expand">补充记录</button>
+              </div>
+              <span class="item-summary defect">瑕疵 · 1 张照片 · 已备注</span>
+            </div>
+
+            <div class="inspection-item">
+              <div class="inspection-head">
+                <div><span class="card-title item-name">门窗锁具</span><span class="item-desc">检查开合、锁舌、钥匙</span></div>
+              </div>
+              <div class="status-buttons">
+                <button class="status-btn active good">良好</button>
+                <button class="status-btn poor">瑕疵</button>
+              </div>
+              <textarea class="item-notes" placeholder="备注说明（可选）…"></textarea>
+              <div class="photo-section">
+                <span class="photo-label" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;display:block">照片记录（0/5）</span>
+                <div class="photo-list">
+                  <div class="photo-item"><div class="photo-placeholder"></div></div>
+                  <div class="photo-actions"><button class="btn-secondary photo-btn">拍照</button><button class="btn-secondary photo-btn">相册</button></div>
+                </div>
+              </div>
+              <button class="btn-secondary item-collapse" style="margin-top:10px">完成并收起</button>
+            </div>
+          </div>
+
+          <div class="sticky-actions">
+            <button class="btn-secondary">保存</button>
+            <button class="btn-primary">生成报告</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 退租证据包 -->
+    <div class="phone-frame">
+      <div class="phone-header"><span class="phone-title">退租证据包</span><span class="phone-time">09:41</span></div>
+      <div class="phone-screen">
+        <div class="page">
+          <div class="card evidence-hero hero-card">
+            <span class="eyebrow">退租证据包</span>
+            <span class="page-title">退租证据整理成包</span>
+            <span class="body-text">把合同、押金凭证、交接照片、费用票据和沟通记录串成一条证据链。</span>
+          </div>
+
+          <div class="card progress-section">
+            <div class="progress-head"><span class="progress-title">证据收集进度</span><button class="btn-secondary" style="width:auto;padding:0 10px;min-height:28px;line-height:26px;font-size:12px">重置</button></div>
+            <span class="progress-text">已添加 4 个真实附件，覆盖 3/6 类</span>
+          </div>
+
+          <div class="step-tabs">
+            <button class="active">1 基本资料</button>
+            <button>2 证据附件</button>
+            <button>3 说明与导出</button>
+          </div>
+
+          <div class="card section">
+            <span class="section-title">基本信息</span>
+            <div class="form-item" style="margin-top:12px"><span class="form-label">房屋地址</span><input class="input" placeholder="请输入房屋地址…" value="杭州市西湖区XX小区"></div>
+            <div class="form-item"><span class="form-label">押金金额（元）</span><input class="input" placeholder="请输入押金金额…" value="2400"></div>
+            <div class="form-item"><span class="form-label">月租金（元）</span><input class="input" placeholder="请输入月租金…" value="2400"></div>
+            <button class="btn-secondary" style="min-height:36px;line-height:34px;font-size:13px;width:auto">补充交接信息（选填）</button>
+          </div>
+
+          <div class="card section">
+            <div class="section-head"><div><span class="eyebrow">证据清单</span><span class="section-title">证据与附件</span></div><span style="font-size:14px;font-weight:700;color:var(--primary)">2 个附件</span></div>
+            <div class="category-tabs">
+              <button class="category-tab active">照片</button>
+              <button class="category-tab">合同</button>
+              <button class="category-tab">押金</button>
+              <button class="category-tab">费用</button>
+              <button class="category-tab">沟通</button>
+              <button class="category-tab">其他</button>
+            </div>
+
+            <div class="evidence-item"><div class="item-header"><div class="checkbox checked">✓</div><span class="item-name">入住验房照片</span></div></div>
+            <div class="evidence-item"><div class="item-header"><div class="checkbox checked">✓</div><span class="item-name">退租交接照片</span></div></div>
+            <div class="evidence-item"><div class="item-header"><div class="checkbox"></div><span class="item-name">水电燃气表读数</span></div></div>
+
+            <div class="attachment-area">
+              <div class="attachment-head"><span class="attachment-title">照片的附件</span><span class="attachment-hint">支持图片、PDF、Word、TXT</span></div>
+              <div class="attachment-card">
+                <div class="attachment-info"><span class="attachment-name">🖼 客厅_墙面裂缝.jpg</span><span class="attachment-meta">102 KB · 相册 · 2026-07-29</span></div>
+                <div class="attachment-actions"><button class="btn-secondary" style="border-color:var(--primary-border);background:var(--primary-light);color:var(--primary)">预览</button><button class="btn-danger" style="font-size:12px">删除</button></div>
+              </div>
+              <div class="attachment-card module">
+                <div class="attachment-info"><span class="attachment-name">📄 入住验房报告</span><span class="attachment-meta">引用·验房模块 · 2026-07-29</span></div>
+                <div class="attachment-actions"><button class="btn-secondary" style="border-color:var(--primary-border);background:var(--primary-light);color:var(--primary)">查看</button><button class="btn-danger" style="font-size:12px">删除</button></div>
+              </div>
+              <div class="attachment-add-row">
+                <button class="btn-primary" style="font-size:13px">从相册添加图片</button>
+                <button class="btn-secondary" style="font-size:13px">从微信选择文件</button>
+              </div>
+              <div class="attachment-add-row" style="margin-top:8px">
+                <button class="btn-secondary" style="font-size:13px">导入验房照片</button>
+                <button class="btn-secondary" style="font-size:13px">导入验房报告</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin:16px 0">
+            <button class="btn-secondary" style="flex:1">上一步</button>
+            <button class="btn-primary" style="flex:1">下一步：生成说明</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI 助手 -->
+    <div class="phone-frame">
+      <div class="phone-header"><span class="phone-title">AI 助手</span><span class="phone-time">09:41</span></div>
+      <div class="phone-screen">
+        <div class="ai-page">
+          <div class="context-strip">
+            <div class="context-top">
+              <div class="context-mode"><span class="status-dot"></span><span>联网 AI · 失败自动本地</span></div>
+              <button class="context-scope">资料范围 · 1</button>
+              <button class="context-clear">清空</button>
+            </div>
+            <div class="remote-options">
+              <div class="remote-options-head"><span class="remote-options-title">已选择 1 类资料</span><button class="context-preview">发送前预览</button></div>
+              <div class="category-tabs" style="margin-bottom:0">
+                <button class="summary-toggle active">✓ 审查结果</button>
+                <button class="summary-toggle">验房瑕疵</button>
+                <button class="summary-toggle">证据清单</button>
+                <button class="summary-toggle">补贴结果</button>
+              </div>
+              <div class="remote-meta-row" style="margin-top:4px"><span class="caption">今日剩余 8/20</span><span style="color:var(--error);font-size:12px;font-weight:600">自动本地保障</span></div>
+            </div>
+          </div>
+
+          <div class="chat-thread">
+            <div class="message assistant">
+              <div class="message-role">租小审 · 助手</div>
+              <div class="message-blocks">
+                <div class="message-block"><span class="block-title">结论</span><div class="block-line">押金条款重点关注退还条件、扣除标准和举证责任。</div></div>
+                <div class="message-block"><span class="block-title">依据</span><div class="block-line">《民法典》第 710 条：承租人按约定使用租赁物致损耗，不承担赔偿责任。</div></div>
+                <div class="message-block"><span class="block-title">下一步</span><div class="block-line">建议要求房东在合同中列明押金退还时限和扣除明细。</div></div>
+              </div>
+              <div class="message-actions"><button class="btn-secondary message-copy">复制回复</button></div>
+            </div>
+            <div class="message user">合同里押金条款应该重点看什么？</div>
+            <div class="quick-panel">
+              <span class="quick-title">你可以这样问</span>
+              <div class="quick-list">
+                <button>房东要扣保洁费，我该怎么回复？</button>
+                <button>入住验房需要拍哪些照片？</button>
+                <button>毕业生租房补贴需要准备什么？</button>
+                <button>押金退还条件怎么写才安全？</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="composer">
+            <div class="composer-row"><input class="composer-input" placeholder="输入合同条款或你的问题…"><button class="send-button">↑</button></div>
+            <span class="composer-note">优先联网 AI · 携带 1 类已预览资料</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 住房补贴 -->
+    <div class="phone-frame">
+      <div class="phone-header"><span class="phone-title">补贴匹配</span><span class="phone-time">09:41</span></div>
+      <div class="phone-screen">
+        <div class="page">
+          <div class="card subsidy-hero hero-card">
+            <span class="eyebrow">补贴匹配</span>
+            <span class="page-title">毕业生租房补贴线索匹配</span>
+            <span class="body-text">按城市和个人情况逐项判断满足 / 待确认 / 不满足，给出缺失条件。政策强时效，申请前请再次核对。</span>
+            <div class="score-box">
+              <strong>88 分</strong>
+              <span>线索参考分</span>
+              <span>杭州 · 2 条</span>
+            </div>
+          </div>
+
+          <div class="card panel">
+            <span class="section-title">填写基础情况</span>
+            <div class="form-item" style="margin-top:14px"><span class="form-label">城市</span><div class="picker-field">杭州<span style="color:var(--primary)">⌄</span></div></div>
+            <div class="form-item"><span class="form-label">个人情况</span><textarea class="profile-input" placeholder="例如：2025 年本科毕业，已就业并连续缴纳 6 个月社保，本市无房…">2025 年本科毕业，已签劳动合同并缴纳社保，目前租房居住，本市无房。</textarea></div>
+            <div class="match-summary">
+              <span class="match-pill satisfied">满足 1</span>
+              <span class="match-pill pending">待确认 1</span>
+              <span class="match-pill unsatisfied">不满足 0</span>
+            </div>
+            <button class="btn-primary" style="margin-top:16px">让 AI 解释匹配结果</button>
+          </div>
+
+          <div class="card panel">
+            <div class="result-head"><div><span class="eyebrow">官方政策</span><span class="section-title">杭州政策线索</span></div><span style="font-size:22px;font-weight:700;color:var(--primary)">2 条</span></div>
+
+            <div class="policy-card">
+              <div class="policy-head"><span>市级</span><span class="status-badge status-badge-done">满足 · 参考 92 分</span></div>
+              <span class="policy-title">杭州市新引进应届大学生租房补贴</span>
+              <span class="policy-amount">每户每年 1 万元，可发放 3 年</span>
+              <div class="criteria-list">
+                <span style="font-size:13px;font-weight:700;margin-bottom:8px;display:block">逐项判断</span>
+                <div class="criterion">
+                  <div class="criterion-head">
+                    <div class="criterion-icon criterion-icon-satisfied">✓</div>
+                    <span class="criterion-label">本科及以上学历应届毕业生</span>
+                    <span class="criterion-status criterion-status-satisfied">满足</span>
+                  </div>
+                </div>
+                <div class="criterion">
+                  <div class="criterion-head">
+                    <div class="criterion-icon criterion-icon-satisfied">✓</div>
+                    <span class="criterion-label">在杭用人单位缴纳社保</span>
+                    <span class="criterion-status criterion-status-satisfied">满足</span>
+                  </div>
+                </div>
+              </div>
+              <div class="materials"><span>✓ 身份证</span><span>✓ 学历证明</span><span>✓ 劳动合同</span></div>
+              <span class="freshness">数据更新时间：2026-07-15（较新）</span>
+              <div class="policy-foot" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--divider)">
+                <span style="flex:1">杭州市人社局</span>
+                <button class="copy-url-btn">复制官网链接</button>
+              </div>
+            </div>
+          </div>
+
+          <span class="legal-note">提示：本页只提供官方政策线索，不构成申领资格确认。</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

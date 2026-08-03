@@ -19,6 +19,7 @@
     "test:miniapp-reliability": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-miniapp-reliability.mjs",
     "test:miniapp-ai": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-miniapp-ai.mjs",
     "test:miniapp-usage": "node scripts/test-miniapp-usage-store.mjs",
+    "test:miniapp-report": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-miniapp-report-export.mjs",
     "test:contract-import": "node scripts/test-contract-import.mjs",
     "generate:contract-review-cases": "node scripts/generate-contract-review-cases.mjs",
     "test:contract-review-benchmark": "node scripts/test-contract-review-benchmark.mjs",
@@ -28,6 +29,7 @@
     "review:subsidy-policies": "node scripts/review-subsidy-policies.mjs --offline",
     "review:subsidy-policies:online": "node scripts/review-subsidy-policies.mjs --online",
     "test:subsidy-review": "node scripts/test-subsidy-review.mjs",
+    "test:subsidy-live": "node scripts/test-subsidy-live-feed.mjs",
     "smoke:miniapp": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/smoke-miniapp.mjs",
     "verify:miniapp": "node scripts/verify-miniapp.mjs"
   },

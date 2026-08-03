@@ -77,12 +77,31 @@ function isValidAttachment(item) {
   return Boolean(hasLocalPath || hasTextContent)
 }
 
+function normalizeAttachment(item) {
+  if (!isValidAttachment(item)) return null
+  const fileName = typeof item.fileName === 'string' && item.fileName
+    ? item.fileName
+    : item.fileType === 'image' ? '图片附件' : '证据附件'
+  const fileType = item.fileType === 'image' || item.fileType === 'file'
+    ? item.fileType
+    : /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName) ? 'image' : 'file'
+
+  return {
+    ...item,
+    fileName,
+    fileType,
+    source: typeof item.source === 'string' && item.source ? item.source : 'unknown',
+    size: Number.isFinite(Number(item.size)) ? Number(item.size) : 0,
+    createdAt: typeof item.createdAt === 'string' && item.createdAt ? item.createdAt : new Date().toISOString(),
+  }
+}
+
 // 兼容旧记录：旧 state 没有 attachments 字段，补全为空数组，不破坏已有 evidence 勾选
 export function normalizeAttachments(savedAttachments) {
   const attachments = {}
   Object.keys(evidenceGroupMeta).forEach((group) => {
     const list = savedAttachments?.[group]
-    attachments[group] = Array.isArray(list) ? list.filter(isValidAttachment) : []
+    attachments[group] = Array.isArray(list) ? list.map(normalizeAttachment).filter(Boolean) : []
   })
   return attachments
 }
@@ -183,7 +202,8 @@ export function importModuleReferences(state, group, refAttachments) {
 }
 
 export function getGroupAttachments(state, group) {
-  return state?.attachments?.[group] || []
+  const list = state?.attachments?.[group]
+  return Array.isArray(list) ? list.map(normalizeAttachment).filter(Boolean) : []
 }
 
 // 统计真实附件数量，按组和总计
@@ -259,6 +279,7 @@ export function createEvidencePackageText({ formData, evidence, attachments, act
   const selectedLines = []
   const missingLines = []
   const attachmentSections = []
+  const safeAttachments = normalizeAttachments(attachments)
 
   Object.entries(evidenceGroupMeta).forEach(([group, meta]) => {
     meta.items.forEach((item, index) => {
@@ -269,7 +290,7 @@ export function createEvidencePackageText({ formData, evidence, attachments, act
         missingLines.push(line)
       }
     })
-    const groupAttachments = attachments?.[group] || []
+    const groupAttachments = safeAttachments[group] || []
     if (groupAttachments.length) {
       const realCount = groupAttachments.filter((att) => att.source !== 'module').length
       const refCount = groupAttachments.length - realCount

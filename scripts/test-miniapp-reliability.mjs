@@ -231,6 +231,7 @@ const checks = [
     assert.deepEqual(getCheckinItems('meter').map((item) => item.label), ['水表', '电表', '燃气表', '阀门/线路'])
     assert.equal(getCheckinItems('kitchen').some((item) => item.label.includes('门锁')), false)
     assert.equal(getCheckinItems('bathroom').some((item) => item.label === '家具家电'), false)
+    assert.ok(Object.values(state.meter).every((record) => record.status === 'unchecked' && record.photos.length === 0))
   }],
   ['验房照片添加：记录保存失败时回收新文件且不更新状态', async () => {
     const state = createDefaultCheckinState()
@@ -471,11 +472,12 @@ const checks = [
     // 5. 实际上传逻辑确实存在（contractTextImport.js 有 uploadFile 调用）
     assert.match(importSource, /uploadFile|startCloudContainerRequest/)
 
-    // 6. 服务端仅内存处理：memoryStorage、OCR worker terminate、retained:false，无持久化写入
+    // 6. 服务端不持久化合同正文：OCR 可短暂写入临时图片，完成后必须清理
     assert.match(aiProxySource, /multer\.memoryStorage\(\)/)
     assert.match(aiProxySource, /await\s+worker\.terminate\(\)/)
     assert.match(aiProxySource, /retained:\s*false/)
-    assert.doesNotMatch(`${aiProxySource}\n${parserSource}`, /(?:writeFile|appendFile|createWriteStream)\s*\(/)
+    assert.doesNotMatch(parserSource, /(?:writeFile|appendFile|createWriteStream)\s*\(/)
+    assert.match(aiProxySource, /await unlink\(imagePath\)\.catch\(\(\) => \{\}\)/)
 
     // 7. privacyAuth.js 的 camera/album/chatFile 三项 action 均区分本机保存与服务端上传
     const capabilityActions = Object.fromEntries(
@@ -1073,8 +1075,7 @@ const checks = [
     // 确认已改用 shareFileMessage
     assert.ok(code.includes('shareFileMessage'), 'textFileExport.js 未使用 shareFileMessage')
   }],
-  ['TXT 导出：保留文本导出的两个业务页调用同一个统一工具', async () => {
-    // 首页和合同页已改用首页业务 Word 报告；其余两个页面继续复用统一文本工具。
+  ['业务页导出统一收口到首页 Word 报告中心', async () => {
     const fs = await import('node:fs')
     const pages = [
       '../miniapp/src/pages/checkin/index.jsx',
@@ -1082,12 +1083,7 @@ const checks = [
     ]
     for (const page of pages) {
       const code = fs.readFileSync(new URL(page, import.meta.url), 'utf-8')
-      assert.ok(
-        code.includes("from '../../utils/textFileExport'"),
-        `${page} 未从统一工具模块导入 exportTextToFile`
-      )
-      const exportFunction = page.includes('/index/index.jsx') ? 'prepareTextFile' : 'exportTextToFile'
-      assert.ok(code.includes(exportFunction), `${page} 未调用 ${exportFunction}`)
+      assert.ok(!code.includes("from '../../utils/textFileExport'"), `${page} 仍保留旧 TXT 导出入口`)
     }
     // 统一工具确实存在且是函数
     assert.equal(typeof textFileExport.exportTextToFile, 'function')
@@ -1170,14 +1166,10 @@ const checks = [
     assert.ok(virtualFiles.has(zipResult.filePath))
   }],
 
-  ['证据导出：页面提供 PDF、ZIP、TXT 三种真实导出入口', async () => {
+  ['证据导出：页面不再保留旧 PDF、ZIP、TXT 入口', async () => {
     const fs = await import('node:fs')
     const source = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.jsx', import.meta.url), 'utf8')
-    assert.match(source, /ZIP 完整证据包（含附件）/)
-    assert.match(source, /PDF 证据摘要/)
-    assert.match(source, /TXT 证据摘要/)
-    assert.match(source, /exportEvidencePdf/)
-    assert.match(source, /exportEvidenceZip/)
+    assert.doesNotMatch(source, /ZIP 完整证据包（含附件）|PDF 证据摘要|TXT 证据摘要|exportEvidencePdf|exportEvidenceZip/)
   }],
   // ---- 合同审查历史：快照保存 / 恢复 / 删除 / 清空 / 旧数据迁移 ----
   ['合同审查历史：保存完整快照到 Storage', () => {
@@ -2102,7 +2094,7 @@ const checks = [
     const failedTask = contractTextImport.startRemoteDocumentImport(file)
     await assert.rejects(failedTask.promise, (error) => {
       const detail = contractTextImport.getContractImportError(error)
-      return error.code === 'network-failed' && /合法域名/.test(detail.content)
+      return error.code === 'network-failed' && /uploadFile:fail network error/.test(detail.content)
     })
     uploadShouldFail = false
   }],
@@ -2336,6 +2328,9 @@ const checks = [
     assert.match(source, /await runRemote\(\{ payload, prompt, currentContext: nextContext, addFallback: true \}\)/)
     assert.doesNotMatch(source, /if \(serviceReady === false\) \{/)
     assert.match(source, /meta: '本地降级'/)
+    assert.match(source, /serviceReady === null \? '正在检查 AI 服务'/)
+    const styles = fs.readFileSync(new URL('../miniapp/src/pages/ai/index.css', import.meta.url), 'utf8')
+    assert.match(styles, /\.status-dot\.checking\s*{[^}]*background:\s*#87928b;/s)
     assert.match(source, /撤销联网 AI 授权/)
     assert.match(source, /clearMiniappSession\(\)/)
   }],
@@ -2401,6 +2396,7 @@ const checks = [
     assert.match(styles, /\.item-expand\s*{[^}]*width:\s*auto;[^}]*flex-shrink:\s*0;/s)
     assert.match(styles, /\.storage-tools\s*{[^}]*display:\s*flex;/s)
     assert.match(styles, /\.storage-hint\s*{[^}]*flex:\s*1;[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/s)
+    assert.doesNotMatch(source, /导出报告 TXT|复制完整报告|让 AI 解读验房记录|openAiTask|textFileExport/)
   }],
 
   ['表单可达性：证据和验房高频输入均有明确标签', async () => {
@@ -2457,11 +2453,13 @@ const checks = [
     assert.match(contractSource, /exportRevisedContract/)
     assert.doesNotMatch(contractSource, /复制修订稿/)
     assert.match(contractStyles, /\.operation-notice\.is-success/)
+    assert.match(contractStyles, /\.finding-actions\s*{[^}]*flex-wrap:\s*wrap;/s)
     assert.match(appStyles, /touch-action:\s*manipulation/)
     assert.match(appStyles, /safe-area-inset-bottom/)
     assert.doesNotMatch(appStyles, /\.sticky-actions\s*{[^}]*position:\s*sticky/s)
     assert.match(evidenceStyles, /overscroll-behavior:\s*contain/)
     assert.match(evidenceSource, /showImportFailure/)
+    assert.doesNotMatch(evidenceSource, /导出文件|复制报告摘要|handleExportFiles|exportEvidencePdf|exportEvidenceZip/)
     assert.doesNotMatch(evidenceStyles, /\.action-buttons\s*{[^}]*position:\s*sticky/s)
   }],
 
@@ -2964,7 +2962,8 @@ const checks = [
     assert.match(documentXml, /入住验房报告/)
     assert.match(documentXml, /墙面裂缝/)
     assert.match(documentXml, /证据包汇总/)
-    assert.match(documentXml, /贵阳市测试路1号/)
+    assert.doesNotMatch(documentXml, /贵阳市测试路1号/)
+    assert.match(documentXml, /已隐藏地址/)
     assert.ok(zip.file('word/media/checkin-1.png'))
     assert.equal(report.includedPhotos, 1)
     assert.equal(report.skippedPhotos, 0)
@@ -3006,7 +3005,9 @@ const checks = [
     assert.match(homeSource, /buildLocalBackupArchive/)
     assert.match(homeSource, /writePackageFile\('租小审-恢复用备份\.docx'/)
     assert.match(homeSource, /preparedExports\.report/)
+    assert.match(homeSource, /preparedExports\.allReports/)
     assert.match(homeSource, /preparedExports\.backup/)
+    assert.match(homeSource, /useDidShow\(\(\) => \{\s*setPreparedExports\(\{ report: null, allReports: null, backup: null \}\)/s)
     assert.match(homeSource, /Taro\.shareFileMessage\(/)
     assert.match(homeSource, /先导出完整备份，再清除/)
     assert.match(homeSource, /不备份，直接彻底清除/)

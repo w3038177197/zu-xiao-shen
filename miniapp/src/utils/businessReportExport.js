@@ -2,6 +2,7 @@ import Taro from '@tarojs/taro'
 import { checkinRoomTypes, checkinRooms, getCheckinItems } from '../constants/checkinConfig.js'
 import { getCheckinDefectRows, getCheckinStats, normalizeCheckinState } from '../features/checkinInspection.js'
 import { evidenceActions, evidenceGroupMeta, normalizeEvidencePackState } from '../features/evidencePack.js'
+import { redactRemoteContext } from '../features/remoteAi.js'
 import { getLocalDataSnapshot } from './localDataManager.js'
 import { createZipArchive } from './evidencePackageExport.js'
 
@@ -16,6 +17,21 @@ const MAX_REPORT_BYTES = 35 * 1024 * 1024
 const BODY_WIDTH = 9360
 const TABLE_INDENT = 120
 const STATUS_LABELS = { good: '良好', defect: '存在瑕疵', unchecked: '未检查' }
+
+export function formatReportDateTime(value) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value || '待确认')
+  const pad = (part) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function reportText(value) {
+  return redactRemoteContext(String(value ?? ''))
+}
+
+function privateField(value, label) {
+  return String(value || '').trim() ? `[已隐藏${label}]` : '待填写'
+}
 
 function xml(value) {
   return String(value ?? '')
@@ -34,7 +50,7 @@ function parseStored(value, fallback) {
 }
 
 function paragraph(value, style = 'BodyText', options = {}) {
-  const lines = String(value ?? '').replace(/\r/g, '').split('\n')
+  const lines = reportText(value).replace(/\r/g, '').split('\n')
   const runs = lines.map((line, index) => `${index ? '<w:br/>' : ''}<w:t xml:space="preserve">${xml(line || ' ')}</w:t>`).join('')
   const keep = options.keepNext ? '<w:keepNext/>' : ''
   const pageBreak = options.pageBreakBefore ? '<w:pageBreakBefore/>' : ''
@@ -48,17 +64,17 @@ function labelValueTable(rows) {
   const rowXml = rows.map(([label, value], rowIndex) => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${[
     { text: label, width: widths[0], fill: rowIndex % 2 ? 'F7F9FB' : 'E8EEF5', bold: true },
     { text: value, width: widths[1], fill: rowIndex % 2 ? 'F7F9FB' : 'FFFFFF', bold: false },
-  ].map((cell) => `<w:tc><w:tcPr><w:tcW w:w="${cell.width}" w:type="dxa"/><w:shd w:val="clear" w:fill="${cell.fill}"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:start w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:end w:w="120" w:type="dxa"/></w:tcMar><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:spacing w:after="0" w:line="280" w:lineRule="auto"/></w:pPr><w:r><w:rPr>${cell.bold ? '<w:b/>' : ''}</w:rPr><w:t xml:space="preserve">${xml(cell.text || '待补充')}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`).join('')
+  ].map((cell) => `<w:tc><w:tcPr><w:tcW w:w="${cell.width}" w:type="dxa"/><w:shd w:val="clear" w:fill="${cell.fill}"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:start w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:end w:w="120" w:type="dxa"/></w:tcMar><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:spacing w:after="0" w:line="280" w:lineRule="auto"/></w:pPr><w:r><w:rPr>${cell.bold ? '<w:b/>' : ''}</w:rPr><w:t xml:space="preserve">${xml(reportText(cell.text || '待补充'))}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`).join('')
   return `<w:tbl><w:tblPr><w:tblW w:w="${BODY_WIDTH}" w:type="dxa"/><w:tblInd w:w="${TABLE_INDENT}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="D7DEE8"/><w:left w:val="single" w:sz="4" w:color="D7DEE8"/><w:bottom w:val="single" w:sz="4" w:color="D7DEE8"/><w:right w:val="single" w:sz="4" w:color="D7DEE8"/><w:insideH w:val="single" w:sz="4" w:color="D7DEE8"/><w:insideV w:val="single" w:sz="4" w:color="D7DEE8"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="${widths[0]}"/><w:gridCol w:w="${widths[1]}"/></w:tblGrid>${rowXml}</w:tbl>`
 }
 
 function matrixTable(headers, rows, widths) {
-  const renderRow = (cells, header = false) => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${cells.map((value, index) => `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/><w:shd w:val="clear" w:fill="${header ? 'E8EEF5' : 'FFFFFF'}"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:start w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:end w:w="120" w:type="dxa"/></w:tcMar><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:spacing w:after="0" w:line="280" w:lineRule="auto"/></w:pPr><w:r><w:rPr>${header ? '<w:b/><w:color w:val="1F4D78"/>' : ''}</w:rPr><w:t xml:space="preserve">${xml(value || '—')}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`
+  const renderRow = (cells, header = false) => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${cells.map((value, index) => `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/><w:shd w:val="clear" w:fill="${header ? 'E8EEF5' : 'FFFFFF'}"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:start w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:end w:w="120" w:type="dxa"/></w:tcMar><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:spacing w:after="0" w:line="280" w:lineRule="auto"/></w:pPr><w:r><w:rPr>${header ? '<w:b/><w:color w:val="1F4D78"/>' : ''}</w:rPr><w:t xml:space="preserve">${xml(reportText(value || '—'))}</w:t></w:r></w:p></w:tc>`).join('')}</w:tr>`
   return `<w:tbl><w:tblPr><w:tblW w:w="${BODY_WIDTH}" w:type="dxa"/><w:tblInd w:w="${TABLE_INDENT}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="D7DEE8"/><w:left w:val="single" w:sz="4" w:color="D7DEE8"/><w:bottom w:val="single" w:sz="4" w:color="D7DEE8"/><w:right w:val="single" w:sz="4" w:color="D7DEE8"/><w:insideH w:val="single" w:sz="4" w:color="D7DEE8"/><w:insideV w:val="single" w:sz="4" w:color="D7DEE8"/></w:tblBorders></w:tblPr><w:tblGrid>${widths.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${renderRow(headers, true)}${rows.map((row) => renderRow(row)).join('')}</w:tbl>`
 }
 
 function bullet(value) {
-  return `<w:p><w:pPr><w:pStyle w:val="BodyText"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t xml:space="preserve">${xml(value)}</w:t></w:r></w:p>`
+  return `<w:p><w:pPr><w:pStyle w:val="BodyText"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t xml:space="preserve">${xml(reportText(value))}</w:t></w:r></w:p>`
 }
 
 function getImageInfo(bytes) {
@@ -86,8 +102,10 @@ function getImageInfo(bytes) {
 function fitImage(width, height) {
   const maxCx = 5029200
   const maxCy = 4846320
-  const ratio = Math.min(maxCx / Math.max(1, width), maxCy / Math.max(1, height))
-  return { cx: Math.round(width * ratio), cy: Math.round(height * ratio) }
+  const nativeCx = Math.max(1, width) * 9525
+  const nativeCy = Math.max(1, height) * 9525
+  const ratio = Math.min(1, maxCx / nativeCx, maxCy / nativeCy)
+  return { cx: Math.round(nativeCx * ratio), cy: Math.round(nativeCy * ratio) }
 }
 
 function readFileBytes(fs, filePath) {
@@ -126,21 +144,25 @@ function footerXml() {
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:spacing w:before="0" w:after="0"/><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="微软雅黑"/><w:color w:val="7B8794"/><w:sz w:val="18"/></w:rPr><w:t>第 </w:t></w:r><w:fldSimple w:instr=" PAGE "><w:r><w:rPr><w:color w:val="7B8794"/><w:sz w:val="18"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple><w:r><w:rPr><w:color w:val="7B8794"/><w:sz w:val="18"/></w:rPr><w:t> 页 / 共 </w:t></w:r><w:fldSimple w:instr=" NUMPAGES "><w:r><w:rPr><w:color w:val="7B8794"/><w:sz w:val="18"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple><w:r><w:rPr><w:color w:val="7B8794"/><w:sz w:val="18"/></w:rPr><w:t> 页</w:t></w:r></w:p></w:ftr>'
 }
 
-function addContractSection(body, data) {
+function addContractSection(body, data, options = {}) {
   const history = Array.isArray(data.reviewHistory) ? data.reviewHistory : []
-  const entry = history.find((item) => item?.snapshot) || history[0] || null
+  const currentDraft = typeof data.contractDraft === 'string' ? data.contractDraft : ''
+  const entry = history.find((item) => item?.snapshot?.contractText === currentDraft)
+    || history.find((item) => item?.snapshot)
+    || history[0]
+    || null
   const snapshot = entry?.snapshot || {}
   const findings = Array.isArray(snapshot.findings) ? snapshot.findings : []
   const summary = snapshot.summary || (entry ? { score: entry.score, label: entry.label } : null)
-  const draft = typeof snapshot.contractText === 'string' ? snapshot.contractText : typeof data.contractDraft === 'string' ? data.contractDraft : ''
+  const draft = typeof snapshot.contractText === 'string' ? snapshot.contractText : currentDraft
   const profile = snapshot.activeProfile || snapshot.profile || data.reviewProfile || {}
 
-  body.push(paragraph('合同分析报告', 'Heading1', { pageBreakBefore: true }))
+  body.push(paragraph('合同分析报告', 'Heading1', { pageBreakBefore: options.pageBreakBefore }))
   body.push(summary
     ? paragraph(`${summary.label || '已完成审查'} · 风险评分 ${summary.score ?? '—'}/100 · 共发现 ${findings.length || entry?.count || 0} 项风险`, 'BodyText', { fill: 'EEF5F1', borderColor: '2F765E' })
     : paragraph('尚未找到完整审查结果。以下仅保留当前合同正文，建议先完成一次综合审查。', 'BodyText', { fill: 'FFF8E1', borderColor: 'C18A00' }))
   body.push(labelValueTable([
-    ['最近审查', entry?.time || '暂无审查时间'],
+    ['最近审查', entry?.time ? formatReportDateTime(entry.time) : '暂无审查时间'],
     ['合同类型', profile.contractType === 'lease' ? '房屋租赁合同' : profile.contractType || '待确认'],
     ['审查身份', profile.partyRole === 'partyB' ? '承租方（乙方）' : profile.partyRole === 'partyA' ? '出租方（甲方）' : profile.partyRole || '待确认'],
     ['审查强度', ({ quick: '快速', business: '标准', strict: '严格' })[profile.reviewDepth] || profile.reviewDepth || '待确认'],
@@ -179,12 +201,12 @@ function addContractSection(body, data) {
   body.push(paragraph(draft || '暂无合同正文。', 'BodyText'))
 }
 
-async function addCheckinSection(body, data, media, relationships, fs, reportState) {
+async function addCheckinSection(body, data, media, relationships, fs, reportState, options = {}) {
   const state = normalizeCheckinState(data.checkinInspection)
   const stats = getCheckinStats(state)
   const defects = getCheckinDefectRows(state)
   const roomType = checkinRoomTypes.find((item) => item.value === data.checkinRoomType)?.label || '租住房屋'
-  body.push(paragraph('入住验房报告', 'Heading1', { pageBreakBefore: true }))
+  body.push(paragraph('入住验房报告', 'Heading1', { pageBreakBefore: options.pageBreakBefore }))
   body.push(paragraph(defects.length
     ? `本次完成 ${stats.percent}% 的检查，记录 ${defects.length} 处疑似瑕疵。建议尽快把带时间的照片和文字说明发给房东或中介确认。`
     : stats.checked ? `本次完成 ${stats.percent}% 的检查，暂未标记明显瑕疵。请继续保留全屋照片和水电燃气起始读数。` : '尚未完成验房检查，请先记录房屋现状。',
@@ -201,6 +223,7 @@ async function addCheckinSection(body, data, media, relationships, fs, reportSta
   else body.push(matrixTable(['空间', '检查项', '瑕疵与说明', '照片'], defects.map((item) => [item.room, item.item, `${item.defect}${item.note ? `；${item.note}` : ''}`, `${item.photoCount} 张`]), [1500, 1800, 4560, 1500]))
 
   body.push(paragraph('逐项记录与照片', 'Heading2'))
+  body.push(paragraph('照片按用户在验房页选择的检查项归档，租小审未识别照片内容是否与检查项一致；发送前请逐张核对。', 'BodyText', { fill: 'FFF8E1', borderColor: 'C18A00' }))
   for (const room of checkinRooms) {
     const records = getCheckinItems(room.key).map((item) => ({ item, record: state[room.key]?.[item.key] })).filter(({ record }) => record && (record.status !== 'unchecked' || record.defect || record.note || record.photos?.length))
     if (!records.length) continue
@@ -226,7 +249,7 @@ async function addCheckinSection(body, data, media, relationships, fs, reportSta
           media.push({ name: `word/media/${mediaName}`, data: bytes })
           relationships.push(`<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${mediaName}"/>`)
           body.push(imageParagraph(relId, `${room.label}-${item.label}-${index + 1}`, imageIndex + 20, fitImage(info.width, info.height)))
-          body.push(paragraph(`图 ${reportState.includedPhotos + 1}  ${room.label} · ${item.label} · 第 ${index + 1} 张`, 'Caption'))
+          body.push(paragraph(`图 ${reportState.includedPhotos + 1}  用户关联：${room.label} · ${item.label} · 第 ${index + 1} 张`, 'Caption'))
           reportState.includedPhotos += 1
         } catch (error) {
           reportState.skippedPhotos += 1
@@ -237,7 +260,7 @@ async function addCheckinSection(body, data, media, relationships, fs, reportSta
   }
 }
 
-function addEvidenceSection(body, data) {
+async function addEvidenceSection(body, data, media, relationships, fs, reportState, options = {}) {
   const state = normalizeEvidencePackState(data.evidencePack)
   const { formData, evidence, attachments, actions, communicationText } = state
   const selected = []
@@ -248,38 +271,84 @@ function addEvidenceSection(body, data) {
     attachmentCount += attachments[group]?.length || 0
   })
 
-  body.push(paragraph('证据包汇总', 'Heading1', { pageBreakBefore: true }))
-  body.push(paragraph(`已勾选 ${selected.length} 项证据，仍有 ${missing.length} 项待补齐；当前关联 ${attachmentCount} 个附件。`, 'BodyText', { fill: missing.length ? 'FFF8E1' : 'EEF5F1', borderColor: missing.length ? 'C18A00' : '2F765E' }))
+  body.push(paragraph('证据包汇总', 'Heading1', { pageBreakBefore: options.pageBreakBefore }))
+  const hasContent = selected.length
+    || attachmentCount
+    || actions.some(Boolean)
+    || communicationText.trim()
+    || Object.values(formData).some((value) => String(value || '').trim())
+  if (!hasContent) {
+    body.push(paragraph('暂无证据资料。请先添加附件、勾选已备材料或填写交接信息后再导出。', 'BodyText', { fill: 'F4F6F9', borderColor: '7B8794' }))
+    return
+  }
+  body.push(paragraph(`用户已勾选 ${selected.length} 项，未勾选 ${missing.length} 项；当前关联 ${attachmentCount} 个附件。勾选状态仅代表用户标记，不代表附件内容已经核验。`, 'BodyText', { fill: missing.length ? 'FFF8E1' : 'EEF5F1', borderColor: missing.length ? 'C18A00' : '2F765E' }))
   body.push(labelValueTable([
-    ['房屋地址', formData.address || '待填写'],
+    ['房屋地址', privateField(formData.address, '地址')],
     ['押金 / 月租金', `${formData.deposit || '待填写'} 元 / ${formData.monthlyRent || '待填写'} 元`],
-    ['房东或中介', `${formData.landlordName || '待填写'}${formData.landlordPhone ? `（${formData.landlordPhone}）` : ''}`],
+    ['房东或中介', `${privateField(formData.landlordName, '姓名')}${formData.landlordPhone ? `（${privateField(formData.landlordPhone, '手机号')}）` : ''}`],
     ['入住 / 退租', `${formData.checkinDate || '待确认'} / ${formData.checkoutDate || '待确认'}`],
     ['交接安排', `${formData.handoverDate || '待确认'} ${formData.handoverTime || ''}`.trim()],
   ]))
 
   body.push(paragraph('附件清单', 'Heading2'))
   const attachmentRows = []
+  const attachmentItems = []
   Object.entries(evidenceGroupMeta).forEach(([group, meta]) => {
-    ;(attachments[group] || []).forEach((item) => attachmentRows.push([
-      meta.title,
-      item.fileName || '未命名附件',
-      item.source === 'module' ? `模块引用 · ${item.sourceModule || '未知来源'}` : item.source === 'album' ? '相册' : '微信文件',
-    ]))
+    ;(attachments[group] || []).forEach((item, index) => {
+      const extension = String(item.fileName || '').match(/\.[^.]+$/)?.[0] || ''
+      const generatedName = /^tmp_[a-z0-9]+\./i.test(String(item.fileName || ''))
+        ? `${meta.title}-${index + 1}${extension}`
+        : item.fileName || '未命名附件'
+      const category = item.sourceModule === 'contract' || item.sourceModule === 'review'
+        ? '合同文件'
+        : /备份/i.test(generatedName) ? '备份文件' : meta.title
+      const source = item.source === 'module' ? `模块引用 · ${item.sourceModule || '未知来源'}` : item.source === 'album' ? '相册' : '微信文件'
+      const createdAt = item.createdAt ? formatReportDateTime(item.createdAt) : '待确认'
+      attachmentRows.push([
+        category,
+        generatedName,
+        source,
+        createdAt,
+      ])
+      attachmentItems.push({ item, category, generatedName, source, createdAt })
+    })
   })
-  body.push(attachmentRows.length ? matrixTable(['分类', '文件名', '来源'], attachmentRows, [1800, 4860, 2700]) : paragraph('暂未关联附件。'))
+  body.push(attachmentRows.length ? matrixTable(['分类', '文件名', '来源', '日期'], attachmentRows, [1500, 3360, 1800, 2700]) : paragraph('暂未关联附件。'))
 
-  body.push(paragraph('已备材料', 'Heading2'))
+  const imageItems = attachmentItems.filter(({ item }) => item.fileType === 'image' && item.localPath)
+  if (imageItems.length) body.push(paragraph('证据图片', 'Heading2'))
+  for (const { item, category, generatedName, source, createdAt } of imageItems) {
+    try {
+      const bytes = await readFileBytes(fs, item.localPath)
+      const info = getImageInfo(bytes)
+      if (!info) throw new Error('仅支持 JPEG 或 PNG 图片')
+      if (reportState.mediaBytes + bytes.length > MAX_REPORT_BYTES) throw new Error('报告图片合计超过 35MB')
+      reportState.mediaBytes += bytes.length
+      const imageIndex = media.length + 1
+      const mediaName = `evidence-${imageIndex}.${info.ext}`
+      const relId = `rIdImage${imageIndex}`
+      media.push({ name: `word/media/${mediaName}`, data: bytes })
+      relationships.push(`<Relationship Id="${relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${mediaName}"/>`)
+      body.push(imageParagraph(relId, generatedName, imageIndex + 20, fitImage(info.width, info.height)))
+      body.push(paragraph(`图 ${reportState.includedPhotos + 1}  ${category} · ${generatedName} · ${source} · ${createdAt}`, 'Caption'))
+      reportState.includedPhotos += 1
+    } catch (error) {
+      reportState.skippedPhotos += 1
+      body.push(paragraph(`${generatedName} 未能嵌入：${error?.message || '本地文件读取失败'}`, 'Caption'))
+    }
+  }
+
+  body.push(paragraph('用户标记已备材料', 'Heading2'))
   if (selected.length) selected.forEach((item) => body.push(bullet(item)))
   else body.push(paragraph('暂无已勾选证据。'))
-  body.push(paragraph('待补齐材料', 'Heading2'))
+  body.push(paragraph('用户未勾选材料', 'Heading2'))
   if (missing.length) missing.forEach((item) => body.push(bullet(item)))
-  else body.push(paragraph('证据清单已全部勾选。'))
+  else body.push(paragraph('证据清单已全部勾选，但仍需核对对应原始附件是否真实、清晰、完整。'))
 
-  body.push(paragraph('行动进度', 'Heading2'))
+  body.push(paragraph('用户标记的行动进度', 'Heading2'))
   body.push(matrixTable(['状态', '行动', '说明'], evidenceActions.map((item, index) => [actions[index] ? '已完成' : '待完成', item.title, item.desc]), [1500, 3000, 4860]))
-  body.push(paragraph('沟通说明', 'Heading2'))
-  body.push(paragraph(communicationText || '尚未生成沟通说明。', 'BodyText', { fill: 'F4F6F9', borderColor: '7B8794' }))
+  body.push(paragraph('用户保存的沟通草稿', 'Heading2'))
+  body.push(paragraph(communicationText ? `${communicationText}\n\n发送前请按当前附件和清单状态重新核对，草稿可能早于后续资料更新。` : '尚未生成沟通说明。', 'BodyText', { fill: 'F4F6F9', borderColor: '7B8794' }))
   if (formData.notes) {
     body.push(paragraph('补充备注', 'Heading2'))
     body.push(paragraph(formData.notes))
@@ -291,6 +360,28 @@ function getReportFileName(modules, now) {
   const pad = (value) => String(value).padStart(2, '0')
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
   return `租小审-${label}-${stamp}.docx`
+}
+
+function addExecutiveSummary(body, modules, data) {
+  body.push(paragraph('关键结论', 'Heading1'))
+  if (modules.includes('contract')) {
+    const history = Array.isArray(data.reviewHistory) ? data.reviewHistory : []
+    const currentDraft = typeof data.contractDraft === 'string' ? data.contractDraft : ''
+    const entry = history.find((item) => item?.snapshot?.contractText === currentDraft) || history.find((item) => item?.snapshot)
+    const findings = Array.isArray(entry?.snapshot?.findings) ? entry.snapshot.findings : []
+    const highRisks = findings.filter((item) => item.level === 'high').slice(0, 3)
+    body.push(bullet(`合同审查：共 ${findings.length} 项风险，高风险 ${findings.filter((item) => item.level === 'high').length} 项。${highRisks.length ? `优先处理：${highRisks.map((item) => item.title).join('、')}。` : '当前没有已记录的高风险项。'}`))
+  }
+  if (modules.includes('checkin')) {
+    const stats = getCheckinStats(normalizeCheckinState(data.checkinInspection))
+    body.push(bullet(`入住验房：已检查 ${stats.checked}/${stats.total} 项，记录 ${stats.defects} 处瑕疵、${stats.photos} 张照片；照片内容仍需人工核对。`))
+  }
+  if (modules.includes('evidence')) {
+    const state = normalizeEvidencePackState(data.evidencePack)
+    const checks = Object.entries(evidenceGroupMeta).flatMap(([group, meta]) => meta.items.map((_, index) => Boolean(state.evidence[group]?.[index])))
+    const attachmentCount = Object.values(state.attachments).reduce((total, items) => total + (items?.length || 0), 0)
+    body.push(bullet(`证据包：用户勾选 ${checks.filter(Boolean).length}/${checks.length} 项，关联 ${attachmentCount} 个附件；勾选状态不等于附件已核验。`))
+  }
 }
 
 export async function buildBusinessReportDocx({ selectedModules, data, fs = Taro.getFileSystemManager?.(), now = new Date() } = {}) {
@@ -309,24 +400,24 @@ export async function buildBusinessReportDocx({ selectedModules, data, fs = Taro
   ]
   const reportState = { includedPhotos: 0, skippedPhotos: 0, mediaBytes: 0 }
 
-  body.push(paragraph('租赁全流程档案', 'Title'))
-  body.push(paragraph('合同风险、入住现状与退租证据的统一 Word 报告', 'Subtitle'))
+  const reportTitle = modules.length === BUSINESS_REPORT_MODULES.length ? '租赁全流程档案' : `${MODULE_LABELS[modules[0]]}报告`
+  body.push(paragraph(reportTitle, 'Title'))
+  body.push(paragraph(modules.length === BUSINESS_REPORT_MODULES.length ? '合同风险、入住现状与退租证据的统一 Word 报告' : '租小审本机资料导出报告', 'Subtitle'))
   body.push(labelValueTable([
-    ['生成时间', now.toLocaleString('zh-CN', { hour12: false })],
+    ['生成时间', formatReportDateTime(now)],
     ['包含内容', modules.map((item) => MODULE_LABELS[item]).join('、')],
     ['数据来源', '租小审本机记录'],
     ['文件用途', '自查、交接核对与沟通留存'],
   ]))
   body.push(paragraph('报告说明', 'Heading1'))
-  body.push(paragraph('本报告只整理用户在本机保存的合同审查、验房和证据资料。请在发送给他人前核对姓名、电话、身份证号、住址和照片等个人信息。', 'BodyText', { fill: 'F4F6F9', borderColor: '7B8794' }))
+  body.push(paragraph('本报告只整理用户在本机保存的合同审查、验房和证据资料，常见格式的姓名、电话、身份证号和详细地址已默认隐藏；照片和自由填写内容仍需发送前核对。本报告不构成律师出具的法律意见，发生争议时请保留可核验的原始文件。', 'BodyText', { fill: 'F4F6F9', borderColor: '7B8794' }))
+  addExecutiveSummary(body, modules, normalized)
 
-  if (modules.includes('contract')) addContractSection(body, normalized)
-  if (modules.includes('checkin')) await addCheckinSection(body, normalized, media, relationships, fs, reportState)
-  if (modules.includes('evidence')) addEvidenceSection(body, normalized)
-  body.push(paragraph('重要提示', 'Heading1'))
-  body.push(paragraph('本报告用于租房风险自查、事实记录和双方协商，不构成律师出具的法律意见，也不能替代原始合同、原图、票据或聊天记录。发生争议时，请保留可核验的原始文件。', 'BodyText', { fill: 'FFF8E1', borderColor: 'C18A00' }))
-
-  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>${body.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`
+  const sectionOptions = { pageBreakBefore: modules.length > 1 }
+  if (modules.includes('contract')) addContractSection(body, normalized, sectionOptions)
+  if (modules.includes('checkin')) await addCheckinSection(body, normalized, media, relationships, fs, reportState, sectionOptions)
+  if (modules.includes('evidence')) await addEvidenceSection(body, normalized, media, relationships, fs, reportState, sectionOptions)
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>${body.join('')}<w:sectPr><w:headerReference w:type="default" r:id="rIdHeader"/><w:footerReference w:type="default" r:id="rIdFooter"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`
   const created = now.toISOString()
   const entries = [
     { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>' },
@@ -347,5 +438,22 @@ export async function buildBusinessReportDocx({ selectedModules, data, fs = Taro
     selectedModules: modules,
     includedPhotos: reportState.includedPhotos,
     skippedPhotos: reportState.skippedPhotos,
+  }
+}
+
+export async function buildBusinessReportBundle({ data, fs = Taro.getFileSystemManager?.(), now = new Date() } = {}) {
+  const source = data || Object.fromEntries(getLocalDataSnapshot().map(({ key, value }) => [key, value]))
+  const reports = []
+  for (const moduleId of BUSINESS_REPORT_MODULES) {
+    reports.push(await buildBusinessReportDocx({ selectedModules: [moduleId], data: source, fs, now }))
+  }
+  const pad = (value) => String(value).padStart(2, '0')
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
+  return {
+    bytes: createZipArchive(reports.map((report, index) => ({ name: `${index + 1}-${report.fileName}`, data: report.bytes })), now),
+    fileName: `租小审-全部Word报告-${stamp}.zip`,
+    reports,
+    includedPhotos: reports.reduce((total, report) => total + report.includedPhotos, 0),
+    skippedPhotos: reports.reduce((total, report) => total + report.skippedPhotos, 0),
   }
 }

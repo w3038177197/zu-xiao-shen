@@ -2,10 +2,12 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import express from 'express'
 import multer from 'multer'
+import { execFile } from 'node:child_process'
 import crypto from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir } from 'node:fs/promises'
+import { copyFile, mkdir, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { createWorker } from 'tesseract.js'
 import { aiEvalCases } from './data/ai-eval-cases.mjs'
@@ -34,8 +36,10 @@ import {
 } from './miniapp-ai.mjs'
 import { parseContractDocument } from './contract-document-parser.mjs'
 import { createMiniappUsageStore } from './miniapp-usage-store.mjs'
+import { getSubsidyPolicyFeed, getSubsidyRefreshConfig, listSubsidyCities } from './subsidy-policy-service.mjs'
 
 dotenv.config()
+const execFileAsync = promisify(execFile)
 
 // 结构化脱敏日志：只输出白名单字段，禁止记录用户问题、合同正文、contextSummary、
 // 姓名、手机号、地址、openid、session token、API Key、Redis Token 等敏感数据。
@@ -88,6 +92,16 @@ const distDir = path.join(rootDir, 'dist')
 const indexHtmlPath = path.join(distDir, 'index.html')
 const upstreamTimeoutMs = Math.max(5_000, Math.min(Number(process.env.AI_PROXY_TIMEOUT_MS) || 45_000, 120_000))
 const ocrTimeoutMs = Math.max(15_000, Math.min(Number(process.env.OCR_TIMEOUT_MS) || 90_000, 180_000))
+const zhipuVisionApiKey = String(process.env.ZHIPU_API_KEY || process.env.BIGMODEL_API_KEY || '').trim()
+const zhipuVisionModels = [...new Set([
+  process.env.ZHIPU_VISION_MODEL,
+  'glm-4.6v-flash',
+  'glm-4.1v-thinking-flash',
+  'glm-4v-flash',
+].map((item) => String(item || '').trim()).filter(Boolean))]
+const rapidOcrEnabled = process.env.RAPIDOCR_ENABLED === 'true'
+const rapidOcrTimeoutMs = Math.max(15_000, Math.min(Number(process.env.RAPIDOCR_TIMEOUT_MS) || ocrTimeoutMs, 180_000))
+const rapidOcrScriptPath = path.join(rootDir, 'server', 'rapidocr-image.py')
 let ocrInFlight = false
 let contractParsesInFlight = 0
 const maxConcurrentContractParses = 2
@@ -363,9 +377,10 @@ async function prepareTesseractLangPath() {
 export function detectImageSignature(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 20) return null
   // JPEG: SOI/marker + EOI
+  const jpegEoi = buffer.lastIndexOf(Buffer.from([0xff, 0xd9]))
   if (
     buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff
-    && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9
+    && jpegEoi >= 3 && buffer.length - jpegEoi - 2 <= 64 * 1024
   ) return 'jpeg'
   // PNG: signature + terminal IEND chunk
   const pngEnd = Buffer.from([0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82])
@@ -383,6 +398,137 @@ export function detectImageSignature(buffer) {
     && ['VP8 ', 'VP8L', 'VP8X'].includes(webpChunk)
   ) return 'webp'
   return null
+}
+
+export async function recognizeImageWithZhipuVision(buffer, {
+  apiKey = zhipuVisionApiKey,
+  models = zhipuVisionModels,
+  fetchImpl = fetch,
+  timeoutMs = ocrTimeoutMs,
+} = {}) {
+  const imageSignature = detectImageSignature(buffer)
+  if (!imageSignature) throw new Error('invalid image signature')
+  if (!apiKey) throw new Error('zhipu vision api key is not configured')
+
+  const mimeType = imageSignature === 'jpeg' ? 'image/jpeg' : `image/${imageSignature}`
+  let lastError = null
+  for (const model of models) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const upstreamResponse = await fetchImpl('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          temperature: 0.1,
+          max_tokens: model === 'glm-4v-flash' ? 1_024 : 4_096,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${buffer.toString('base64')}` } },
+              {
+                type: 'text',
+                text: '请对这张房屋租赁合同图片进行OCR。只输出图片中可辨认的合同原文，保留标题、条款编号、标点和换行；被遮挡或无法辨认的内容用□表示，不得猜测、补写、解释、总结或使用Markdown代码块。',
+              },
+            ],
+          }],
+        }),
+      })
+      const data = await upstreamResponse.json().catch(() => ({}))
+      if (!upstreamResponse.ok) {
+        const error = new Error(data?.error?.message || data?.message || `zhipu vision failed (${upstreamResponse.status})`)
+        error.status = upstreamResponse.status
+        throw error
+      }
+      const text = String(data?.choices?.[0]?.message?.content || '')
+        .replace(/^```(?:text|markdown)?\s*/i, '')
+        .replace(/\s*```$/, '')
+        .trim()
+      if (text.length < 20) throw new Error('zhipu vision returned empty text')
+      return {
+        text,
+        confidence: null,
+        engine: model,
+        mode: 'remote-zhipu-vision',
+        language: 'zh+en',
+      }
+    } catch (error) {
+      lastError = error
+      if (![400, 404, 429, 500, 502, 503, 504].includes(Number(error?.status))) break
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+  throw lastError || new Error('zhipu vision unavailable')
+}
+
+function rapidOcrPythonCandidates() {
+  const configured = String(process.env.RAPIDOCR_PYTHON_BIN || process.env.PYTHON_BIN || '').trim()
+  return [...new Set([configured, 'python3', 'python'].filter(Boolean))]
+}
+
+function rapidOcrConfidence(score) {
+  const normalized = Number(score) || 0
+  return Math.max(0, Math.min(100, Math.round(normalized * 100)))
+}
+
+async function runRapidOcrPython(pythonBin, imagePath, timeoutMs, execFileImpl = execFileAsync) {
+  const { stdout } = await execFileImpl(pythonBin, [rapidOcrScriptPath, imagePath], {
+    timeout: timeoutMs,
+    maxBuffer: 8 * 1024 * 1024,
+    windowsHide: true,
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+  })
+  return JSON.parse(String(stdout || '{}'))
+}
+
+export async function recognizeImageWithRapidOcr(buffer, {
+  pythonBins = rapidOcrPythonCandidates(),
+  execFileImpl = execFileAsync,
+  timeoutMs = rapidOcrTimeoutMs,
+} = {}) {
+  const imageSignature = detectImageSignature(buffer)
+  if (!imageSignature) {
+    const error = new Error('invalid image signature')
+    error.code = 'invalid-image-signature'
+    throw error
+  }
+
+  const tempDir = path.join(rootDir, '.cache', 'rapidocr-inputs')
+  await mkdir(tempDir, { recursive: true })
+  const extension = imageSignature === 'jpeg' ? 'jpg' : imageSignature
+  const imagePath = path.join(tempDir, `${Date.now()}-${crypto.randomUUID()}.${extension}`)
+  await writeFile(imagePath, buffer)
+
+  try {
+    let lastError = null
+    for (const pythonBin of pythonBins) {
+      try {
+        const result = await runRapidOcrPython(pythonBin, imagePath, timeoutMs, execFileImpl)
+        const text = String(result.text || '').trim()
+        if (!text) throw new Error('rapidocr returned empty text')
+        return {
+          text,
+          confidence: rapidOcrConfidence(result.avgScore),
+          engine: 'rapidocr',
+          mode: 'offline-rapidocr',
+          language: 'zh+en',
+          itemCount: Number(result.count) || 0,
+        }
+      } catch (error) {
+        lastError = error
+        if (error.code && error.code !== 'ENOENT') break
+      }
+    }
+    throw lastError || new Error('rapidocr unavailable')
+  } finally {
+    await unlink(imagePath).catch(() => {})
+  }
 }
 
 export async function recognizeImageOffline(buffer, {
@@ -412,6 +558,43 @@ export async function recognizeImageOffline(buffer, {
   } finally {
     clearTimeout(timeoutId)
     await worker.terminate()
+  }
+}
+
+export async function recognizeImageWithFallback(buffer, {
+  enableZhipuVision = Boolean(zhipuVisionApiKey),
+  recognizeZhipuVisionImpl = recognizeImageWithZhipuVision,
+  enableRapidOcr = rapidOcrEnabled,
+  recognizeRapidOcrImpl = recognizeImageWithRapidOcr,
+  recognizeTesseractImpl = recognizeImageOffline,
+  rapidOcrOptions = {},
+  tesseractOptions = {},
+} = {}) {
+  let fallbackReason = ''
+  if (enableZhipuVision) {
+    try {
+      return await recognizeZhipuVisionImpl(buffer)
+    } catch (error) {
+      fallbackReason = error?.message || 'zhipu vision failed'
+    }
+  }
+  if (enableRapidOcr) {
+    try {
+      return await recognizeRapidOcrImpl(buffer, rapidOcrOptions)
+    } catch (error) {
+      fallbackReason = error?.message || 'rapidocr failed'
+    }
+  }
+
+  const result = await recognizeTesseractImpl(buffer, tesseractOptions)
+  return {
+    ...result,
+    engine: 'tesseract',
+    mode: 'offline-tesseract',
+    language: 'chi_sim+eng',
+    fallback: Boolean(enableZhipuVision || enableRapidOcr),
+    fallbackFrom: enableZhipuVision ? 'remote-zhipu-vision' : enableRapidOcr ? 'offline-rapidocr' : null,
+    fallbackReason: fallbackReason ? fallbackReason.slice(0, 160) : null,
   }
 }
 
@@ -531,8 +714,27 @@ app.get('/api/health', async (_request, response) => {
     miniappUsagePersistent: miniappUsageStore.mode !== 'memory',
     miniappUsageHealthy: usageHealth.ok,
     contractDocumentParsing: true,
-    ocrMode: 'offline-tesseract',
+    ocrMode: zhipuVisionApiKey
+      ? 'remote-zhipu-vision+offline-fallback'
+      : rapidOcrEnabled ? 'offline-rapidocr+tesseract-fallback' : 'offline-tesseract',
+    zhipuVisionConfigured: Boolean(zhipuVisionApiKey),
+    subsidyLiveUpdates: true,
   })
+})
+
+app.get('/api/subsidy/policies', rateLimit('subsidy-policies', 30), async (request, response) => {
+  const city = String(request.query.city || '').trim()
+  if (!city || !listSubsidyCities().includes(city)) {
+    response.set('Cache-Control', 'private, max-age=300')
+    response.json({ generatedAt: new Date().toISOString(), ...getSubsidyRefreshConfig(), policies: [], warning: 'city-not-collected' })
+    return
+  }
+  response.set('Cache-Control', 'private, max-age=300')
+  try {
+    response.json(await getSubsidyPolicyFeed(city))
+  } catch {
+    response.json({ generatedAt: new Date().toISOString(), ...getSubsidyRefreshConfig(), policies: [], warning: 'live-review-unavailable' })
+  }
 })
 
 app.post('/api/auth/wx-login', rateLimit('wx-login', 12), async (request, response) => {
@@ -963,14 +1165,17 @@ async function handleOcrUpload(request, response) {
 
   ocrInFlight = true
   try {
-    const result = await recognizeImageOffline(request.file.buffer)
+    const result = await recognizeImageWithFallback(request.file.buffer)
     logStructured({ requestId, route, statusCode: 200, elapsedMs: Date.now() - startedAt, storeMode: miniappUsageStore.mode })
     response.json({
       ok: true,
-      mode: 'offline-tesseract',
-      language: 'chi_sim+eng',
+      mode: result.mode,
+      engine: result.engine,
+      language: result.language,
       text: result.text,
       confidence: result.confidence,
+      fallback: Boolean(result.fallback),
+      fallbackFrom: result.fallbackFrom || null,
     })
   } catch (error) {
     logStructured({ requestId, route, statusCode: 500, elapsedMs: Date.now() - startedAt, errorCode: 'ocr-failed', storeMode: miniappUsageStore.mode })

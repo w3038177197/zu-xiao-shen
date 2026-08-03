@@ -46,6 +46,10 @@
   background: #b86e00;
 }
 
+.context-mode .status-dot.checking {
+  background: #87928b;
+}
+
 .context-scope,
 .context-clear {
   flex-shrink: 0;

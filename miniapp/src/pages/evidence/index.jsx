@@ -9,7 +9,6 @@ import {
   loadEvidencePackState,
   saveEvidencePackState,
   buildEvidenceCommunication,
-  createEvidencePackageText,
   addAttachment,
   removeAttachment,
   getGroupAttachments,
@@ -24,8 +23,6 @@ import {
 } from '../../features/evidenceImport'
 import { createDebouncedSaver } from '../../utils/debounceSave'
 import { copyText } from '../../utils/copyText'
-import { exportTextToFile } from '../../utils/textFileExport'
-import { exportEvidencePdf, exportEvidenceZip } from '../../utils/evidencePackageExport'
 import { deleteEvidenceAttachmentTransaction } from '../../utils/evidenceAttachmentTransactions'
 import { getCapabilityFailure, showCapabilityFailure } from '../../utils/privacyAuth'
 import { formatMessageBlocks, loadAllModuleContext } from '../../features/aiAssistant'
@@ -44,7 +41,8 @@ import {
 import './index.css'
 
 const GROUPS = Object.entries(evidenceGroupMeta)
-const TODAY = new Date().toISOString().slice(0, 10)
+const today = new Date()
+const TODAY = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 const STEPS = [
   { key: 'basic', label: '1 基本资料' },
   { key: 'attachments', label: '2 证据附件' },
@@ -64,7 +62,6 @@ export default class EvidencePack extends Component {
     isSaving: false,
     isAttaching: false,
     isImporting: false,
-    exportingType: '',
     textPreview: null,
     activeStep: 'basic',
     operationNotice: '',
@@ -396,66 +393,6 @@ export default class EvidencePack extends Component {
     })
   }
 
-  handleExport = () => {
-    const report = createEvidencePackageText(this.state.packState)
-    copyText(report, '已复制到剪贴板')
-  }
-
-  handleExportTxt = async () => {
-    const report = createEvidencePackageText(this.state.packState)
-    this.setState({ exportingType: 'txt' })
-    try {
-      await exportTextToFile('退租证据包摘要.txt', report)
-    } finally {
-      this.setState({ exportingType: '' })
-    }
-  }
-
-  handleExportPdf = async () => {
-    const report = createEvidencePackageText(this.state.packState)
-    this.setState({ exportingType: 'pdf' })
-    try {
-      await exportEvidencePdf(report)
-    } finally {
-      this.setState({ exportingType: '' })
-    }
-  }
-
-  handleExportZip = async () => {
-    const report = createEvidencePackageText(this.state.packState)
-    this.setState({ exportingType: 'zip' })
-    try {
-      const result = await exportEvidenceZip({
-        packState: this.state.packState,
-        reportText: report,
-        groupLabels: Object.fromEntries(GROUPS.map(([key, meta]) => [key, meta.title])),
-      })
-      if (result.ok && result.skipped?.length) {
-        Taro.showModal({
-          title: '证据包已导出',
-          content: `已打包 ${result.included.length} 个附件；另有 ${result.skipped.length} 个本地文件无法读取，未放入 ZIP。请回到附件列表重新添加后再导出。`,
-          showCancel: false,
-        })
-      }
-    } finally {
-      this.setState({ exportingType: '' })
-    }
-  }
-
-  handleExportFiles = async () => {
-    if (this.state.exportingType) return
-    try {
-      const result = await Taro.showActionSheet({
-        itemList: ['ZIP 完整证据包（含附件）', 'PDF 证据摘要', 'TXT 证据摘要'],
-      })
-      if (result.tapIndex === 0) await this.handleExportZip()
-      else if (result.tapIndex === 1) await this.handleExportPdf()
-      else if (result.tapIndex === 2) await this.handleExportTxt()
-    } catch {
-      // 用户关闭导出菜单，不需要错误提示。
-    }
-  }
-
   // 模块引用导入：读取其他模块的持久化数据生成引用，按来源和路径去重
   // 不复制或删除原模块的持久化文件，只把引用记录写入证据包
   handleImportCheckinPhotos = async () => {
@@ -591,8 +528,8 @@ export default class EvidencePack extends Component {
   }
 
   render() {
-    const { packState, currentTab, currentGroup, isSaving, isAttaching, isImporting, exportingType, textPreview, activeStep, operationNotice, isAiAnalyzing, aiCommunication, aiError } = this.state
-    const { formData, evidence, actions, communicationText } = packState
+    const { packState, currentTab, currentGroup, isSaving, isAttaching, isImporting, textPreview, activeStep, operationNotice, isAiAnalyzing, aiCommunication, aiError } = this.state
+    const { formData = {}, evidence = {}, actions = [], communicationText = '' } = packState || {}
     const progress = this.getProgress()
     const hasAiContext = progress.totalAttachments > 0
       || actions.some(Boolean)
@@ -600,6 +537,7 @@ export default class EvidencePack extends Component {
       || Object.values(formData).some((value) => String(value || '').trim())
       || Boolean(String(communicationText || '').trim())
     const [activeGroupKey, activeGroupMeta] = GROUPS[currentGroup] || GROUPS[0]
+    const activeEvidence = Array.isArray(evidence?.[activeGroupKey]) ? evidence[activeGroupKey] : []
     const activeGroupAttachments = getGroupAttachments(packState, activeGroupKey)
     const moduleSourceLabel = (att) => {
       if (att.source !== 'module') return att.source === 'album' ? '相册' : '微信文件'
@@ -696,9 +634,9 @@ export default class EvidencePack extends Component {
           <View className='evidence-list'>
             {activeGroupMeta.items.map((item, itemIndex) => (
               <View key={itemIndex} className='evidence-item'>
-                <Button className='item-header' aria-checked={evidence[activeGroupKey][itemIndex]} onClick={() => this.handleEvidenceToggle(activeGroupKey, itemIndex)}>
-                  <View className={`checkbox ${evidence[activeGroupKey][itemIndex] ? 'checked' : ''}`}>
-                    {evidence[activeGroupKey][itemIndex] && <Text>✓</Text>}
+                <Button className='item-header' aria-checked={Boolean(activeEvidence[itemIndex])} onClick={() => this.handleEvidenceToggle(activeGroupKey, itemIndex)}>
+                  <View className={`checkbox ${activeEvidence[itemIndex] ? 'checked' : ''}`}>
+                    {activeEvidence[itemIndex] && <Text>✓</Text>}
                   </View>
                   <Text className='item-name'>{item}</Text>
                 </Button>
@@ -801,12 +739,6 @@ export default class EvidencePack extends Component {
         <View className='action-buttons'>
           <Button className='btn-save' onClick={this.saveData} disabled={isSaving}>
             {isSaving ? '保存中…' : '保存'}
-          </Button>
-          <Button className='btn-export' onClick={this.handleExportFiles} disabled={Boolean(exportingType)}>
-            {exportingType ? '正在生成…' : '导出文件'}
-          </Button>
-          <Button className='btn-export' onClick={this.handleExport}>
-            复制报告摘要
           </Button>
         </View>
         </> : null}

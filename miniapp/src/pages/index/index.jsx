@@ -15,7 +15,7 @@ import {
   restoreBackupArchive,
   restoreLocalData,
 } from '../../utils/localDataManager'
-import { buildBusinessReportDocx, BUSINESS_REPORT_MODULES } from '../../utils/businessReportExport'
+import { buildBusinessReportBundle, buildBusinessReportDocx, BUSINESS_REPORT_MODULES } from '../../utils/businessReportExport'
 import { writeAndShare, writePackageFile } from '../../utils/evidencePackageExport'
 import './index.css'
 
@@ -77,7 +77,7 @@ export default function Index() {
   const [workflow, setWorkflow] = useState(loadWorkflowContext)
   // 备份/恢复稳定提示（不只依赖 Toast）
   const [backupMessage, setBackupMessage] = useState(null)
-  const [preparedExports, setPreparedExports] = useState({ report: null, backup: null })
+  const [preparedExports, setPreparedExports] = useState({ report: null, allReports: null, backup: null })
   const result = useMemo(() => calculateDeposit(deposit), [deposit])
   const hasDepositAmount = Number(deposit.depositAmount) > 0
   const storageUsageLabel = storageInfo
@@ -94,6 +94,7 @@ export default function Index() {
   }
 
   Taro.useDidShow(() => {
+    setPreparedExports({ report: null, allReports: null, backup: null })
     refreshLocalState()
   })
 
@@ -145,10 +146,21 @@ export default function Index() {
     }
   }
 
-  const handleExportAllReports = () => {
-    setSelectedReports([...BUSINESS_REPORT_MODULES])
-    setPreparedExports((current) => ({ ...current, report: null }))
-    handleExportReport(BUSINESS_REPORT_MODULES)
+  const handleExportAllReports = async () => {
+    setBackupMessage(null)
+    try {
+      const bundle = await buildBusinessReportBundle()
+      const result = await writePackageFile(bundle.fileName, bundle.bytes)
+      if (!result.ok) {
+        setBackupMessage({ type: 'error', text: '全部 Word 报告生成失败，请重试。' })
+        return
+      }
+      setPreparedExports((current) => ({ ...current, allReports: { ...result, reportCount: bundle.reports.length } }))
+      const skipped = bundle.skippedPhotos ? `，${bundle.skippedPhotos} 张照片未能读取` : ''
+      setBackupMessage({ type: skipped ? 'warning' : 'success', text: `已生成 ${bundle.reports.length} 份独立 Word 报告并装入 ZIP${skipped}。请点击“分享全部报告 ZIP”。` })
+    } catch (error) {
+      setBackupMessage({ type: 'error', text: `全部 Word 报告生成失败：${error?.message || '未知错误'}` })
+    }
   }
 
   // 导出可用 Word 打开的整包备份，包含本机可读取的照片和附件
@@ -180,7 +192,9 @@ export default function Index() {
           setPreparedExports((current) => ({ ...current, [type]: null }))
           setBackupMessage({ type: 'success', text: type === 'report'
             ? 'Word 报告已打开微信分享。'
-            : `恢复用备份已打开分享，包含 ${prepared.includedCount} 个照片/附件。` })
+            : type === 'allReports'
+              ? `全部报告 ZIP 已打开分享，内含 ${prepared.reportCount} 份 Word。`
+              : `恢复用备份已打开分享，包含 ${prepared.includedCount} 个照片/附件。` })
         },
         fail: (error) => {
           const cancelled = /cancel/i.test(error?.errMsg || error?.message || '')
@@ -319,7 +333,7 @@ export default function Index() {
 
     globalThis.__ZU_XIAO_SHEN_CLEARING__ = true
     const result = await clearLocalData()
-    setPreparedExports({ report: null, backup: null })
+    setPreparedExports({ report: null, allReports: null, backup: null })
     setBackupMessage({
       type: result.ok ? 'success' : 'warning',
       text: result.ok ? '全部本机使用痕迹已清除。' : '记录已清除，但部分本地文件删除失败，请再次清除。',
@@ -383,7 +397,7 @@ export default function Index() {
         </View>
         <View className='home-status-badge'>
           <View className='status-dot' />
-          <Text>资料本地保存</Text>
+          <Text>原始资料本机保存 · AI 脱敏联网</Text>
         </View>
       </View>
 
@@ -503,7 +517,7 @@ export default function Index() {
         </Button>
         {showDataDetails ? (
           <View className='data-details'>
-            <Text className='body-text'>勾选要整理的内容。合同风险、验房照片与分析、证据包汇总会合并到一份 Word，也可以单独导出。</Text>
+            <Text className='body-text'>勾选导出会生成一份组合 Word；“一键导出全部”会生成 ZIP，内含合同分析、入住验房和证据包汇总三份独立 Word。</Text>
             <CheckboxGroup className='report-options' value={selectedReports} onChange={(event) => handleReportSelection(event.detail.value)}>
               {reportOptions.map((option) => {
                 const module = workflow.modules[option.id === 'contract' ? 'review' : option.id]
@@ -523,7 +537,7 @@ export default function Index() {
             </CheckboxGroup>
             <View className='report-actions'>
               <Button className='btn-primary report-button' disabled={!selectedReports.length} onClick={preparedExports.report ? () => handleSharePrepared('report') : () => handleExportReport()}>{preparedExports.report ? '分享已生成 Word' : `导出所选 Word（${selectedReports.length}）`}</Button>
-              <Button className='btn-secondary report-button' onClick={handleExportAllReports}>一键导出全部</Button>
+              <Button className='btn-secondary report-button' onClick={preparedExports.allReports ? () => handleSharePrepared('allReports') : handleExportAllReports}>{preparedExports.allReports ? '分享全部报告 ZIP' : '一键导出全部'}</Button>
             </View>
             {backupMessage ? (
               <Text className={`backup-message backup-message-${backupMessage.type}`}>{backupMessage.text}</Text>

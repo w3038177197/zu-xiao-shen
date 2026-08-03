@@ -2142,7 +2142,7 @@ export function createReportText({ summary, findings, revisionItems, contractTex
     `综合评分：${summary.score}/100`,
     `风险结论：${summary.label}`,
     `审查建议：${summary.advice}`,
-    `审查覆盖率：${summary.coverage?.label || '未生成'}`,
+    `条款维度完整度：${summary.coverage?.label || '未生成'}`,
     `待补齐信息：${summary.missingCount || 0} 项；内部矛盾：${summary.consistencyCount || 0} 项`,
     '',
     '一、风险清单',

@@ -24,6 +24,7 @@ export const REMOTE_AI_CONFIG = {
   transport: 'cloud',
   apiBaseUrl: 'https://express-kqoh-288630-10-1435338026.sh.run.tcloudbase.com',
   requestTimeoutMs: 45_000,
+  ocrTimeoutMs: 120_000,
   contractReviewTimeoutMs: 120_000,
 }
 

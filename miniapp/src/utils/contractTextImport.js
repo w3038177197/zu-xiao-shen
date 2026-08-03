@@ -106,7 +106,24 @@ export async function chooseContractImage(sourceType = 'album') {
   if (!path) throw createImportError('missing-file', '没有取得合同图片')
   const pathName = String(path).split('/').pop() || ''
   const name = getExtension(pathName) ? pathName : `合同照片.${String(tempFile.type || 'jpg').replace(/^image\//, '')}`
-  return validateContractFile({ path, name, size: Number(tempFile.size) || 0 }, CONTRACT_IMAGE_EXTENSIONS)
+  let file = validateContractFile({ path, name, size: Number(tempFile.size) || 0 }, CONTRACT_IMAGE_EXTENSIONS)
+  if (typeof Taro.compressImage !== 'function') return file
+  for (const quality of [65, 40]) {
+    if (file.size <= 700 * 1024) break
+    try {
+      const compressed = await Taro.compressImage({ src: file.path, quality })
+      if (!compressed?.tempFilePath) break
+      const info = await Taro.getFileInfo({ filePath: compressed.tempFilePath })
+      file = validateContractFile({
+        ...file,
+        path: compressed.tempFilePath,
+        size: Number(info?.size) || file.size,
+      }, CONTRACT_IMAGE_EXTENSIONS)
+    } catch {
+      break
+    }
+  }
+  return file
 }
 
 export async function importLocalContractFile(file) {
@@ -136,53 +153,23 @@ function readBase64File(filePath) {
   })
 }
 
-function startAuthenticatedUpload({ file, path, fieldName, onProgress }) {
+function isCloudContainerPlatformFailure(error) {
+  const message = String(error?.errMsg || error?.message || '')
+  return /cloud\.callContainer:fail[\s\S]*-606001|cloud\.callContainer:fail[\s\S]*system error/i.test(message)
+}
+
+function startAuthenticatedUpload({ file, path, fieldName, onProgress, timeoutMs = REMOTE_AI_CONFIG.requestTimeoutMs }) {
   let uploadTask = null
   let cancelled = false
 
   const uploadOnce = (session) => new Promise((resolve, reject) => {
-    if (REMOTE_AI_CONFIG.transport === 'cloud' && isCloudContainerAvailable()) {
-      ;(async () => {
-        try {
-          onProgress?.(5)
-          const fileBase64 = await readBase64File(file.path)
-          if (cancelled) throw createImportError('cancelled', '已取消文件解析')
-          onProgress?.(35)
-          uploadTask = startCloudContainerRequest({
-            path,
-            method: 'POST',
-            token: session.token,
-            data: { fileName: file.name, fileBase64 },
-            timeoutMs: REMOTE_AI_CONFIG.requestTimeoutMs,
-          })
-          const response = await uploadTask.promise
-          const data = parseUploadResponse(response?.data)
-          if (response?.statusCode >= 200 && response?.statusCode < 300 && data?.ok && data?.text) {
-            onProgress?.(100)
-            resolve(data)
-            return
-          }
-          reject(createImportError(
-            response?.statusCode === 401 ? 'unauthorized' : response?.statusCode === 429 ? 'busy' : 'remote-failed',
-            data?.message || `解析服务请求失败（${response?.statusCode || '未知'}）`,
-            response,
-          ))
-        } catch (error) {
-          const message = String(error?.errMsg || error?.message || '')
-          reject(error?.code === 'cancelled' || /abort|cancel/i.test(message)
-            ? createImportError('cancelled', '已取消文件解析', error)
-            : createImportError('network-failed', '文件上传失败，请稍后重试', error))
-        }
-      })()
-      return
-    }
-
-    uploadTask = Taro.uploadFile({
+    const startDirectUpload = () => Taro.uploadFile({
       url: `${REMOTE_AI_CONFIG.apiBaseUrl}${path}`,
       filePath: file.path,
       name: fieldName,
       formData: { fileName: file.name },
       header: { Authorization: `Bearer ${session.token}` },
+      timeout: timeoutMs,
       success: (response) => {
         const data = parseUploadResponse(response.data)
         if (response.statusCode >= 200 && response.statusCode < 300 && data?.ok && data?.text) {
@@ -197,9 +184,64 @@ function startAuthenticatedUpload({ file, path, fieldName, onProgress }) {
       },
       fail: (error) => {
         const message = String(error?.errMsg || error?.message || '')
-        reject(createImportError(/abort|cancel/i.test(message) || cancelled ? 'cancelled' : 'network-failed', /abort|cancel/i.test(message) || cancelled ? '已取消解析' : '文件上传失败，请检查网络', error))
+        const code = /abort|cancel/i.test(message) || cancelled ? 'cancelled' : /timeout|超时/i.test(message) ? 'timeout' : 'network-failed'
+        reject(createImportError(code, code === 'cancelled' ? '已取消解析' : code === 'timeout' ? '合同图片识别超时，请重试' : '文件上传失败，请检查网络', error))
       },
     })
+
+    const startCloudUpload = async () => {
+      onProgress?.(5)
+      const fileBase64 = await readBase64File(file.path)
+      if (cancelled) throw createImportError('cancelled', '已取消文件解析')
+      onProgress?.(35)
+      uploadTask = startCloudContainerRequest({
+        path,
+        method: 'POST',
+        token: session.token,
+        data: { fileName: file.name, fileBase64 },
+        timeoutMs,
+      })
+      const response = await uploadTask.promise
+      const data = parseUploadResponse(response?.data)
+      if (response?.statusCode >= 200 && response?.statusCode < 300 && data?.ok && data?.text) {
+        onProgress?.(100)
+        resolve(data)
+        return true
+      }
+      throw createImportError(
+        response?.statusCode === 401 ? 'unauthorized' : response?.statusCode === 429 ? 'busy' : 'remote-failed',
+        data?.message || `解析服务请求失败（${response?.statusCode || '未知'}）`,
+        response,
+      )
+    }
+
+    if (REMOTE_AI_CONFIG.transport === 'cloud' && isCloudContainerAvailable()) {
+      ;(async () => {
+        try {
+          await startCloudUpload()
+        } catch (error) {
+          const message = String(error?.errMsg || error?.message || '')
+          if (error?.code === 'cancelled' || /abort|cancel/i.test(message)) {
+            reject(createImportError('cancelled', '已取消文件解析', error))
+          } else if (isCloudContainerPlatformFailure(error)) {
+            try {
+              uploadTask = startDirectUpload()
+            } catch (directError) {
+              reject(createImportError('network-failed', '云托管调用失败，请将云托管域名加入小程序合法域名后重试', directError))
+            }
+          } else if (['unauthorized', 'busy', 'remote-failed'].includes(error?.code)) {
+            reject(error)
+          } else if (error?.code === 'timeout' || /timeout|超时/i.test(message)) {
+            reject(createImportError('timeout', '合同图片识别超时，请重试', error))
+          } else {
+            reject(createImportError('network-failed', message || '文件上传失败，请稍后重试', error))
+          }
+        }
+      })()
+      return
+    }
+
+    uploadTask = startDirectUpload()
     uploadTask?.onProgressUpdate?.(({ progress }) => onProgress?.(Math.max(0, Math.min(100, Number(progress) || 0))))
   })
 
@@ -245,6 +287,7 @@ export function startRemoteImageImport(file, options = {}) {
     file: validateContractFile(file, CONTRACT_IMAGE_EXTENSIONS),
     path: '/api/miniapp/ocr/image',
     fieldName: 'image',
+    timeoutMs: REMOTE_AI_CONFIG.ocrTimeoutMs,
     ...options,
   })
 }
@@ -277,7 +320,13 @@ export function getContractImportError(error, { source = 'wechat', platform = ''
   if (code === 'unsupported-encoding') return { title: '文本编码不支持', content: '请在 WPS 或文本编辑器中另存为 UTF-8 编码的 TXT 文件后重试。' }
   if (code === 'read-failed') return { title: '文件读取失败', content: '微信已经选到文件，但无法读取正文。请确认文件未损坏，并另存为 UTF-8 的 TXT/MD 后重试。' }
   if (code === 'remote-auth') return { title: '联网解析尚未就绪', content: error?.message || '微信登录或解析服务尚未配置，请稍后重试。TXT/MD 和手机粘贴仍可本地导入。' }
-  if (code === 'network-failed') return { title: '上传失败', content: '请检查网络和微信 request/uploadFile 合法域名配置后重试。TXT/MD 和手机粘贴仍可本地导入。' }
+  if (code === 'timeout') return { title: '识别超时', content: '首次启动 OCR 可能较慢，请重新尝试；也可以换一张更清晰、裁剪后的合同图片。' }
+  if (code === 'network-failed') {
+    const detail = rawMessage && !/^文件上传失败/.test(rawMessage)
+      ? `微信返回：${rawMessage.slice(0, 180)}`
+      : '请检查网络和微信 request/uploadFile 合法域名配置后重试。'
+    return { title: '上传失败', content: `${detail} TXT/MD 和手机粘贴仍可本地导入。` }
+  }
   if (code === 'busy') return { title: '解析服务繁忙', content: '当前有其他文件正在识别，请稍后重试。' }
   if (code === 'remote-failed') return { title: '合同解析失败', content: error?.message || '文件可能已加密、损坏或没有可提取正文。' }
   if (source === 'phone' && code === 'clipboard-empty') {

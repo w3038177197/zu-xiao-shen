@@ -71,7 +71,8 @@ check('合同审查：空数据引导粘贴或导入，有演示合同', () => {
   assert.match(contract, /手机粘贴/, '应有手机粘贴入口')
   assert.match(contract, /载入演示合同/, '应有载入演示合同入口')
   assert.match(contract, /清空合同正文/, '有正文时应有清空入口')
-  assert.doesNotMatch(contract, /拍照识别|相册识别/, '合同页不应提供图片 OCR 入口')
+  assert.match(contract, /拍照识别/, '合同页应有拍照 OCR 入口')
+  assert.match(contract, /相册识别/, '合同页应有相册 OCR 入口')
   assert.match(contract, /请先粘贴或导入合同/, '空数据提交时应提示先粘贴')
 })
 
@@ -84,9 +85,7 @@ check('合同审查：有数据时显示风险评分与审查记录', () => {
 // ---------- 3. 入住验房：空数据/已有数据 ----------
 check('入住验房：空数据引导按房间拍照，有数据时显示统计', () => {
   const checkin = readPage('checkin')
-  // 空数据引导文案来自 workflowContext，这里校验页面存在 AI 解读按钮和禁用态
-  assert.match(checkin, /让 AI 解读验房记录/, '验房页应有 AI 解读按钮')
-  assert.match(checkin, /暂无验房记录可解读/, '空数据时 AI 解读按钮应禁用并提示')
+  assert.doesNotMatch(checkin, /导出报告 TXT|复制完整报告|让 AI 解读验房记录/, '验房页导出统一由首页报告中心处理')
 })
 
 // ---------- 4. 证据包：空数据/已有数据 ----------
@@ -100,7 +99,8 @@ check('证据包：空数据提示暂无附件，有数据时显示 AI 润色入
 // ---------- 5. 补贴匹配 ----------
 check('补贴匹配：城市选择、个人情况输入、匹配结果、本地降级', () => {
   const subsidy = readPage('subsidy')
-  assert.match(subsidy, /选择补贴城市/, '应有城市选择 Picker')
+  assert.match(subsidy, /搜索城市/, '应有城市关键词搜索框')
+  assert.match(subsidy, /city-result/, '应有可点击的城市搜索结果')
   assert.match(subsidy, /个人情况/, '应有个人情况输入')
   assert.match(subsidy, /政策线索/, '应有政策线索结果区')
   assert.match(subsidy, /本地降级/, '联网失败时应显示本地降级')

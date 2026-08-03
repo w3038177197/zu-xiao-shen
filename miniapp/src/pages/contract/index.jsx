@@ -20,11 +20,13 @@ import { createDebouncedSaver } from '../../utils/debounceSave'
 import { copyText as copyToClipboard } from '../../utils/copyText'
 import {
   CONTRACT_TEXT_EXTENSIONS,
+  chooseContractImage,
   chooseWechatContractFile,
   getContractImportError,
   importClipboardContractText,
   importLocalContractFile,
   startRemoteDocumentImport,
+  startRemoteImageImport,
 } from '../../utils/contractTextImport'
 import { buildRemoteContractReviewPayload } from '../../features/remoteAi'
 import { exportRevisedContract } from '../../utils/revisedContractExport'
@@ -335,7 +337,7 @@ export default class ContractReview extends Component {
     try {
       const result = await Taro.showModal({
         title: '上传解析合同？',
-        content: `“${String(fileName || '合同文件').slice(0, 36)}”将上传至租小审服务端，仅用于提取正文，原始文件仅在内存中处理，不写入磁盘、不持久化保存，请求处理结束后释放相关内存。解析完成后仍在本机审查。`,
+        content: `“${String(fileName || '合同文件').slice(0, 36)}”将上传至租小审服务端；合同图片会交由智谱视觉模型提取正文，失败时使用本地 OCR。原始文件仅在请求内存中处理，不写入磁盘、不持久化保存。解析完成后仍在本机审查。`,
         confirmText: '上传解析',
         cancelText: '暂不上传',
       })
@@ -345,13 +347,13 @@ export default class ContractReview extends Component {
     }
   }
 
-  runRemoteImport = async (file) => {
+  runRemoteImport = async (file, startImport = startRemoteDocumentImport) => {
     if (!await this.confirmRemoteParse(file.name)) return
     this.setState({ importProgress: { fileName: file.name, progress: 0 } })
     const options = {
       onProgress: (progress) => this.setState({ importProgress: { fileName: file.name, progress } }),
     }
-    const task = startRemoteDocumentImport(file, options)
+    const task = startImport(file, options)
     this.activeImportTask = task
     const result = await task.promise
     this.applyImportedContract({ ...result, fileName: result.fileName || file.name })
@@ -379,12 +381,27 @@ export default class ContractReview extends Component {
     this.activeImportTask?.cancel?.()
   }
 
+  importFromImage = async (sourceType) => {
+    if (this.state.isImporting) return
+    this.setState({ isImporting: true })
+    try {
+      const file = await chooseContractImage(sourceType)
+      await this.runRemoteImport(file, startRemoteImageImport)
+    } catch (error) {
+      this.showImportFailure(error, sourceType)
+    } finally {
+      this.activeImportTask = null
+      this.setState({ isImporting: false, importProgress: null })
+    }
+  }
+
   retryLastImport = () => {
     const source = this.state.lastImportSource
     this.setState({ operationNotice: '', lastImportSource: '' })
     if (!source || this.state.isImporting) return
     if (source === 'wechat') this.chooseWechatFile()
     else if (source === 'phone') this.importFromPhone()
+    else if (source === 'camera' || source === 'album') this.importFromImage(source)
   }
 
   importFromPhone = async () => {
@@ -508,7 +525,7 @@ export default class ContractReview extends Component {
           <Text className='body-text'>标出押金、涨租、维修、入户和违约责任，把风险翻译成可直接沟通的修改建议。</Text>
           <View className='privacy-note'>
             <View className='privacy-indicator'>✓</View>
-            <Text>本地规则与 AI 一次协作审查；合同文字双重脱敏，照片和附件原文件不发送</Text>
+            <Text>本地规则与 AI 一次协作审查；合同文字双重脱敏，合同图片和附件仅在确认后用于提取正文</Text>
           </View>
         </View>
 
@@ -548,6 +565,8 @@ export default class ContractReview extends Component {
           <View className='secondary-actions'>
             <Button className='btn-secondary' disabled={isImporting} onClick={this.importFromPhone}>手机粘贴</Button>
             <Button className='btn-secondary' disabled={isImporting} onClick={this.chooseWechatFile}>选择文件/最近文件</Button>
+            <Button className='btn-secondary' disabled={isImporting} onClick={() => this.importFromImage('camera')}>拍照识别</Button>
+            <Button className='btn-secondary' disabled={isImporting} onClick={() => this.importFromImage('album')}>相册识别</Button>
             <Picker className='demo-picker' aria-label='选择演示合同' range={demoContracts.map((item) => item.title)} onChange={(event) => this.loadDemo(Number(event.detail.value))}>
               <Button className='btn-secondary demo-picker-button'>载入演示合同</Button>
             </Picker>
@@ -562,7 +581,7 @@ export default class ContractReview extends Component {
               <Button className='btn-danger import-cancel' onClick={this.cancelImport}>取消解析</Button>
             </View>
           ) : null}
-          <Text className='caption import-help'>TXT/MD 在本机读取；微信里的 DOCX/PDF 可确认后上传解析。手机文件可在 WPS/文件 App 复制正文，或把文件发送到微信后选择。</Text>
+          <Text className='caption import-help'>TXT/MD 在本机读取；DOCX/PDF 和合同图片可在确认后上传提取正文。图片请尽量正对纸面、光线均匀并避免反光。</Text>
           <View className='profile-grid'>
             {this.renderProfilePicker('合同类型', contractTypeOptions, 'contractType')}
             {this.renderProfilePicker('审查角色', partyRoleOptions, 'partyRole')}
@@ -600,7 +619,7 @@ export default class ContractReview extends Component {
             {summary.coverage ? (
               <View className='audit-coverage'>
                 <View className='audit-coverage-head'>
-                  <Text className='finding-label'>审查覆盖率</Text>
+                  <Text className='finding-label'>条款维度完整度</Text>
                   <Text className='audit-coverage-value'>{summary.coverage.percent}%</Text>
                 </View>
                 <View className='dimension-bar'><View className='dimension-fill low' style={{ width: `${summary.coverage.percent}%` }} /></View>

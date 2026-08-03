@@ -9,7 +9,7 @@ const legacyRoomKeys = {
   living: ['livingRoom', 'bedroom', 'balcony'],
   kitchen: ['kitchen'],
   bathroom: ['bathroom'],
-  meter: ['livingRoom', 'bedroom', 'kitchen', 'bathroom', 'balcony'],
+  meter: [],
 }
 const legacyItemKeys = {
   wall: ['walls', 'floor', 'ceiling'],

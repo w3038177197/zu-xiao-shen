@@ -21,8 +21,6 @@ import {
 import { createDebouncedSaver } from '../../utils/debounceSave'
 import { copyText } from '../../utils/copyText'
 import { isUserCancellation, showCapabilityFailure } from '../../utils/privacyAuth'
-import { exportTextToFile } from '../../utils/textFileExport'
-import { openAiTask } from '../../utils/aiTaskHandoff'
 import { removePersistedFile } from '../../utils/evidenceAttachments'
 import { getEvidenceReferencedCheckinPhotoPaths } from '../../features/evidenceImport'
 import {
@@ -388,21 +386,8 @@ export default class CheckinInspection extends Component {
     Taro.showToast({ title: '验房报告已生成', icon: 'success' })
   }
 
-  handleExport = () => {
-    copyText(this.state.report || this.buildReport(), '报告已复制')
-  }
-
-  handleExportTxt = () => {
-    exportTextToFile('验房报告.txt', this.state.report || this.buildReport())
-  }
-
   handleCopyScript = () => {
     copyText(this.getLandlordScript(), '话术已复制')
-  }
-
-  handleAiCheck = () => {
-    this.autoSaver.flush()
-    openAiTask('checkin')
   }
 
   handlePreviewPhoto = (photos, index) => {
@@ -411,7 +396,8 @@ export default class CheckinInspection extends Component {
 
   render() {
     const { inspectionState, currentRoom, isSaving, roomType, report, expandedItemKey, operationNotice, lastPhotoSource } = this.state
-    const room = ROOMS[currentRoom]
+    const safeRoomIndex = ROOMS[currentRoom] ? currentRoom : 0
+    const room = ROOMS[safeRoomIndex]
     const inspectionItems = getCheckinItems(room.key)
     const stats = getCheckinStats(inspectionState)
 
@@ -469,7 +455,7 @@ export default class CheckinInspection extends Component {
             {ROOMS.map((r, index) => (
               <Button
                 key={r.key}
-                className={`room-tab ${currentRoom === index ? 'active' : ''}`}
+                className={`room-tab ${safeRoomIndex === index ? 'active' : ''}`}
                 onClick={() => this.setState({ currentRoom: index, expandedItemKey: null })}
               >
                 {r.label}
@@ -589,11 +575,8 @@ export default class CheckinInspection extends Component {
             <Text className='section-title'>验房报告</Text>
             <Textarea className='report-text' aria-label='验房报告' value={report} maxlength={-1} disabled />
             <View className='report-actions'>
-              <Button className='btn-secondary' onClick={this.handleExportTxt}>导出报告 TXT</Button>
-              <Button className='btn-secondary' onClick={this.handleExport}>复制完整报告</Button>
               <Button className='btn-secondary' onClick={this.handleCopyScript}>复制房东话术</Button>
             </View>
-            <Button className='ai-task-btn' disabled={!stats.checked} onClick={this.handleAiCheck}>{stats.checked ? '让 AI 解读验房记录' : '暂无验房记录可解读'}</Button>
           </View>
         ) : null}
       </ScrollView>

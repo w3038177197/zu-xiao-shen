@@ -350,6 +350,16 @@ export async function fetchRemoteAiServiceHealth() {
   }
 }
 
+export async function fetchRemoteSubsidyPolicies(city) {
+  const request = startJsonRequest({
+    path: `/api/subsidy/policies?city=${encodeURIComponent(String(city || '').trim())}`,
+    timeoutMs: 12_000,
+  })
+  const data = await request.promise
+  if (!Array.isArray(data?.policies)) throw createRemoteError('政策服务返回的数据无效', 'http')
+  return data
+}
+
 export async function fetchRemoteAiQuota() {
   let session = await ensureMiniappSession()
   for (let attempt = 0; attempt < 2; attempt += 1) {

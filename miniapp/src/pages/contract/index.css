@@ -606,13 +606,14 @@
 
 .finding-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   margin-top: 20px;
 }
 
 .finding-actions .btn-primary,
 .finding-actions .btn-secondary {
-  flex: 1;
+  flex: 1 1 calc(50% - 8px);
   min-height: 72px;
   font-size: 24px;
   line-height: 70px;

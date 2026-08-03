@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Picker, ScrollView, Text, Textarea, View } from '@tarojs/components'
+import { Button, Input, ScrollView, Text, Textarea, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import {
   evaluateSubsidyMatch,
@@ -12,7 +12,7 @@ import { buildLocalReply, formatMessageBlocks, loadAllModuleContext } from '../.
 import { AI_TASK_PRESETS, buildRemoteAiPayload } from '../../features/remoteAi'
 import { REMOTE_AI_CONFIG } from '../../constants/appConfig'
 import { copyText } from '../../utils/copyText'
-import { confirmRemoteConsent, getRemoteAiError, startRemoteAiRequest } from '../../utils/remoteAiRequest'
+import { confirmRemoteConsent, fetchRemoteSubsidyPolicies, getRemoteAiError, startRemoteAiRequest } from '../../utils/remoteAiRequest'
 import './index.css'
 
 const STORAGE_KEY = 'zu-xiao-shen-subsidy-matcher'
@@ -32,26 +32,51 @@ const STATUS_ICON = {
 function getInitialState() {
   try {
     const saved = Taro.getStorageSync(STORAGE_KEY)
-    return saved && subsidyCities.includes(saved.city)
-      ? { ...saved, profile: saved.profile === LEGACY_DEMO_PROFILE ? '' : String(saved.profile || '') }
+    const savedCity = String(saved?.city || '').trim().replace(/市$/, '')
+    return saved && subsidyCities.includes(savedCity)
+      ? { ...saved, city: savedCity, profile: saved.profile === LEGACY_DEMO_PROFILE ? '' : String(saved.profile || '') }
       : { city: '杭州', profile: '' }
   } catch {
     return { city: '杭州', profile: '' }
   }
 }
 
+function formatRefreshInterval(hours) {
+  const value = Number(hours) || 24
+  if (value === 24) return '每天'
+  if (value === 168) return '每周'
+  if (value % 24 === 0) return `每 ${value / 24} 天`
+  return `每 ${value} 小时`
+}
+
 export default function SubsidyMatcher() {
   const [initial] = useState(getInitialState)
   const [city, setCity] = useState(initial.city)
+  const [cityQuery, setCityQuery] = useState(initial.city)
+  const [showCityResults, setShowCityResults] = useState(false)
   const [profile, setProfile] = useState(initial.profile)
   const [isAiAnalyzing, setIsAiAnalyzing] = useState(false)
   const [aiAnalysis, setAiAnalysis] = useState(null)
   const [aiError, setAiError] = useState(null)
   const [isAiExpanded, setIsAiExpanded] = useState(false)
+  const [remotePolicies, setRemotePolicies] = useState([])
+  const [policySync, setPolicySync] = useState({ loading: true, generatedAt: '', failed: false, refreshIntervalHours: 24 })
   const pendingAiRef = useRef(null)
   const aiRunRef = useRef(0)
   const hasProfile = Boolean(profile.trim())
-  const matches = useMemo(() => subsidyPolicies
+  const citySuggestions = useMemo(() => {
+    const query = cityQuery.trim().replace(/市$/, '')
+    return subsidyCities.filter((item) => {
+      if (!query) return true
+      const searchText = subsidyPolicies
+        .filter((policy) => policy.city === item)
+        .flatMap((policy) => [policy.city, policy.policy, policy.type, policy.status, ...(policy.keywords || [])])
+        .join(' ')
+      return searchText.includes(query)
+    }).slice(0, 12)
+  }, [cityQuery])
+  const policies = remotePolicies.length ? remotePolicies : subsidyPolicies
+  const matches = useMemo(() => policies
     .filter((item) => item.city === city)
     .map((item) => {
       const evaluation = evaluateSubsidyMatch(item, profile)
@@ -69,7 +94,7 @@ export default function SubsidyMatcher() {
       const statusDiff = (order[first.matchStatus] ?? 3) - (order[second.matchStatus] ?? 3)
       if (statusDiff !== 0) return statusDiff
       return second.matchScore - first.matchScore
-    }), [city, profile])
+    }), [city, policies, profile])
   const topScore = hasProfile ? (matches[0]?.matchScore || 0) : null
   const satisfiedCount = matches.filter((m) => m.matchStatus === 'satisfied').length
   const pendingCount = matches.filter((m) => m.matchStatus === 'pending').length
@@ -81,6 +106,26 @@ export default function SubsidyMatcher() {
       // Matching stays usable even when local storage is unavailable.
     }
   }, [city, profile])
+
+  useEffect(() => {
+    let active = true
+    setRemotePolicies([])
+    setPolicySync((prev) => ({ ...prev, loading: true, generatedAt: '', failed: false }))
+    fetchRemoteSubsidyPolicies(city).then((result) => {
+      if (!active) return
+      setRemotePolicies(result.policies)
+      setPolicySync({ loading: false, generatedAt: result.generatedAt || '', failed: false, refreshIntervalHours: Number(result.refreshIntervalHours) || 24 })
+    }).catch(() => {
+      if (active) setPolicySync((prev) => ({ ...prev, loading: false, generatedAt: '', failed: true }))
+    })
+    return () => { active = false }
+  }, [city])
+
+  const selectCity = (nextCity) => {
+    setCity(nextCity)
+    setCityQuery(nextCity)
+    setShowCityResults(false)
+  }
 
   useEffect(() => () => {
     aiRunRef.current += 1
@@ -168,16 +213,27 @@ export default function SubsidyMatcher() {
     <ScrollView className='subsidy-page' scrollY>
       <View className='card subsidy-hero'>
         <View><Text className='eyebrow'>补贴匹配</Text><Text className='page-title'>毕业生租房补贴线索匹配</Text><Text className='body-text'>按城市和个人情况逐项判断满足 / 待确认 / 不满足，给出缺失条件。政策强时效，申请前请再次核对。</Text></View>
-        <View className='score-box'><Text>{hasProfile ? `${topScore} 分` : '待填写'}</Text><Text>{hasProfile ? '线索参考分' : '个人情况'}</Text><Text>{city} · {matches.length} 条</Text></View>
+        <View className='score-box'><Text>{hasProfile ? (matches.length ? `${topScore} 分` : '暂无政策') : '待填写'}</Text><Text>{hasProfile ? '匹配结果' : '个人情况'}</Text><Text>{city} · {matches.length} 条</Text></View>
       </View>
 
       <View className='card panel'>
         <Text className='section-title'>填写基础情况</Text>
         <Text className='field-label'>城市</Text>
-        <Picker aria-label='选择补贴城市' range={subsidyCities} value={Math.max(0, subsidyCities.indexOf(city))} onChange={(event) => setCity(subsidyCities[Number(event.detail.value)])}>
-          <View className='picker-field'>{city}<Text>⌄</Text></View>
-        </Picker>
-        <Text className='city-count'>已收录 {subsidyCities.length} 个城市，滚动选择更多城市</Text>
+        <View className='city-search'>
+          <Input className='city-search-input' aria-label='搜索城市' value={cityQuery} maxlength={30} placeholder='输入城市关键词，例如：贵阳' onFocus={() => setShowCityResults(true)} onInput={(event) => { setCityQuery(event.detail.value); setShowCityResults(true) }} />
+          {cityQuery ? <Button className='city-search-clear' aria-label='清空城市关键词' onClick={() => { setCityQuery(''); setShowCityResults(true) }}>×</Button> : null}
+        </View>
+        {showCityResults ? (
+          <View className='city-search-results'>
+            {citySuggestions.map((item) => (
+              <Button className={item === city ? 'city-result is-selected' : 'city-result'} key={item} onClick={() => selectCity(item)}>
+                <Text>{item}</Text><Text>已收录政策</Text>
+              </Button>
+            ))}
+            {!citySuggestions.length ? <Text className='city-search-empty'>未找到该城市，请检查关键词</Text> : null}
+          </View>
+        ) : null}
+        <Text className='city-count'>当前选择：{city}。可搜索 {subsidyCities.length} 个已收录政策城市。</Text>
         <Text className='field-label'>个人情况</Text>
         <Textarea className='profile-input' aria-label='个人情况' name='subsidyProfile' adjustPosition cursorSpacing={20} value={profile} maxlength={500} placeholder='例如：2025 年本科毕业，已就业并连续缴纳 6 个月社保，本市无房…' onInput={(event) => setProfile(event.detail.value)} />
         <Text className={hasProfile ? 'auto-match-note' : 'profile-empty-hint'}>{hasProfile ? '修改城市或个人情况后，结果会自动更新' : '请填写真实情况后再查看匹配判断，页面不会再使用演示身份代替你。'}</Text>
@@ -188,7 +244,7 @@ export default function SubsidyMatcher() {
             <Text className={`match-pill ${STATUS_TONE.unsatisfied}`}>不满足 {matches.length - satisfiedCount - pendingCount}</Text>
           </View>
         ) : null}
-        {hasProfile ? <Button className='ai-task-btn' disabled={isAiAnalyzing} onClick={() => explainWithAi()}>{isAiAnalyzing ? '正在分析匹配结果…' : '让 AI 解释匹配结果'}</Button> : null}
+        {hasProfile && matches.length ? <Button className='ai-task-btn' disabled={isAiAnalyzing} onClick={() => explainWithAi()}>{isAiAnalyzing ? '正在分析匹配结果…' : '让 AI 解释匹配结果'}</Button> : null}
         {isAiAnalyzing || aiAnalysis ? (
           <View className='inline-ai-panel'>
             <View className='inline-ai-head'><Text>AI 匹配解释</Text><Text>{isAiAnalyzing ? '分析中' : aiAnalysis?.meta}</Text></View>
@@ -216,6 +272,7 @@ export default function SubsidyMatcher() {
 
       <View className='card panel'>
         <View className='result-head'><View><Text className='eyebrow'>官方政策</Text><Text className='section-title'>{city}政策线索</Text></View><Text className='count'>{matches.length} 条</Text></View>
+        {matches.length ? <Text className={policySync.failed ? 'freshness stale' : 'freshness'}>{policySync.loading ? '正在检查官网可访问性…' : policySync.failed ? '官网实时核验暂不可用，已显示人工核对版本；政策内容仍以官网正文为准' : `官网核验${formatRefreshInterval(policySync.refreshIntervalHours)}刷新 · ${new Date(policySync.generatedAt).toLocaleString('zh-CN')} · 政策内容仍以官网正文为准`}</Text> : null}
         {!matches.length ? <Text className='no-match-hint'>当前城市暂无收录线索，请前往当地人社、住建或政务服务官网查询。</Text> : null}
         {matches.map((policy) => (
           <View className='policy-card' key={`${policy.city}-${policy.policy}`}>
@@ -245,7 +302,7 @@ export default function SubsidyMatcher() {
 
             <View className='policy-detail'><Text>常见条件</Text><Text>{policy.condition}</Text></View>
             <View className='materials'>{policy.materials.slice(0, 6).map((item) => <Text key={item}>✓ {item}</Text>)}</View>
-            <Text className={policy.freshness.stale ? 'freshness stale' : 'freshness'}>{policy.freshness.stale ? '政策可能已过期，请以官网最新页面为准' : `数据更新时间：${policy.checkedAt}（${policy.freshness.label}）`}</Text>
+            <Text className={policy.liveReview?.mayHaveChanged || policy.freshness.stale ? 'freshness stale' : 'freshness'}>{policy.liveReview?.mayHaveChanged ? '官网页面在人工核对后有更新，请打开官网确认最新条件' : policy.liveReview?.status === 'available' ? `官网可访问 · 政策内容人工核对于 ${policy.checkedAt}` : policy.freshness.label}</Text>
             <View className='policy-foot'><Text>{policy.sourceName}</Text><Button className='copy-url-btn' onClick={() => copyOfficialUrl(policy)}>复制官网链接</Button></View>
             <Text className='policy-url' userSelect>{policy.applyUrl || policy.sourceUrl}</Text>
           </View>

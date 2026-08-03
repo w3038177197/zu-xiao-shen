@@ -6,7 +6,7 @@ import {
   extractPdfText,
   parseContractDocument,
 } from '../server/contract-document-parser.mjs'
-import { detectImageSignature, recognizeImageOffline } from '../server/ai-proxy.mjs'
+import { detectImageSignature, recognizeImageOffline, recognizeImageWithZhipuVision } from '../server/ai-proxy.mjs'
 
 const checks = []
 const check = (name, fn) => checks.push([name, fn])
@@ -53,7 +53,7 @@ check('安全限制：拒绝伪造 PDF、未知格式和超大文件', async () 
   )
 })
 
-check('接口与页面：文档上传保留，合同页不再提供图片 OCR', async () => {
+check('接口与页面：文档上传与图片 OCR 入口可用', async () => {
   const serverSource = await readFile(new URL('../server/ai-proxy.mjs', import.meta.url), 'utf8')
   const pageSource = await readFile(new URL('../miniapp/src/pages/contract/index.jsx', import.meta.url), 'utf8')
   assert.match(serverSource, /\/api\/miniapp\/contract\/parse/)
@@ -64,10 +64,10 @@ check('接口与页面：文档上传保留，合同页不再提供图片 OCR', 
   assert.match(serverSource, /Cache-Control', 'no-store'/)
   assert.match(serverSource, /maxConcurrentContractParses/)
   assert.match(pageSource, /上传至租小审服务端/)
-  assert.match(pageSource, /原始文件仅在内存中处理，不写入磁盘、不持久化保存/)
+  assert.match(pageSource, /原始文件仅在请求内存中处理，不写入磁盘、不持久化保存/)
   assert.match(pageSource, /取消解析/)
-  assert.doesNotMatch(pageSource, /拍照识别/)
-  assert.doesNotMatch(pageSource, /相册识别/)
+  assert.match(pageSource, /拍照识别/)
+  assert.match(pageSource, /相册识别/)
   assert.match(pageSource, /aria-label='清空合同正文'/)
   const resetSource = pageSource.slice(pageSource.indexOf('handleReset = () =>'), pageSource.indexOf('renderProfilePicker ='))
   assert.match(resetSource, /this\.draftSaver\.cancel\(\)/)
@@ -75,6 +75,8 @@ check('接口与页面：文档上传保留，合同页不再提供图片 OCR', 
   assert.match(resetSource, /this\.updateContract\('',/)
   const importSource = await readFile(new URL('../miniapp/src/utils/contractTextImport.js', import.meta.url), 'utf8')
   assert.match(importSource, /path: '\/api\/miniapp\/ocr\/image'/)
+  assert.match(importSource, /isCloudContainerPlatformFailure/)
+  assert.match(importSource, /云托管域名加入小程序合法域名/)
 })
 
 check('图片签名：完整容器标记通过，伪造、截断和长度不符时拒绝', () => {
@@ -86,6 +88,7 @@ check('图片签名：完整容器标记通过，伪造、截断和长度不符�
   webp.write('WEBPVP8X', 8, 'ascii')
   webp.writeUInt32LE(10, 16)
   assert.equal(detectImageSignature(jpeg), 'jpeg')
+  assert.equal(detectImageSignature(Buffer.concat([jpeg, Buffer.alloc(24)])), 'jpeg')
   assert.equal(detectImageSignature(png), 'png')
   assert.equal(detectImageSignature(webp), 'webp')
   assert.equal(detectImageSignature(Buffer.from('这是文本不是图片', 'utf8')), null)
@@ -95,6 +98,31 @@ check('图片签名：完整容器标记通过，伪造、截断和长度不符�
   const wrongWebpLength = Buffer.from(webp)
   wrongWebpLength.writeUInt32LE(999, 4)
   assert.equal(detectImageSignature(wrongWebpLength), null)
+})
+
+check('智谱视觉 OCR：免费模型失败时依次切换全部备用模型', async () => {
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(20), Buffer.from([0xff, 0xd9])])
+  const models = []
+  const result = await recognizeImageWithZhipuVision(jpeg, {
+    apiKey: 'test-key',
+    models: ['glm-4.6v-flash', 'glm-4.1v-thinking-flash', 'glm-4v-flash'],
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body)
+      models.push(body.model)
+      assert.match(body.messages[0].content[0].image_url.url, /^data:image\/jpeg;base64,/)
+      if (body.model === 'glm-4.6v-flash') {
+        return { ok: false, status: 429, json: async () => ({ error: { message: '访问量过大' } }) }
+      }
+      if (body.model === 'glm-4.1v-thinking-flash') {
+        return { ok: false, status: 400, json: async () => ({ error: { message: '模型参数已调整' } }) }
+      }
+      assert.equal(body.max_tokens, 1024)
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '房屋租赁合同\n第一条 房屋基本信息与租赁期限' } }] }) }
+    },
+  })
+  assert.deepEqual(models, ['glm-4.6v-flash', 'glm-4.1v-thinking-flash', 'glm-4v-flash'])
+  assert.equal(result.engine, 'glm-4v-flash')
+  assert.match(result.text, /第一条 房屋基本信息/)
 })
 
 check('OCR worker：成功、识别失败和超时都会真实执行 terminate', async () => {

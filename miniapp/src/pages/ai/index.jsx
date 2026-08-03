@@ -295,7 +295,7 @@ export default function AiAssistant() {
     <View className='ai-page'>
       <View className='context-strip'>
         <View className='context-top'>
-          <View className='context-mode'><Text className={`status-dot ${serviceReady === false ? 'fallback' : 'remote'}`} /><Text>联网 AI · 失败自动本地</Text></View>
+          <View className='context-mode'><Text className={`status-dot ${serviceReady === null ? 'checking' : serviceReady === false ? 'fallback' : 'remote'}`} /><Text>{serviceReady === null ? '正在检查 AI 服务' : '联网 AI · 失败自动本地'}</Text></View>
           <Button className='context-scope' aria-expanded={showContextOptions} onClick={() => setShowContextOptions((current) => !current)}>资料范围 · {selectedContextModules.length}</Button>
           <Button className='context-clear' aria-label='清空对话' disabled={messages.length === 1 && !isSending} onClick={clear}>清空</Button>
         </View>

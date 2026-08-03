@@ -1,0 +1,76 @@
+{
+  "data": {
+    "nodes": [
+      {
+        "id": "page-home",
+        "type": "page",
+        "name": "首页",
+        "devMetadata": {
+          "htmlSrc": "zu-xiao-shen-miniapp-ui-preview.html",
+          "imageSrc": "zu-xiao-shen-miniapp-ui-preview.png"
+        }
+      },
+      {
+        "id": "page-contract",
+        "type": "page",
+        "name": "合同审查",
+        "devMetadata": {
+          "htmlSrc": "zu-xiao-shen-miniapp-ui-preview.html",
+          "imageSrc": "zu-xiao-shen-miniapp-ui-preview.png"
+        }
+      },
+      {
+        "id": "page-checkin",
+        "type": "page",
+        "name": "入住验房",
+        "devMetadata": {
+          "htmlSrc": "zu-xiao-shen-miniapp-ui-preview.html",
+          "imageSrc": "zu-xiao-shen-miniapp-ui-preview.png"
+        }
+      },
+      {
+        "id": "page-evidence",
+        "type": "page",
+        "name": "退租证据包",
+        "devMetadata": {
+          "htmlSrc": "zu-xiao-shen-miniapp-ui-preview.html",
+          "imageSrc": "zu-xiao-shen-miniapp-ui-preview.png"
+        }
+      },
+      {
+        "id": "page-ai",
+        "type": "page",
+        "name": "AI 助手",
+        "devMetadata": {
+          "htmlSrc": "zu-xiao-shen-miniapp-ui-preview.html",
+          "imageSrc": "zu-xiao-shen-miniapp-ui-preview.png"
+        }
+      },
+      {
+        "id": "page-subsidy",
+        "type": "page",
+        "name": "补贴匹配",
+        "devMetadata": {
+          "htmlSrc": "zu-xiao-shen-miniapp-ui-preview.html",
+          "imageSrc": "zu-xiao-shen-miniapp-ui-preview.png"
+        }
+      }
+    ],
+    "metadata": {
+      "title": "租小审小程序 UI 设计稿",
+      "description": "可信、克制、清晰的租房风险管理工具设计稿，包含首页、合同审查、入住验房、退租证据包、AI 助手和补贴匹配六个核心页面。",
+      "pages": 6,
+      "primaryColor": "#1a4d3a",
+      "platform": "weapp"
+    }
+  },
+  "devMetadata": {
+    "projectName": "租小审小程序 UI 设计稿",
+    "version": "1.0.0",
+    "createdAt": "2026-07-29T12:00:00+08:00",
+    "platform": "weapp",
+    "techStack": "Taro 4 + React",
+    "htmlSrc": "zu-xiao-shen-miniapp-ui-preview.html",
+    "imageSrc": "zu-xiao-shen-miniapp-ui-preview.png"
+  }
+}
