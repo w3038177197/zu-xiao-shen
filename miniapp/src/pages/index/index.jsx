@@ -52,7 +52,13 @@ const defaultDeposit = {
 
 function calculateDeposit(values) {
   const result = calculateDepositReturn(values)
-  return { estimatedReturn: result.estimatedReturn, deduction: result.totalDeduction, warning: result.warning }
+  return {
+    estimatedReturn: result.estimatedReturn,
+    deduction: result.totalDeduction,
+    disputedDeduction: result.disputedDeduction,
+    needsEvidenceDeduction: result.needsEvidenceDeduction,
+    warning: result.warning,
+  }
 }
 
 function getCurrentStep(workflow) {
@@ -658,8 +664,8 @@ export default function Index() {
             <Text>押</Text>
           </View>
           <View className='tool-body'>
-            <Text className='tool-name'>押金估算</Text>
-            <Text className='body-text'>{hasDepositAmount ? `预计应退 ¥ ${result.estimatedReturn.toLocaleString()}` : '填写金额后计算应退押金'}</Text>
+            <Text className='tool-name'>押金结算助手</Text>
+            <Text className='body-text'>{hasDepositAmount ? `应退 ¥ ${result.estimatedReturn.toLocaleString()} · 可争议 ¥ ${result.disputedDeduction.toLocaleString()}` : '估算应退、可争议和待补证扣款'}</Text>
           </View>
           <Text className='step-arrow' aria-hidden>{showDepositDetails ? '⌃' : '⌄'}</Text>
         </Button>
@@ -667,15 +673,24 @@ export default function Index() {
           <View className='deposit-details'>
             <View className='deposit-summary'>
               <View className='deposit-summary-item'>
-                <Text className='caption'>预计应退</Text>
+                <Text className='caption'>应退押金</Text>
                 <Text className='deposit-result'>¥ {result.estimatedReturn.toLocaleString()}</Text>
               </View>
               <View className='deposit-summary-item'>
-                <Text className='caption'>预计扣款</Text>
+                <Text className='caption'>可认可扣款</Text>
                 <Text className='deposit-deduction'>¥ {result.deduction.toLocaleString()}</Text>
+              </View>
+              <View className='deposit-summary-item'>
+                <Text className='caption'>可争议扣款</Text>
+                <Text className='deposit-disputed'>¥ {result.disputedDeduction.toLocaleString()}</Text>
+              </View>
+              <View className='deposit-summary-item'>
+                <Text className='caption'>待补证扣款</Text>
+                <Text className='deposit-pending'>¥ {result.needsEvidenceDeduction.toLocaleString()}</Text>
               </View>
             </View>
             {result.warning ? <Text className='deposit-warning'>{result.warning}</Text> : null}
+            <Text className='deposit-helper'>无票据维修/保洁先放入“待补证”；正常损耗先放入“可争议”，建议进入证据包补照片、票据和沟通记录。</Text>
             <View className='deposit-grid'>
               {[
                 ['depositAmount', '押金金额'],
@@ -700,6 +715,9 @@ export default function Index() {
                   <View className='picker-field'>{deposit.normalWear === 'yes' ? '是，仅正常损耗' : '否，疑似人为损坏'}<Text>⌄</Text></View>
                 </Picker>
               </View>
+            </View>
+            <View className='deposit-actions'>
+              <Button onClick={() => openModule('evidence')}>去整理退租证据包</Button>
             </View>
           </View>
         ) : null}

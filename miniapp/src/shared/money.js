@@ -15,7 +15,10 @@ export function calculateDepositReturn(inputs) {
   const cleaningCost = parseMoney(inputs.cleaningCost)
   const hasVoucher = inputs.hasVoucher === 'yes'
   const normalWear = inputs.normalWear === 'yes'
-  const documentedDamageDeduction = hasVoucher && !normalWear ? repairCost + cleaningCost : 0
+  const claimedDamageDeduction = repairCost + cleaningCost
+  const documentedDamageDeduction = hasVoucher && !normalWear ? claimedDamageDeduction : 0
+  const disputedDeduction = normalWear ? claimedDamageDeduction : 0
+  const needsEvidenceDeduction = !hasVoucher && !normalWear ? claimedDamageDeduction : 0
   const totalDeduction = Math.min(depositAmount, unpaidFees + documentedDamageDeduction)
   const estimatedReturn = Math.max(0, depositAmount - totalDeduction)
   const warning = !hasVoucher && (repairCost > 0 || cleaningCost > 0)
@@ -27,6 +30,10 @@ export function calculateDepositReturn(inputs) {
   return {
     estimatedReturn,
     totalDeduction,
+    disputedDeduction,
+    needsEvidenceDeduction,
+    acceptedDeduction: totalDeduction,
+    claimedDamageDeduction,
     warning,
   }
 }

@@ -1,5 +1,5 @@
 import Taro from '@tarojs/taro'
-import { checkinRoomTypes, checkinRooms, getCheckinItems } from '../constants/checkinConfig.js'
+import { checkinRoomTypes, getCheckinItems, getCheckinRooms } from '../constants/checkinConfig.js'
 import { getCheckinDefectRows, getCheckinStats, normalizeCheckinState } from '../features/checkinInspection.js'
 import { evidenceActions, evidenceGroupMeta, normalizeEvidencePackState } from '../features/evidencePack.js'
 import { redactRemoteContext } from '../features/remoteAi.js'
@@ -203,9 +203,10 @@ function addContractSection(body, data, options = {}) {
 
 async function addCheckinSection(body, data, media, relationships, fs, reportState, options = {}) {
   const state = normalizeCheckinState(data.checkinInspection)
-  const stats = getCheckinStats(state)
-  const defects = getCheckinDefectRows(state)
-  const roomType = checkinRoomTypes.find((item) => item.value === data.checkinRoomType)?.label || '租住房屋'
+  const roomTypeValue = data.checkinRoomType || 'studio'
+  const stats = getCheckinStats(state, roomTypeValue)
+  const defects = getCheckinDefectRows(state, roomTypeValue)
+  const roomType = checkinRoomTypes.find((item) => item.value === roomTypeValue)?.label || '租住房屋'
   body.push(paragraph('入住验房报告', 'Heading1', { pageBreakBefore: options.pageBreakBefore }))
   body.push(paragraph(defects.length
     ? `本次完成 ${stats.percent}% 的检查，记录 ${defects.length} 处疑似瑕疵。建议尽快把带时间的照片和文字说明发给房东或中介确认。`
@@ -224,8 +225,8 @@ async function addCheckinSection(body, data, media, relationships, fs, reportSta
 
   body.push(paragraph('逐项记录与照片', 'Heading2'))
   body.push(paragraph('照片按用户在验房页选择的检查项归档，租小审未识别照片内容是否与检查项一致；发送前请逐张核对。', 'BodyText', { fill: 'FFF8E1', borderColor: 'C18A00' }))
-  for (const room of checkinRooms) {
-    const records = getCheckinItems(room.key).map((item) => ({ item, record: state[room.key]?.[item.key] })).filter(({ record }) => record && (record.status !== 'unchecked' || record.defect || record.note || record.photos?.length))
+  for (const room of getCheckinRooms(roomTypeValue)) {
+    const records = getCheckinItems(room.key, roomTypeValue).map((item) => ({ item, record: state[room.key]?.[item.key] })).filter(({ record }) => record && (record.status !== 'unchecked' || record.defect || record.note || record.photos?.length))
     if (!records.length) continue
     body.push(paragraph(room.label, 'Heading3'))
     for (const { item, record } of records) {
@@ -373,7 +374,7 @@ function addExecutiveSummary(body, modules, data) {
     body.push(bullet(`合同审查：共 ${findings.length} 项风险，高风险 ${findings.filter((item) => item.level === 'high').length} 项。${highRisks.length ? `优先处理：${highRisks.map((item) => item.title).join('、')}。` : '当前没有已记录的高风险项。'}`))
   }
   if (modules.includes('checkin')) {
-    const stats = getCheckinStats(normalizeCheckinState(data.checkinInspection))
+    const stats = getCheckinStats(normalizeCheckinState(data.checkinInspection), data.checkinRoomType)
     body.push(bullet(`入住验房：已检查 ${stats.checked}/${stats.total} 项，记录 ${stats.defects} 处瑕疵、${stats.photos} 张照片；照片内容仍需人工核对。`))
   }
   if (modules.includes('evidence')) {

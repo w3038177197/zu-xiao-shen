@@ -752,6 +752,12 @@ export default class ContractReview extends Component {
                           <Text className='body-text suggestion-text'>{finding.suggestion}</Text>
                         </View>
                       ) : null}
+                      {finding.roleTip ? (
+                        <View className='finding-content'>
+                          <Text className='finding-label'>我方关注点</Text>
+                          <Text className='body-text'>{finding.roleTip}</Text>
+                        </View>
+                      ) : null}
                       {finding.replacement ? (
                         <View className='finding-content'>
                           <Text className='finding-label'>建议条款</Text>

@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro'
 import { STORAGE_KEYS } from '../constants/appConfig.js'
-import { CHECKIN_MAX_PHOTOS_PER_ITEM, checkinItems, checkinRooms, getCheckinItems } from '../constants/checkinConfig.js'
+import { CHECKIN_MAX_PHOTOS_PER_ITEM, checkinItems, checkinRooms, getCheckinItems, getCheckinRooms } from '../constants/checkinConfig.js'
 
 const LEGACY_STORAGE_KEY = 'checkin_inspection_data'
 
@@ -84,8 +84,8 @@ export function normalizeCheckinState(savedState) {
   return state
 }
 
-export function getCheckinStats(checkinData) {
-  const records = checkinRooms.flatMap((room) => getCheckinItems(room.key).map((item) => checkinData?.[room.key]?.[item.key]))
+export function getCheckinStats(checkinData, roomType) {
+  const records = getCheckinRooms(roomType).flatMap((room) => getCheckinItems(room.key, roomType).map((item) => checkinData?.[room.key]?.[item.key]))
   const checked = records.filter((record) => record?.status && record.status !== 'unchecked').length
   const defects = records.filter((record) => record?.status === 'defect').length
   const photos = records.reduce((total, record) => total + (Array.isArray(record?.photos) ? record.photos.length : 0), 0)
@@ -94,8 +94,8 @@ export function getCheckinStats(checkinData) {
   return { checked, defects, photos, total, percent: total ? Math.round((checked / total) * 100) : 0 }
 }
 
-export function hasCheckinContent(checkinData) {
-  return checkinRooms.some((room) => getCheckinItems(room.key).some((item) => {
+export function hasCheckinContent(checkinData, roomType) {
+  return getCheckinRooms(roomType).some((room) => getCheckinItems(room.key, roomType).some((item) => {
     const record = checkinData?.[room.key]?.[item.key]
     return Boolean(
       (record?.status && record.status !== 'unchecked')
@@ -106,8 +106,8 @@ export function hasCheckinContent(checkinData) {
   }))
 }
 
-export function getCheckinDefectRows(checkinData) {
-  return checkinRooms.flatMap((room) => getCheckinItems(room.key)
+export function getCheckinDefectRows(checkinData, roomType) {
+  return getCheckinRooms(roomType).flatMap((room) => getCheckinItems(room.key, roomType)
     .filter((item) => checkinData?.[room.key]?.[item.key]?.status === 'defect')
     .map((item) => {
       const record = checkinData[room.key][item.key]
@@ -150,11 +150,11 @@ export function serializeCheckinInspectionState(state) {
   return normalizeCheckinState(state)
 }
 
-export function getCheckinContextSummary(checkinData) {
+export function getCheckinContextSummary(checkinData, roomType) {
   const state = checkinData || createDefaultCheckinState()
-  const stats = getCheckinStats(state)
-  const defectRows = getCheckinDefectRows(state)
-  const unclassifiedContent = !stats.checked && hasCheckinContent(state)
+  const stats = getCheckinStats(state, roomType)
+  const defectRows = getCheckinDefectRows(state, roomType)
+  const unclassifiedContent = !stats.checked && hasCheckinContent(state, roomType)
   return [
     `完成度：${stats.percent}%（${stats.checked}/${stats.total}）`,
     `疑似瑕疵：${stats.defects} 处`,

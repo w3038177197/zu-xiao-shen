@@ -52,7 +52,7 @@ const [{
   import('../miniapp/src/utils/privacyAuth.js'),
 ])
 const { STORAGE_KEYS } = await import('../miniapp/src/constants/appConfig.js')
-const { getCheckinItems } = await import('../miniapp/src/constants/checkinConfig.js')
+const { getCheckinItems, getCheckinRooms } = await import('../miniapp/src/constants/checkinConfig.js')
 const checkinPhotoTransactions = await import('../miniapp/src/utils/checkinPhotoTransactions.js')
 const evidenceAttachmentTransactions = await import('../miniapp/src/utils/evidenceAttachmentTransactions.js')
 const Taro = (await import('../miniapp/node_modules/@tarojs/taro/index.js')).default
@@ -222,16 +222,37 @@ const checks = [
   ['验房模型统一与旧数据迁移', () => {
     const oldState = { livingRoom: { walls: { status: 'defect', photos: Array.from({ length: 8 }, (_, i) => `photo-${i}`) } } }
     const state = normalizeCheckinState(oldState)
-    assert.deepEqual(Object.keys(state), ['living', 'kitchen', 'bathroom', 'meter'])
+    assert.deepEqual(Object.keys(state), ['living', 'bedroom', 'kitchen', 'bathroom', 'meter', 'building'])
     assert.equal(Object.keys(state.living).length, 4)
     assert.equal(state.living.wall.status, 'defect')
     assert.equal(state.living.wall.photos.length, 6)
     assert.equal(getCheckinStats(state).total, 16)
-    assert.equal(Object.keys(createDefaultCheckinState()).length, 4)
+    assert.equal(Object.keys(createDefaultCheckinState()).length, 6)
     assert.deepEqual(getCheckinItems('meter').map((item) => item.label), ['水表', '电表', '燃气表', '阀门/线路'])
     assert.equal(getCheckinItems('kitchen').some((item) => item.label.includes('门锁')), false)
     assert.equal(getCheckinItems('bathroom').some((item) => item.label === '家具家电'), false)
     assert.ok(Object.values(state.meter).every((record) => record.status === 'unchecked' && record.photos.length === 0))
+  }],
+  ['验房房屋类型会改变检查房间和统计范围', () => {
+    const state = createDefaultCheckinState()
+    state.kitchen.wall.status = 'good'
+    state.building.wall.status = 'defect'
+    state.bedroom.wall.status = 'good'
+
+    assert.deepEqual(getCheckinRooms('studio').map((room) => room.key), ['living', 'kitchen', 'bathroom', 'meter'])
+    assert.deepEqual(getCheckinRooms('family').map((room) => room.key), ['living', 'bedroom', 'kitchen', 'bathroom', 'meter'])
+    assert.deepEqual(getCheckinRooms('apartment').map((room) => room.key), ['living', 'bathroom', 'meter', 'building'])
+    assert.deepEqual(getCheckinRooms('shared').map((room) => room.label), ['个人房间', '公共厨房', '公共卫浴', '水电/费用分摊'])
+    assert.equal(getCheckinItems('living', 'shared').find((item) => item.key === 'doorWindow').label, '房门/门锁')
+    assert.equal(getCheckinItems('meter', 'shared').find((item) => item.key === 'waterElectric').label, '公共费用凭证')
+
+    assert.equal(getCheckinStats(state, 'studio').checked, 1)
+    assert.equal(getCheckinStats(state, 'studio').total, 16)
+    assert.equal(getCheckinStats(state, 'family').checked, 2)
+    assert.equal(getCheckinStats(state, 'family').total, 20)
+    assert.equal(getCheckinStats(state, 'apartment').checked, 1)
+    assert.equal(getCheckinStats(state, 'apartment').defects, 1)
+    assert.equal(getCheckinStats(state, 'apartment').total, 16)
   }],
   ['验房照片添加：记录保存失败时回收新文件且不更新状态', async () => {
     const state = createDefaultCheckinState()
@@ -2448,7 +2469,7 @@ const checks = [
     const homeStyles = fs.readFileSync(new URL('../miniapp/src/pages/index/index.css', import.meta.url), 'utf8')
     const subsidySource = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.jsx', import.meta.url), 'utf8')
     assert.match(homeSource, /depositAmount:\s*''/)
-    assert.match(homeSource, /填写金额后计算/)
+    assert.match(homeSource, /估算应退、可争议和待补证扣款/)
     assert.match(homeSource, /const review = workflow\.review/)
     assert.match(homeSource, /if \(!review\.isCurrent\)/)
     assert.match(homeSource, /workflow\.review\.isCurrent/)
@@ -2486,7 +2507,7 @@ const checks = [
     assert.match(source, /startRemoteAiRequest\(payload, \{ force \}\)/)
     assert.match(source, /已保留本地草稿/)
     assert.match(source, /applyAiCommunication/)
-    assert.match(source, /让 AI 优化这段话/)
+    assert.match(source, /用 AI 润色说明/)
     assert.match(source, /重试联网/)
     assert.match(styles, /\.evidence-ai-panel\s*{/)
     assert.match(styles, /\.evidence-ai-line\s*{[^}]*overflow-wrap:\s*anywhere;/s)
@@ -4079,6 +4100,59 @@ const checks = [
     const r3 = calculateDepositReturn({ depositAmount: '999999999', unpaidFees: '100', repairCost: '', cleaningCost: '', hasVoucher: 'no', normalWear: 'yes' })
     assert.ok(r3.estimatedReturn >= 0, '超大数应返回非负值')
     assert.ok(r3.totalDeduction >= 0, '超大数扣款应非负')
+  }],
+
+  ['M8b：押金结算助手区分认可、争议和待补证扣款', async () => {
+    const { calculateDepositReturn } = await import('../miniapp/src/shared/money.js')
+
+    const needsEvidence = calculateDepositReturn({
+      depositAmount: '3000',
+      unpaidFees: '100',
+      repairCost: '200',
+      cleaningCost: '50',
+      hasVoucher: 'no',
+      normalWear: 'no',
+    })
+    assert.equal(needsEvidence.totalDeduction, 100, '无票据维修/保洁不应直接计入认可扣款')
+    assert.equal(needsEvidence.needsEvidenceDeduction, 250, '无票据维修/保洁应进入待补证扣款')
+    assert.equal(needsEvidence.disputedDeduction, 0)
+
+    const normalWear = calculateDepositReturn({
+      depositAmount: '3000',
+      unpaidFees: '100',
+      repairCost: '200',
+      cleaningCost: '50',
+      hasVoucher: 'yes',
+      normalWear: 'yes',
+    })
+    assert.equal(normalWear.totalDeduction, 100, '正常损耗不应直接计入认可扣款')
+    assert.equal(normalWear.disputedDeduction, 250, '正常损耗维修/保洁应进入可争议扣款')
+    assert.equal(normalWear.needsEvidenceDeduction, 0)
+
+    const documented = calculateDepositReturn({
+      depositAmount: '3000',
+      unpaidFees: '100',
+      repairCost: '200',
+      cleaningCost: '50',
+      hasVoucher: 'yes',
+      normalWear: 'no',
+    })
+    assert.equal(documented.totalDeduction, 350, '有票据且非正常损坏可计入认可扣款')
+    assert.equal(documented.disputedDeduction, 0)
+    assert.equal(documented.needsEvidenceDeduction, 0)
+  }],
+
+  ['M8c：证据包与押金助手页面文案已收口', async () => {
+    const fs = await import('node:fs')
+    const indexSource = fs.readFileSync(new URL('../miniapp/src/pages/index/index.jsx', import.meta.url), 'utf8')
+    const evidenceSource = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.jsx', import.meta.url), 'utf8')
+
+    for (const text of ['押金结算助手', '应退押金', '可认可扣款', '可争议扣款', '待补证扣款', '去整理退租证据包']) {
+      assert.ok(indexSource.includes(text), `首页应包含押金助手文案：${text}`)
+    }
+    for (const text of ['真实附件', '模块引用', '待办完成', '证据覆盖', '已勾选但未上传凭证', '从合同填充', '导出包预览', '用 AI 润色说明']) {
+      assert.ok(evidenceSource.includes(text), `证据包应包含收口文案：${text}`)
+    }
   }],
 
   ['M9：合同审查空 findings 评分正确', async () => {

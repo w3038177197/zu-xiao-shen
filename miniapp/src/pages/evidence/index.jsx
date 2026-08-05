@@ -27,7 +27,7 @@ import { deleteEvidenceAttachmentTransaction } from '../../utils/evidenceAttachm
 import { getCapabilityFailure, showCapabilityFailure } from '../../utils/privacyAuth'
 import { formatMessageBlocks, loadAllModuleContext } from '../../features/aiAssistant'
 import { AI_TASK_PRESETS, buildRemoteAiPayload } from '../../features/remoteAi'
-import { REMOTE_AI_CONFIG } from '../../constants/appConfig'
+import { REMOTE_AI_CONFIG, STORAGE_KEYS } from '../../constants/appConfig'
 import { confirmRemoteConsent, getRemoteAiError, startRemoteAiRequest } from '../../utils/remoteAiRequest'
 import {
   persistAttachment,
@@ -49,6 +49,43 @@ const STEPS = [
   { key: 'attachments', label: '2 证据附件' },
   { key: 'output', label: '3 说明与导出' },
 ]
+
+const GROUP_GAP_HINTS = {
+  contract: '缺少租赁合同原件/电子版、押金收据或租金支付记录。',
+  photos: '缺少入住或退租现场照片，建议覆盖墙面、门窗、厨卫和家电。',
+  chat: '缺少微信、短信、电话纪要或退租通知等沟通记录。',
+  expense: '缺少水电燃气、物业、维修或保洁等费用凭证。',
+}
+
+const OUTPUT_PREVIEW_ITEMS = ['证据清单', '沟通说明', '附件列表', '待补材料', '附件完整性清单']
+
+function normalizeStorageText(value) {
+  if (!value) return ''
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return typeof parsed?.text === 'string' ? parsed.text : value
+    } catch {
+      return value
+    }
+  }
+  return typeof value?.text === 'string' ? value.text : ''
+}
+
+function firstMoneyAfter(text, labels) {
+  const pattern = new RegExp('(?:' + labels.join('|') + ')[^\\d]{0,16}(\\d+(?:\\.\\d+)?)\\s*元?')
+  const match = text.match(pattern)
+  return match?.[1] || ''
+}
+
+function parseBasicInfoFromContract(text) {
+  const address = (text.match(/(?:房屋坐落|房屋地址|租赁房屋|出租房屋|房屋位于|地址)[:：为\s]*([^。；\n]{4,60})/) || [])[1] || ''
+  return {
+    address: address.trim(),
+    deposit: firstMoneyAfter(text, ['押金', '保证金']),
+    monthlyRent: firstMoneyAfter(text, ['月租金', '每月租金', '租金']),
+  }
+}
 
 export default class EvidencePack extends Component {
   autoSaver = createDebouncedSaver((state) => saveEvidencePackState(state))
@@ -127,6 +164,33 @@ export default class EvidencePack extends Component {
         formData: { ...prev.packState.formData, [field]: value },
       },
     }), this.scheduleSave)
+  }
+
+  handleAutofillFromContract = () => {
+    const contractText = normalizeStorageText(Taro.getStorageSync(STORAGE_KEYS.contractDraft)).trim()
+    if (!contractText) {
+      Taro.showToast({ title: '暂无合同正文可识别', icon: 'none' })
+      return
+    }
+    const parsed = parseBasicInfoFromContract(contractText)
+    const formData = this.state.packState.formData || {}
+    const nextFields = {}
+    ;['address', 'deposit', 'monthlyRent'].forEach((field) => {
+      if (!String(formData[field] || '').trim() && parsed[field]) nextFields[field] = parsed[field]
+    })
+    if (!Object.keys(nextFields).length) {
+      Taro.showToast({ title: '未识别到可自动填充的新信息', icon: 'none' })
+      return
+    }
+    const labels = { address: '房屋地址', deposit: '押金金额', monthlyRent: '月租金' }
+    this.setState((prev) => ({
+      packState: {
+        ...prev.packState,
+        formData: { ...prev.packState.formData, ...nextFields },
+      },
+      operationNotice: '已从合同填入：' + Object.keys(nextFields).map((field) => labels[field]).join('、'),
+    }), this.scheduleSave)
+    Taro.showToast({ title: '已从合同填充', icon: 'success' })
   }
 
   handleEvidenceToggle = (group, index) => {
@@ -538,10 +602,29 @@ export default class EvidencePack extends Component {
     const stats = getAttachmentStats(this.state.packState)
     const totalGroups = GROUPS.length
     const collectedGroups = Object.values(stats.byGroup).filter((count) => count > 0).length
+    let realAttachments = 0
+    let moduleRefs = 0
+    let checklistDone = 0
+    let checklistTotal = 0
+    const checkedWithoutAttachmentGroups = []
+    GROUPS.forEach(([group, meta]) => {
+      const groupAttachments = getGroupAttachments(this.state.packState, group)
+      realAttachments += groupAttachments.filter((item) => item.source !== 'module').length
+      moduleRefs += groupAttachments.filter((item) => item.source === 'module').length
+      const checked = (this.state.packState?.evidence?.[group] || []).filter(Boolean).length
+      checklistDone += checked
+      checklistTotal += meta.items.length
+      if (checked > 0 && groupAttachments.length === 0) checkedWithoutAttachmentGroups.push(meta.title)
+    })
     return {
       totalGroups,
       collectedGroups,
       totalAttachments: stats.total,
+      realAttachments,
+      moduleRefs,
+      checklistDone,
+      checklistTotal,
+      checkedWithoutAttachmentGroups,
     }
   }
 
@@ -557,6 +640,9 @@ export default class EvidencePack extends Component {
     const [activeGroupKey, activeGroupMeta] = GROUPS[currentGroup] || GROUPS[0]
     const activeEvidence = Array.isArray(evidence?.[activeGroupKey]) ? evidence[activeGroupKey] : []
     const activeGroupAttachments = getGroupAttachments(packState, activeGroupKey)
+    const activeGroupHasChecklist = activeEvidence.some(Boolean)
+    const activeGroupNeedsAttachment = activeGroupHasChecklist && !activeGroupAttachments.length
+    const activeGroupMissingHint = GROUP_GAP_HINTS[activeGroupKey]
     const moduleSourceLabel = (att) => {
       if (att.source !== 'module') return att.source === 'album' ? '相册' : '微信文件'
       const map = { checkin: '验房模块', contract: '合同模块', review: '审查模块' }
@@ -572,9 +658,15 @@ export default class EvidencePack extends Component {
         </View>
         <View className='card progress-section'>
           <View className='progress-head'><Text className='progress-title'>证据收集进度</Text><Button className='reset-link' onClick={this.handleReset}>重置记录</Button></View>
-          <Text className='progress-text'>
-            已添加 {progress.totalAttachments} 个真实附件，覆盖 {progress.collectedGroups}/{progress.totalGroups} 类
-          </Text>
+          <View className='progress-metrics'>
+            <View><Text>真实附件</Text><Text>{progress.realAttachments} 个</Text></View>
+            <View><Text>模块引用</Text><Text>{progress.moduleRefs} 个</Text></View>
+            <View><Text>待办完成</Text><Text>{progress.checklistDone}/{progress.checklistTotal}</Text></View>
+            <View><Text>证据覆盖</Text><Text>{progress.collectedGroups}/{progress.totalGroups} 类</Text></View>
+          </View>
+          {progress.checkedWithoutAttachmentGroups.length ? (
+            <Text className='progress-warning'>已勾选但未上传凭证：{progress.checkedWithoutAttachmentGroups.join('、')}。建议补附件或从合同/验房模块导入。</Text>
+          ) : null}
         </View>
         <View className='step-tabs' aria-label='证据包步骤'>
           {STEPS.map((step) => <Button key={step.key} className={activeStep === step.key ? 'active' : ''} aria-current={activeStep === step.key ? 'step' : undefined} onClick={() => this.setState({ activeStep: step.key })}>{step.label}</Button>)}
@@ -583,7 +675,10 @@ export default class EvidencePack extends Component {
 
         {activeStep === 'basic' ? <>
         <View className='card section'>
-          <Text className='section-title'>基本信息</Text>
+          <View className='section-head'>
+            <View><Text className='section-title'>基本信息</Text><Text className='section-subtitle'>地址、押金和月租可从本机合同草稿自动识别。</Text></View>
+            <Button className='btn-autofill' onClick={this.handleAutofillFromContract}>从合同填充</Button>
+          </View>
 
           <View className='form-item'>
             <Text className='form-label'>房屋地址</Text>
@@ -648,6 +743,7 @@ export default class EvidencePack extends Component {
               )
             })}
           </View>
+          {activeGroupMissingHint ? <Text className='gap-hint'>{activeGroupMissingHint}</Text> : null}
 
           <View className='evidence-list'>
             {activeGroupMeta.items.map((item, itemIndex) => (
@@ -656,7 +752,10 @@ export default class EvidencePack extends Component {
                   <View className={`checkbox ${activeEvidence[itemIndex] ? 'checked' : ''}`}>
                     {activeEvidence[itemIndex] && <Text>✓</Text>}
                   </View>
-                  <Text className='item-name'>{item}</Text>
+                  <View className='item-copy'>
+                    <Text className='item-name'>{item}</Text>
+                    {activeEvidence[itemIndex] && !activeGroupAttachments.length ? <Text className='item-warning'>已标记完成，但本类还没有上传凭证。</Text> : null}
+                  </View>
                 </Button>
               </View>
             ))}
@@ -667,6 +766,7 @@ export default class EvidencePack extends Component {
               <Text className='attachment-title'>{activeGroupMeta.title}的附件</Text>
               <Text className='attachment-hint'>支持图片、PDF、Word、TXT，可从其他模块导入引用</Text>
             </View>
+            {activeGroupNeedsAttachment ? <Text className='attachment-gap'>这类证据已勾选完成，但还没有附件。建议补一张截图、照片或文件，避免只有口头记录。</Text> : null}
             {activeGroupAttachments.length ? (
               <View className='attachment-list'>
                 {activeGroupAttachments.map((attachment) => (
@@ -708,6 +808,15 @@ export default class EvidencePack extends Component {
         </> : null}
 
         {activeStep === 'output' ? <>
+        <View className='card section export-preview'>
+          <Text className='section-title'>导出包预览</Text>
+          <Text className='section-subtitle'>证据包会随首页“报告导出中心”生成 Word 汇总；ZIP 备份会附带完整性清单。</Text>
+          <View className='export-preview-grid'>
+            {OUTPUT_PREVIEW_ITEMS.map((item) => <Text key={item}>{item}</Text>)}
+          </View>
+          <Text className='export-preview-note'>当前资料：真实附件 {progress.realAttachments} 个，模块引用 {progress.moduleRefs} 个，待办完成 {progress.checklistDone}/{progress.checklistTotal}。</Text>
+        </View>
+
         <View className='card section'>
           <Text className='section-title'>下一步行动</Text>
           {evidenceActions.map((action, index) => (
@@ -742,7 +851,7 @@ export default class EvidencePack extends Component {
           {communicationText ? (
             <Textarea className='communication-text' aria-label='沟通说明' adjustPosition cursorSpacing={20} value={communicationText} maxlength={2000} onInput={(e) => this.handleCommunicationChange(e.detail.value)} />
           ) : null}
-            <Button className='ai-task-btn' disabled={!hasAiContext || isAiAnalyzing} onClick={() => this.handleAiEvidenceCheck()}>{isAiAnalyzing ? '正在优化沟通说明…' : hasAiContext ? '让 AI 优化这段话' : '暂无证据资料可优化'}</Button>
+            <Button className='ai-task-btn' disabled={!hasAiContext || isAiAnalyzing} onClick={() => this.handleAiEvidenceCheck()}>{isAiAnalyzing ? '正在润色沟通说明…' : hasAiContext ? '用 AI 润色说明' : '暂无证据资料可润色'}</Button>
             {isAiAnalyzing || aiCommunication ? (
               <View className='evidence-ai-panel' aria-live='polite'>
                 <View className='evidence-ai-head'><Text>优化结果</Text><Text>{isAiAnalyzing ? '生成中' : aiCommunication?.meta}</Text></View>

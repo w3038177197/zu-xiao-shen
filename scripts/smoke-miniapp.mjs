@@ -92,8 +92,8 @@ check('入住验房：空数据引导按房间拍照，有数据时显示统计'
 check('证据包：空数据提示暂无附件，有数据时显示 AI 润色入口', () => {
   const evidence = readPage('evidence')
   assert.match(evidence, /该组暂无附件/, '空数据应提示暂无附件')
-  assert.match(evidence, /让 AI 优化这段话/, '应有当前页 AI 优化沟通说明入口')
-  assert.match(evidence, /暂无证据资料可优化/, '空数据时 AI 优化应禁用并提示')
+  assert.match(evidence, /用 AI 润色说明/, '应有当前页 AI 润色沟通说明入口')
+  assert.match(evidence, /暂无证据资料可润色/, '空数据时 AI 润色应禁用并提示')
 })
 
 // ---------- 5. 补贴匹配 ----------

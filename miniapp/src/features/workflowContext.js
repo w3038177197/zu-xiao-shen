@@ -107,13 +107,14 @@ export function buildWorkflowContext({
   contractText = '',
   reviewHistory = [],
   checkinState,
+  checkinRoomType,
   evidencePackState,
   subsidyState,
 } = {}) {
   const safeContractText = typeof contractText === 'string' ? contractText.trim() : ''
   const reviewSnapshot = getReviewSnapshot(safeContractText, reviewHistory)
-  const checkinStats = getCheckinStats(checkinState)
-  const checkinHasData = hasCheckinContent(checkinState)
+  const checkinStats = getCheckinStats(checkinState, checkinRoomType)
+  const checkinHasData = hasCheckinContent(checkinState, checkinRoomType)
   const attachmentStats = getAttachmentStats(evidencePackState)
   const evidenceChecklist = getEvidenceChecklistStats(evidencePackState)
   const evidenceHasData = hasMeaningfulEvidenceData(evidencePackState, evidenceChecklist, attachmentStats)
@@ -131,8 +132,8 @@ export function buildWorkflowContext({
     checkin: {
       hasData: checkinHasData,
       stats: checkinStats,
-      defects: getCheckinDefectRows(checkinState),
-      summary: checkinHasData ? getCheckinContextSummary(checkinState) : '',
+      defects: getCheckinDefectRows(checkinState, checkinRoomType),
+      summary: checkinHasData ? getCheckinContextSummary(checkinState, checkinRoomType) : '',
     },
     evidence: {
       hasData: evidenceHasData,
@@ -178,10 +179,12 @@ export function loadWorkflowContext() {
   const contractText = String(readStorage(STORAGE_KEYS.contractDraft, '') || '')
   const reviewHistory = readStorage(STORAGE_KEYS.reviewHistory, [])
   const subsidyState = readStorage(STORAGE_KEYS.subsidyMatcher, null)
+  const checkinRoomType = String(readStorage(STORAGE_KEYS.checkinRoomType, '') || '')
   return buildWorkflowContext({
     contractText,
     reviewHistory,
     checkinState: loadCheckinInspectionState(),
+    checkinRoomType,
     evidencePackState: loadEvidencePackState(),
     subsidyState,
   })

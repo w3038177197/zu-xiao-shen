@@ -499,7 +499,8 @@
 }
 
 .deposit-summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 16px;
 }
@@ -513,7 +514,9 @@
 }
 
 .deposit-result,
-.deposit-deduction {
+.deposit-deduction,
+.deposit-disputed,
+.deposit-pending {
   display: block;
   margin-top: 6px;
   font-size: 36px;
@@ -528,6 +531,43 @@
 
 .deposit-deduction {
   color: #c9372d;
+}
+
+.deposit-disputed {
+  color: #b86e00;
+}
+
+.deposit-pending {
+  color: #5c6a60;
+}
+
+.deposit-helper {
+  display: block;
+  margin: 0 0 16px;
+  color: #5c6a60;
+  font-size: 22px;
+  line-height: 1.5;
+}
+
+.deposit-actions {
+  margin-top: 16px;
+}
+
+.deposit-actions button {
+  width: 100%;
+  min-height: 72px;
+  margin: 0;
+  border: 1px solid #1a4d3a;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1a4d3a;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 70px;
+}
+
+.deposit-actions button::after {
+  border: 0;
 }
 
 .deposit-warning {

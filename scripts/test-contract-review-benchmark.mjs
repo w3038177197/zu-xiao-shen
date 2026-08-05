@@ -255,6 +255,20 @@ assert.ok(balancedDepth.some((item) => item.level === 'medium'), '标准审查�
 assert.ok(businessDepth.length > 0 && businessDepth.every((item) => item.level === 'high'), '宽松友好应只显示高风险和签署阻断项')
 assert.equal(getRiskSummary(businessDepth).missingCount, 0, '宽松友好不应显示一般完整性提示')
 
+const landlordRoleFindings = analyzeContract(depthContract, { ...profile, partyRole: 'partyA' })
+const tenantRoleFindings = analyzeContract(depthContract, { ...profile, partyRole: 'partyB' })
+const neutralRoleFindings = analyzeContract(depthContract, { ...profile, partyRole: 'neutral' })
+assert.ok(landlordRoleFindings.some((item) => item.roleTip?.includes('甲方视角')), '我方是甲方时应生成甲方关注点')
+assert.ok(tenantRoleFindings.some((item) => item.roleTip?.includes('租客视角')), '我方是租客时应生成租客关注点')
+assert.ok(neutralRoleFindings.some((item) => item.roleTip?.includes('中立视角')), '中立评估时应生成中立关注点')
+assert.match(createReportText({
+  summary: getRiskSummary(landlordRoleFindings),
+  findings: landlordRoleFindings,
+  revisionItems: [],
+  contractText: depthContract,
+  reviewProfile: { ...profile, partyRole: 'partyA' },
+}), /我方关注点：甲方视角/, '审查报告应带出角色关注点')
+
 const comprehensiveTrapContract = [
   '租期未满一年，乙方不得以任何理由提前退租；中途退房时已支付全部租金、押金不予退还，同时额外向甲方支付1个月房租作为违约金。',
   '乙方须一次性付清全年房租，不接受月付、季付等分期支付方式。',

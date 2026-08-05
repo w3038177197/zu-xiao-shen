@@ -2011,6 +2011,14 @@ ${knowledgeLines}
 请优先检查：付款与验收、解除权对等、违约责任上限、知识产权归属、保密期限与违约金、个人信息/数据处理、管辖与通知送达、需求变更控制、证据留存。`
 }
 
+function getRoleTip(finding, profile) {
+  if (profile.contractType !== 'lease') return ''
+  if (profile.partyRole === 'partyA') return '甲方视角：保留管理、扣款或解除权时，要落到书面通知、合理期限、票据凭证和实际损失；绝对没收、随意入户、自行处置这类写法反而容易无效。'
+  if (profile.partyRole === 'partyB') return '租客视角：优先要求删除或收窄该条，写清房东通知义务、举证责任、票据凭证、维修边界和押金退还期限。'
+  if (profile.partyRole === 'neutral') return '中立视角：同时看条款能否执行、双方权责是否对等、证据和通知链条是否完整。'
+  return ''
+}
+
 export function analyzeContract(text, profile = { contractType: 'lease', partyRole: 'partyB', reviewDepth: 'strict' }) {
   const reviewText = cleanContractTextForReview(text)
   const lowerText = reviewText.toLowerCase()
@@ -2035,6 +2043,7 @@ export function analyzeContract(text, profile = { contractType: 'lease', partyRo
 
   const allFindings = [...baseFindings, ...getProfessionalFindings(reviewText, profile)].map((finding) => ({
     ...finding,
+    roleTip: getRoleTip(finding, profile),
     confidence: finding.confidence ?? Math.min(0.96, 0.65 + (finding.hits?.length || 0) * 0.08),
     evidenceLocation: finding.evidenceLocation || getEvidenceLocation(reviewText, finding.evidence || finding.hits?.[0]),
   }))
@@ -2108,11 +2117,13 @@ export function createReportText({ summary, findings, revisionItems, contractTex
         const priority = finding.priority || details?.priority || 'P2'
         const evidence = finding.evidence || details?.evidence || finding.hits.join('、')
         const negotiation = finding.negotiation || details?.negotiation || '建议结合交易背景与对方协商。'
+        const roleTip = finding.roleTip || ''
         return [
           `${index + 1}. ${finding.title}（${finding.levelText}，${priority}）`,
           `风险解释：${finding.explain}`,
           `证据片段：${evidence}`,
           `修改建议：${finding.suggestion}`,
+          ...(roleTip ? [`我方关注点：${roleTip}`] : []),
           `谈判话术：${negotiation}`,
         ].join('\n')
       }),

@@ -9,9 +9,9 @@ import {
   CHECKIN_PHOTO_QUALITY,
   checkinRoomTypes,
   getCheckinItems,
+  getCheckinRooms,
 } from '../../constants/checkinConfig'
 import {
-  ROOMS,
   createDefaultCheckinState,
   getCheckinStats,
   getCheckinDefectRows,
@@ -76,7 +76,7 @@ export default class CheckinInspection extends Component {
   }
 
   setRoomType = (roomType) => {
-    this.setState({ roomType, report: '' })
+    this.setState({ roomType, currentRoom: 0, expandedItemKey: null, report: '' })
     Taro.setStorageSync(STORAGE_KEYS.checkinRoomType, roomType)
   }
 
@@ -348,7 +348,7 @@ export default class CheckinInspection extends Component {
   }
 
   getLandlordScript = () => {
-    const defects = getCheckinDefectRows(this.state.inspectionState)
+    const defects = getCheckinDefectRows(this.state.inspectionState, this.state.roomType)
     const roomType = checkinRoomTypes.find((item) => item.value === this.state.roomType)?.label || '租住房屋'
     return defects.length
       ? `您好，我今天入住${roomType}时已按房间拍摄并整理验房记录。记录中标注了${defects.slice(0, 3).map((row) => row.defect).join('、')}等入住前已存在情况。麻烦确认这些问题为入住时现状，后续退租时不作为我的责任扣除押金。`
@@ -357,9 +357,10 @@ export default class CheckinInspection extends Component {
 
   buildReport = () => {
     const { inspectionState, roomType } = this.state
-    const stats = getCheckinStats(inspectionState)
-    const defects = getCheckinDefectRows(inspectionState)
+    const stats = getCheckinStats(inspectionState, roomType)
+    const defects = getCheckinDefectRows(inspectionState, roomType)
     const roomTypeLabel = checkinRoomTypes.find((item) => item.value === roomType)?.label || '租住房屋'
+    const rooms = getCheckinRooms(roomType)
 
     let report = `租小审入住验房报告\n`
     report += `生成时间：${new Date().toLocaleString('zh-CN', { hour12: false })}\n`
@@ -368,9 +369,9 @@ export default class CheckinInspection extends Component {
     report += `疑似瑕疵：${stats.defects} 处\n`
     report += `验房照片：${stats.photos} 张\n\n`
 
-    ROOMS.forEach((room) => {
+    rooms.forEach((room) => {
       report += `【${room.label}】\n`
-      getCheckinItems(room.key).forEach((item) => {
+      getCheckinItems(room.key, roomType).forEach((item) => {
         const record = inspectionState[room.key]?.[item.key]
         if (!record || record.status === 'unchecked') return
         const statusText = record.status === 'good' ? '良好' : '瑕疵'
@@ -407,10 +408,11 @@ export default class CheckinInspection extends Component {
 
   render() {
     const { inspectionState, currentRoom, isSaving, roomType, report, expandedItemKey, operationNotice, lastPhotoSource } = this.state
-    const safeRoomIndex = ROOMS[currentRoom] ? currentRoom : 0
-    const room = ROOMS[safeRoomIndex]
-    const inspectionItems = getCheckinItems(room.key)
-    const stats = getCheckinStats(inspectionState)
+    const rooms = getCheckinRooms(roomType)
+    const safeRoomIndex = rooms[currentRoom] ? currentRoom : 0
+    const room = rooms[safeRoomIndex]
+    const inspectionItems = getCheckinItems(room.key, roomType)
+    const stats = getCheckinStats(inspectionState, roomType)
 
     return (
       <ScrollView scrollY enableFlex scrollWithAnimation scrollIntoView={report ? 'checkin-report' : ''} className='page checkin-page'>
@@ -463,7 +465,7 @@ export default class CheckinInspection extends Component {
           ) : null}
 
           <View className='room-tabs'>
-            {ROOMS.map((r, index) => (
+            {rooms.map((r, index) => (
               <Button
                 key={r.key}
                 className={`room-tab ${safeRoomIndex === index ? 'active' : ''}`}
