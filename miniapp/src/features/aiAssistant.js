@@ -125,6 +125,7 @@ export function loadAllModuleContext() {
         ...context.review,
         findings,
         summary: getRiskSummary(findings),
+        isLocalAnalysis: true,
       },
     }
   } catch {

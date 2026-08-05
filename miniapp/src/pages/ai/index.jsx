@@ -6,6 +6,7 @@ import {
   buildRemoteAiPayload,
   getAvailableRemoteContextModules,
   getRemoteContextPreview,
+  resolveRemoteContextModules,
 } from '../../features/remoteAi'
 import { REMOTE_AI_CONFIG, STORAGE_KEYS } from '../../constants/appConfig'
 import { copyText } from '../../utils/copyText'
@@ -122,8 +123,12 @@ export default function AiAssistant() {
     const nextContext = loadAllModuleContext()
     const task = consumeAiTaskHandoff()
     setContext(nextContext)
-    if (!task) return
-    const available = new Set(getAvailableRemoteContextModules(nextContext).map((item) => item.key))
+    const availableModules = getAvailableRemoteContextModules(nextContext).map((item) => item.key)
+    if (!task) {
+      setSelectedContextModules(availableModules)
+      return
+    }
+    const available = new Set(availableModules)
     const selectedModules = task.modules.filter((key) => available.has(key))
     setDraft(task.prompt)
     setSelectedContextModules(selectedModules)
@@ -134,15 +139,24 @@ export default function AiAssistant() {
   })
 
   const contextLabel = useMemo(() => {
-    if (!selectedContextModules.length) return '仅发送当前问题'
-    return `已选择 ${selectedContextModules.length} 类资料`
-  }, [selectedContextModules.length])
+    const resolved = resolveRemoteContextModules(context, selectedContextModules)
+    if (resolved.length) return `已选择 ${resolved.length} 类资料`
+    return '仅发送当前问题'
+  }, [context, draft, selectedContextModules])
 
   const availableRemoteModules = useMemo(() => getAvailableRemoteContextModules(context), [context])
+  const effectiveContextModules = useMemo(
+    () => resolveRemoteContextModules(context, selectedContextModules),
+    [context, selectedContextModules]
+  )
 
   useEffect(() => {
-    const available = new Set(availableRemoteModules.map((item) => item.key))
-    setSelectedContextModules((current) => current.filter((key) => available.has(key)))
+    const availableKeys = availableRemoteModules.map((item) => item.key)
+    const available = new Set(availableKeys)
+    setSelectedContextModules((current) => {
+      const next = current.filter((key) => available.has(key))
+      return next.length ? next : availableKeys
+    })
   }, [availableRemoteModules])
 
   const appendRemoteReply = (result) => {
@@ -226,8 +240,13 @@ export default function AiAssistant() {
         return
       }
 
-      const payload = buildRemoteAiPayload({ prompt, messages, context: nextContext, selectedModules: selectedContextModules })
+      const contextModules = resolveRemoteContextModules(nextContext, selectedContextModules)
+      const payload = buildRemoteAiPayload({ prompt, messages, context: nextContext, selectedModules: contextModules })
       setMessages((current) => [...current, { role: 'user', content: prompt }])
+      if (contextModules.length && !selectedContextModules.length) {
+        setSelectedContextModules(contextModules)
+        setStatusHint('已自动携带当前房源可用资料摘要，不发送合同全文、照片或附件')
+      }
       await runRemote({ payload, prompt, currentContext: nextContext, addFallback: true })
     } finally {
       sendPreparingRef.current = false
@@ -289,7 +308,7 @@ export default function AiAssistant() {
   const showModeInfo = () => {
     Taro.showModal({
       title: 'AI 数据范围',
-      content: `本次发送内容预览：\n\n${getRemoteContextPreview(context, selectedContextModules)}\n\n不会发送合同全文、照片内容、附件文件或本地文件路径；手机号、证件号、银行卡号、邮箱、姓名和地址会在本机及服务端再次脱敏。联网不可用时自动使用本地分析。`,
+      content: `本次发送内容预览：\n\n${getRemoteContextPreview(context, effectiveContextModules)}\n\n不会发送合同全文、照片内容、附件文件或本地文件路径；手机号、证件号、银行卡号、邮箱、姓名和地址会在本机及服务端再次脱敏。联网不可用时自动使用本地分析。`,
       showCancel: false,
     })
   }
@@ -306,7 +325,7 @@ export default function AiAssistant() {
       <View className='context-strip'>
         <View className='context-top'>
           <View className='context-mode'><Text className={`status-dot ${serviceReady === null ? 'checking' : serviceReady === false ? 'fallback' : 'remote'}`} /><Text>{serviceReady === null ? '正在检查 AI 服务' : '联网 AI · 失败自动本地'}</Text></View>
-          <Button className='context-scope' aria-expanded={showContextOptions} onClick={() => setShowContextOptions((current) => !current)}>资料范围 · {selectedContextModules.length}</Button>
+          <Button className='context-scope' aria-expanded={showContextOptions} onClick={() => setShowContextOptions((current) => !current)}>资料范围 · {effectiveContextModules.length}</Button>
           <Button className='context-clear' aria-label='清空对话' disabled={messages.length === 1 && !isSending} onClick={clear}>清空</Button>
         </View>
         {showContextOptions ? <View className='remote-options'>
@@ -348,7 +367,7 @@ export default function AiAssistant() {
           <Textarea className='composer-input' aria-label='输入租房问题' name='aiPrompt' value={draft} maxlength={1000} adjustPosition cursorSpacing={20} showConfirmBar={false} confirmType='send' disabled={isSending} placeholder='输入合同条款或你的问题…' onInput={(event) => setDraft(event.detail.value)} onConfirm={() => send()} />
           <Button className={isSending ? 'send-button cancel' : 'send-button'} aria-label={isSending ? '取消联网回答' : '发送消息'} disabled={!isSending && !draft.trim()} onClick={isSending ? cancelRemote : () => send()}>{isSending ? '停' : '↑'}</Button>
         </View>
-        <Text className='composer-note'>{statusHint || `优先联网 AI · ${selectedContextModules.length ? `携带 ${selectedContextModules.length} 类已预览资料` : '失败自动本地回答'}`}</Text>
+        <Text className='composer-note'>{statusHint || `优先联网 AI · ${effectiveContextModules.length ? `携带 ${effectiveContextModules.length} 类已预览资料` : '失败自动本地回答'}`}</Text>
       </View>
     </View>
   )

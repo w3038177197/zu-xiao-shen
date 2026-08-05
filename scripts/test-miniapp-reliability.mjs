@@ -1697,6 +1697,19 @@ const checks = [
       if (c.status === 'satisfied') assert.ok(c.evidence, `${c.label} 缺少依据`)
     })
   }],
+  ['补贴结构化匹配：选择城市与个人情况城市冲突时判不满足', async () => {
+    const miniappSubsidyData = await import('../miniapp/src/shared/subsidyPolicies.js')
+    const profile = '2025 年本科毕业，目前在杭州一家互联网公司就业，已签订劳动合同并连续缴纳社保 6 个月，本人及家庭在杭州市区无自有住房。'
+    for (const data of [subsidyData, miniappSubsidyData]) {
+      const policy = data.subsidyPolicies.find((p) => p.city === '北京')
+      const result = data.evaluateSubsidyMatch(policy, profile)
+      const cityCriterion = result.criteria.find((c) => c.key === 'city')
+      assert.equal(result.status, 'unsatisfied')
+      assert.equal(cityCriterion.status, 'unsatisfied')
+      assert.match(cityCriterion.evidence, /杭州/)
+      assert.ok(result.score <= 45, '城市冲突时参考分不应继续显示高分')
+    }
+  }],
   ['补贴结构化匹配：缺少社保和学历判定为待确认', () => {
     const policy = subsidyData.subsidyPolicies.find((p) => p.city === '杭州')
     const profile = '我刚来杭州租房居住，无房。'
@@ -4082,6 +4095,53 @@ const checks = [
     const match = evaluateSubsidyMatch(policy, '')
     assert.equal(match.status, 'pending', '空 profile 应返回 pending')
     assert.ok(match.score >= 0, '空 profile 分数应非负')
+  }],
+
+  ['AI 问答：合同草稿可自动转为远程摘要且不发送全文', async () => {
+    storage.clear()
+    const remoteAi = await import('../miniapp/src/features/remoteAi.js')
+    const contractText = '完整合同原文不得发送。甲方可随时进入房屋检查，无需提前通知乙方。押金3000元，退租时甲方可自行决定扣除。'
+    storage.set(STORAGE_KEYS.contractDraft, contractText)
+
+    const context = aiAssistant.loadAllModuleContext()
+    assert.equal(context.review.hasDraft, true)
+    assert.equal(context.review.isLocalAnalysis, true)
+    assert.ok(context.review.findings.length > 0, '未审查草稿也应生成本地风险摘要')
+    assert.deepEqual(remoteAi.resolveRemoteContextModules(context, []), ['review'])
+
+    const payload = remoteAi.buildRemoteAiPayload({
+      prompt: '依据我本地合同看看有哪些注意点',
+      context,
+      selectedModules: [],
+      messages: [],
+    })
+    assert.match(payload.contextSummary, /本地规则扫描/)
+    assert.match(payload.contextSummary, /风险点/)
+    assert.doesNotMatch(payload.contextSummary, /完整合同原文不得发送/)
+  }],
+
+  ['AI 问答：空选择时自动同步当前房源所有可用模块摘要', async () => {
+    const remoteAi = await import('../miniapp/src/features/remoteAi.js')
+    const context = {
+      review: { hasDraft: true, isCurrent: true, summary: { score: 70 }, findings: [{ title: '押金风险', evidence: '押金不退' }] },
+      checkin: { hasData: true, stats: { checked: 2, total: 16, defects: 1, photos: 3 }, defects: [{ roomLabel: '厨房', itemLabel: '水槽', note: '渗水' }] },
+      evidence: { hasData: true, attachmentStats: { total: 1 }, checklist: { checked: 2, total: 5 }, groups: [{ title: '押金凭证', attachmentCount: 1, attachmentNames: ['收据.jpg'] }] },
+      subsidy: { hasData: true, city: '杭州', total: 1, satisfied: 0, pending: 1, unsatisfied: 0, matches: [{ policy: '租房补贴', status: 'pending', score: 60, criteria: [] }] },
+    }
+
+    assert.deepEqual(remoteAi.resolveRemoteContextModules(context, []), ['review', 'checkin', 'evidence', 'subsidy'])
+    const payload = remoteAi.buildRemoteAiPayload({ prompt: '帮我整体看看', context, selectedModules: [], messages: [] })
+    assert.match(payload.contextSummary, /合同评分 70 分/)
+    assert.match(payload.contextSummary, /已检查 2\/16 项/)
+    assert.match(payload.contextSummary, /共 1 个附件/)
+    assert.match(payload.contextSummary, /城市 杭州/)
+  }],
+
+  ['合同审查：开始综合审查前会强制保存草稿', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/contract/index.jsx', import.meta.url), 'utf8')
+    assert.match(source, /handleAnalyze = async \(\) => \{[\s\S]*this\.draftSaver\.flush\(\) === false/,
+      'handleAnalyze 应先 flush 草稿，避免 AI 页读不到正在审查的合同')
   }],
 ]
 

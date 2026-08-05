@@ -79,13 +79,23 @@ export function getAvailableRemoteContextModules(context) {
   })
 }
 
+export function resolveRemoteContextModules(context, selectedModules = []) {
+  const available = new Set(getAvailableRemoteContextModules(context).map((item) => item.key))
+  const explicit = Array.isArray(selectedModules) ? selectedModules.filter((key) => available.has(key)) : []
+  if (explicit.length) return explicit
+  return [...available]
+}
+
 function buildReviewLines(context) {
   const review = context?.review
   if (!review?.hasDraft) return []
+  const hasAnalysis = Boolean(review.summary && Array.isArray(review.findings))
   const lines = [review.isCurrent
     ? `合同评分 ${review.summary?.score ?? 0} 分，共 ${review.findings?.length || 0} 个风险点。`
-    : '已有合同正文，但当前版本尚未审查。']
-  if (review.isCurrent) {
+    : hasAnalysis
+      ? `已根据当前合同正文完成本地规则扫描：评分 ${review.summary?.score ?? 0} 分，共 ${review.findings?.length || 0} 个风险点。`
+      : '已有合同正文，但当前版本尚未审查。']
+  if (hasAnalysis) {
     review.findings?.slice(0, 8).forEach((finding, index) => {
       const evidence = compact(finding?.evidence || finding?.original || finding?.replaceFrom, 180)
       const suggestion = compact(finding?.suggestion || finding?.action || finding?.recommendation, 160)
@@ -210,7 +220,7 @@ export function buildRemoteAiPayload({
     prompt: safePrompt,
     history,
     contextSummary: Array.isArray(selectedModules)
-      ? getRemoteContextSummary(context, selectedModules)
+      ? getRemoteContextSummary(context, resolveRemoteContextModules(context, selectedModules))
       : includeContext ? getRemoteContextSummary(context) : '',
   }
 }

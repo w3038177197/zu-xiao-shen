@@ -237,6 +237,10 @@ export default class ContractReview extends Component {
       Taro.showToast({ title: '请先粘贴或导入合同', icon: 'none' })
       return
     }
+    if (this.draftSaver.flush() === false) {
+      Taro.showToast({ title: '合同暂未保存，请稍后重试', icon: 'none' })
+      return
+    }
 
     const run = ++this.reviewRun
     const profile = { ...this.state.profile }

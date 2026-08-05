@@ -809,16 +809,33 @@ function resolveProfileStatement(profile, satisfiedPhrases, unsatisfiedPhrases) 
   return specificMatches[specificMatches.length - 1].status
 }
 
+function findProfileCities(profile) {
+  const text = String(profile || '')
+  return subsidyCities.filter((city) => text.includes(city) || text.includes(`${city}市`))
+}
+
 function deriveCriterion(policy, profile, key) {
   switch (key) {
-    case 'city':
+    case 'city': {
+      const mentionedCities = findProfileCities(profile)
+      const otherCities = mentionedCities.filter((city) => city !== policy.city)
+      if (otherCities.length && !mentionedCities.includes(policy.city)) {
+        return {
+          key: 'city',
+          label: `城市：${policy.city}`,
+          status: 'unsatisfied',
+          evidence: `个人情况提到 ${otherCities.join('、')}`,
+          missing: `当前选择 ${policy.city}，但个人情况像是 ${otherCities[0]}；请切换城市，或补充${policy.city}就业、租住、无房情况。`,
+        }
+      }
       return {
         key: 'city',
         label: `城市：${policy.city}`,
         status: 'satisfied',
-        evidence: `已选择 ${policy.city}`,
+        evidence: mentionedCities.includes(policy.city) ? `个人情况已提到 ${policy.city}` : `已选择 ${policy.city}`,
         missing: '',
       }
+    }
     case 'education': {
       // EDUCATION_KEYWORDS 按从高到低排序，取政策支持的最低学历作为门槛
       const supported = EDUCATION_KEYWORDS.filter((k) => policy.keywords.includes(k))
@@ -954,7 +971,8 @@ export function evaluateSubsidyMatch(policy, profile) {
   // 兼容旧评分逻辑：分数仍以关键词命中数为基础
   const text = `${policy.city}${profile}`
   const hits = policy.keywords.filter((keyword) => text.includes(keyword)).length
-  const score = Math.min(98, 52 + hits * 7)
+  const rawScore = Math.min(98, 52 + hits * 7)
+  const score = status === 'unsatisfied' ? Math.min(rawScore, 45) : status === 'pending' ? Math.min(rawScore, 78) : rawScore
 
   return { status, score, criteria }
 }
