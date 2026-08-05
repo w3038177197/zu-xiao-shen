@@ -34,6 +34,7 @@ import {
   getRemoteAiError,
   startRemoteContractReviewRequest,
 } from '../../utils/remoteAiRequest'
+import { hasHouseSwitchedSince } from '../../features/houseProfile'
 import './index.css'
 
 const STORAGE_KEY = 'zu-xiao-shen-contract-draft'
@@ -91,6 +92,29 @@ export default class ContractReview extends Component {
       history: Array.isArray(savedHistory) ? savedHistory.slice(0, 8) : [],
       profile: { ...DEFAULT_PROFILE, ...(typeof savedProfile === 'object' ? savedProfile : {}) },
     })
+    this.loadedAt = Date.now()
+  }
+
+  componentDidShow() {
+    if (!hasHouseSwitchedSince(this.loadedAt || 0)) return
+    this.cancelActiveReview()
+    this.draftSaver.cancel()
+    const savedProfile = loadStored(PROFILE_KEY, DEFAULT_PROFILE)
+    const savedHistory = loadStored(HISTORY_KEY, [])
+    this.setState({
+      contractText: loadStored(STORAGE_KEY, ''),
+      history: Array.isArray(savedHistory) ? savedHistory.slice(0, 8) : [],
+      profile: { ...DEFAULT_PROFILE, ...(typeof savedProfile === 'object' ? savedProfile : {}) },
+      findings: [],
+      summary: null,
+      dimensions: [],
+      adoptedItems: [],
+      revisedDraft: '',
+      activeProfile: null,
+      isAnalyzing: false,
+      analysisStage: 'idle',
+    })
+    this.loadedAt = Date.now()
   }
 
   componentDidHide() {

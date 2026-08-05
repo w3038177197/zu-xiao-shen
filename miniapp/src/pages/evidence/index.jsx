@@ -38,6 +38,7 @@ import {
   openFileAttachment,
   formatSize,
 } from '../../utils/evidenceAttachments'
+import { hasHouseSwitchedSince } from '../../features/houseProfile'
 import './index.css'
 
 const GROUPS = Object.entries(evidenceGroupMeta)
@@ -73,6 +74,23 @@ export default class EvidencePack extends Component {
   componentDidMount() {
     const packState = loadEvidencePackState()
     this.setState({ packState })
+    this.loadedAt = Date.now()
+  }
+
+  componentDidShow() {
+    if (!hasHouseSwitchedSince(this.loadedAt || 0)) return
+    this.autoSaver.cancel()
+    this.aiRunId += 1
+    this.pendingAiRequest?.cancel()
+    const packState = loadEvidencePackState()
+    this.setState({
+      packState,
+      textPreview: null,
+      aiCommunication: null,
+      aiError: null,
+      isAiAnalyzing: false,
+    })
+    this.loadedAt = Date.now()
   }
 
   componentDidHide() {

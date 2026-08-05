@@ -29,6 +29,7 @@ import {
   persistAddedCheckinPhotos,
   replaceCheckinStateAndRemovePhotos,
 } from '../../utils/checkinPhotoTransactions'
+import { hasHouseSwitchedSince } from '../../features/houseProfile'
 import './index.css'
 
 export default class CheckinInspection extends Component {
@@ -49,6 +50,16 @@ export default class CheckinInspection extends Component {
     const inspectionState = loadCheckinInspectionState()
     const roomType = Taro.getStorageSync(STORAGE_KEYS.checkinRoomType) || 'studio'
     this.setState({ inspectionState, roomType })
+    this.loadedAt = Date.now()
+  }
+
+  componentDidShow() {
+    if (!hasHouseSwitchedSince(this.loadedAt || 0)) return
+    this.autoSaver.cancel()
+    const inspectionState = loadCheckinInspectionState()
+    const roomType = Taro.getStorageSync(STORAGE_KEYS.checkinRoomType) || 'studio'
+    this.setState({ inspectionState, roomType, report: '', expandedItemKey: null })
+    this.loadedAt = Date.now()
   }
 
   componentDidHide() {

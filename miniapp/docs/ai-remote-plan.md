@@ -59,6 +59,14 @@
 | `MINIAPP_SESSION_SECRET` | 至少 32 位随机会话签名密钥，仅在微信云托管后台生成 |
 | `MINIAPP_SESSION_TTL_SECONDS` | 会话有效期，当前建议 `7200` |
 | `DEEPSEEK_API_KEY` | 模型服务密钥 |
+| `ZHIPU_API_KEY` / `BIGMODEL_API_KEY` | 可选：智谱视觉 OCR 和 GLM 模型密钥 |
+| `DASHSCOPE_API_KEY` / `QWEN_API_KEY` | 可选：通义千问兼容模型密钥 |
+| `HUNYUAN_API_KEY` / `TENCENT_HUNYUAN_API_KEY` | 可选：腾讯混元兼容模型密钥 |
+| `ARK_API_KEY` / `VOLCENGINE_API_KEY` | 可选：火山方舟 / 豆包兼容模型密钥 |
+| `ZHIPU_VISION_MODEL` | 可选：覆盖默认智谱视觉 OCR 模型 |
+| `RAPIDOCR_ENABLED` | 可选：设为 `true` 时启用 RapidOCR 离线识别兜底 |
+| `RAPIDOCR_PYTHON_BIN` / `PYTHON_BIN` | 可选：RapidOCR Python 解释器路径 |
+| `RAPIDOCR_TIMEOUT_MS` / `OCR_TIMEOUT_MS` | 可选：OCR 超时时间，服务端会限制在安全范围内 |
 | `AI_DAILY_QUOTA` | 单个微信用户每日联网次数 |
 | `UPSTASH_REDIS_REST_URL` | 生产环境必须配置；Upstash Redis REST 地址，用于持久化额度和幂等结果 |
 | `UPSTASH_REDIS_REST_TOKEN` | 生产环境必须配置；与上项配套的服务端访问令牌 |
@@ -66,6 +74,14 @@
 部署后还必须在微信公众平台配置微信云托管服务域名（或正式自有域名）为 `request` 合法域名。当前用户隐私保护指引已通过；正式开放联网 AI 前仍需确认其中已披露模型服务商的数据处理范围。
 
 每次微信云托管重新部署后，在项目根目录执行 `npm run check:miniapp-deployment`。该命令会验证线上版本号、微信登录配置、模型密钥状态以及联网 AI、合同解析、OCR 三条受保护接口；任何一项仍是旧版本、404 或未鉴权都会退出失败。微信开发者工具已开启合法域名校验，模拟器不会再掩盖真机域名问题。
+
+## 真实 AI/OCR 冒烟监测
+
+服务端提供受保护诊断接口 `GET /api/ai/smoke`，用于验证线上模型和 OCR 链路当前是否真的可用。该接口使用极小内置合同片段和 1x1 PNG 样本，不读取用户资料，不进入用户正常流程，也不消耗用户每日额度。
+
+调用该接口仍会消耗少量上游模型额度：AI 检查使用很短的提示词和 `maxTokens=64`；OCR 若走云端视觉模型也会产生对应视觉模型调用，若走 RapidOCR 或 Tesseract 则不产生云端 OCR 费用。
+
+建议在重新部署微信云托管后手动调用一次，确认返回中 `ai.success` 和 `ocr.success` 的状态；如果需要外部定时监控，应使用受信令牌或小程序会话，并控制频率，避免无意义消耗。
 
 ## 生产化后续
 

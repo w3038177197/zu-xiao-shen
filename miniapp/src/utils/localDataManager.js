@@ -1,6 +1,11 @@
 import Taro from '@tarojs/taro'
 import { STORAGE_KEYS } from '../constants/appConfig.js'
 import { createZipArchive } from './evidencePackageExport.js'
+import {
+  collectAllHouseSnapshots,
+  removeAllHouseStorage,
+  pruneOrphanHouseSnapshots,
+} from '../features/houseProfile.js'
 
 const DATA_KEYS = [
   ['contractDraft', '合同草稿'],
@@ -180,6 +185,16 @@ export async function clearLocalData({ removePhotos = true } = {}) {
   } catch (error) {
     errors.push(error)
   }
+  // 清除全部房源相关 storage（houses 列表、activeHouse、所有 houseData 快照）
+  // houseData: 前缀的 key 会被上面 getStorageInfoSync().keys 收集并清除，
+  // 这里显式调用 removeAllHouseStorage 确保 houses 和 activeHouse 也被清除，
+  // 并清理任何孤立的快照 key。
+  try {
+    removeAllHouseStorage()
+    pruneOrphanHouseSnapshots()
+  } catch (error) {
+    errors.push(error)
+  }
   ;[...new Set(storageKeys.filter(Boolean))].forEach((key) => {
     try { Taro.removeStorageSync(key) } catch (error) { errors.push(error) }
   })
@@ -268,7 +283,17 @@ function visitFilePaths(value, paths, seen) {
 export function collectReferencedFilePaths(snapshot = getLocalDataSnapshot()) {
   const paths = new Set()
   const seen = new Set()
+  // 当前活跃房源（扁平 key）
   snapshot.forEach(({ value }) => visitFilePaths(value, paths, seen))
+  // 其他房源快照中的照片引用也要纳入，避免误删其他房源引用的物理文件
+  try {
+    for (const { snapshot: houseSnapshot } of collectAllHouseSnapshots()) {
+      if (!houseSnapshot) continue
+      Object.values(houseSnapshot).forEach((value) => visitFilePaths(value, paths, seen))
+    }
+  } catch {
+    // 多房源扫描失败不应阻塞当前房源的引用收集
+  }
   return paths
 }
 

@@ -63,7 +63,7 @@ npm run check:miniapp-deployment
 要做：
 
 - 按 git status --short 分类：源码/测试/文档/素材/预览产物。
-- 明确 zu-xiao-shen-miniapp-ui-preview.* 是否只是设计预览。
+- 明确 docs/design/zu-xiao-shen-miniapp-ui-preview.* 是否只是设计预览。
 - 不自动删除文件；删除预览产物前必须由用户确认。
 - 给出建议提交批次，例如：后端安全、AI/RAG、补贴、备份恢复、UI、文档。
 

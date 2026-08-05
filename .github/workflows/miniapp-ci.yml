@@ -32,6 +32,10 @@ jobs:
         run: npm run test:miniapp-usage
       - name: contract-import
         run: npm run test:contract-import
+      - name: contract-review-benchmark
+        run: npm run test:contract-review-benchmark
+      - name: rag-evaluation
+        run: npm run test:ai
       - name: subsidy-policies
         run: npm run check:subsidy-policies
       - name: build web

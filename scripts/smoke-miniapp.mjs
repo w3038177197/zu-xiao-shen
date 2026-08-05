@@ -142,13 +142,22 @@ check('数据管理：备份导入前展示摘要并请求用户确认', () => {
 })
 
 // ---------- 8. 双源知识库一致 ----------
-check('知识库：Web 与小程序双源一致', async () => {
+check('知识库：Web 与小程序双源一致且无错误来源域名', async () => {
   const [{ knowledgeBaseItems: webItems }, { knowledgeBaseItems: miniappItems }] = await Promise.all([
     import('../src/data/knowledgeBase.js'),
     import('../miniapp/src/shared/knowledgeBase.js'),
   ])
   assert.deepEqual(miniappItems, webItems, 'Web 与小程序知识库应一致')
   assert.ok(webItems.length >= 39, '知识库应至少 39 条')
+  // 住房租赁条例来源不得指向生态环境部（mee.gov.cn）等无关站点
+  const forbidden = ['mee.gov.cn']
+  for (const item of webItems) {
+    for (const domain of forbidden) {
+      if (item.sourceUrl && item.sourceUrl.includes(domain)) {
+        assert.fail(`知识条目 ${item.title} 来源不得指向 ${domain}`)
+      }
+    }
+  }
 })
 
 // ---------- 9. 本地 AI 兜底可用 ----------

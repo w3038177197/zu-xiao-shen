@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Input, ScrollView, Text, Textarea, View } from '@tarojs/components'
-import Taro from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import {
   evaluateSubsidyMatch,
   getSubsidyFreshness,
@@ -13,6 +13,7 @@ import { AI_TASK_PRESETS, buildRemoteAiPayload } from '../../features/remoteAi'
 import { REMOTE_AI_CONFIG } from '../../constants/appConfig'
 import { copyText } from '../../utils/copyText'
 import { confirmRemoteConsent, fetchRemoteSubsidyPolicies, getRemoteAiError, startRemoteAiRequest } from '../../utils/remoteAiRequest'
+import { hasHouseSwitchedSince } from '../../features/houseProfile'
 import './index.css'
 
 const STORAGE_KEY = 'zu-xiao-shen-subsidy-matcher'
@@ -63,6 +64,7 @@ export default function SubsidyMatcher() {
   const [policySync, setPolicySync] = useState({ loading: true, generatedAt: '', failed: false, refreshIntervalHours: 24 })
   const pendingAiRef = useRef(null)
   const aiRunRef = useRef(0)
+  const loadedAtRef = useRef(Date.now())
   const hasProfile = Boolean(profile.trim())
   const citySuggestions = useMemo(() => {
     const query = cityQuery.trim().replace(/市$/, '')
@@ -106,6 +108,20 @@ export default function SubsidyMatcher() {
       // Matching stays usable even when local storage is unavailable.
     }
   }, [city, profile])
+
+  useDidShow(() => {
+    if (!hasHouseSwitchedSince(loadedAtRef.current)) return
+    const fresh = getInitialState()
+    setCity(fresh.city)
+    setCityQuery(fresh.city)
+    setProfile(fresh.profile)
+    setAiAnalysis(null)
+    setAiError(null)
+    setIsAiAnalyzing(false)
+    aiRunRef.current += 1
+    pendingAiRef.current?.cancel()
+    loadedAtRef.current = Date.now()
+  })
 
   useEffect(() => {
     let active = true

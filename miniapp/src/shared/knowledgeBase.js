@@ -18,7 +18,7 @@ export const knowledgeBaseItems = [
     tag: '监管趋势',
     text: '补充出租安全、合同备案、押金约定、经纪机构责任和禁止非法腾退等监管要求。',
     source: '国务院令第812号',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '格式条款提示义务',
@@ -32,7 +32,7 @@ export const knowledgeBaseItems = [
     tag: '押金守护',
     text: '押金扣除应有明确项目、实际损失、合理必要和凭证支持，正常使用损耗不应随意扣款。',
     source: '住房租赁条例 + 裁判常识',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '出租人维修义务',
@@ -46,7 +46,7 @@ export const knowledgeBaseItems = [
     tag: '退租安全',
     text: '对换锁、断水断电、威胁收房等场景，优先提示留证、沟通和投诉路径。',
     source: '住房租赁条例第十二条',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '入住验房留证',
@@ -109,7 +109,7 @@ export const knowledgeBaseItems = [
     tag: '费用核对',
     text: '合同应写明水电燃气、物业、网络等费用的承担方和计价方式；交接时记录表底，对额外加价或不明收费要求账单依据。',
     source: '住房租赁条例第十条 + 产品核验流程',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '通知送达与沟通留痕',
@@ -152,14 +152,14 @@ export const knowledgeBaseItems = [
     tag: '群租隔断',
     text: '出租应以原规划设计为居住空间的房间为最小出租单位，厨房、卫生间、阳台、地下储藏室等非居住空间不得出租居住。',
     source: '住房租赁条例第七条 + 商品房屋租赁管理办法第八条',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '隔断房消防与安全要求',
     tag: '群租隔断',
     text: '出租住房应符合建筑、消防、燃气、室内装修等安全要求。隔断材料应满足防火等级，不得堵塞消防通道和逃生出口。',
     source: '住房租赁条例第七条 + 消防法',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '租金逾期与合理催告期限',
@@ -173,7 +173,7 @@ export const knowledgeBaseItems = [
     tag: '租金支付',
     text: '合同应写明租金数额、支付周期、支付方式和收款账户。建议核对收款方与出租人一致，保留转账凭证，警惕第三方代收和个人二维码收款。',
     source: '住房租赁条例第十条',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '转租牟利与差价争议',
@@ -215,14 +215,14 @@ export const knowledgeBaseItems = [
     tag: '押金扣减',
     text: '押金扣减应有明确项目、实际损失和有效凭证：欠租需转账记录，欠费需账单，维修需照片清单票据，保洁需前后对比和明细。正常损耗和无凭证不得扣减。',
     source: '住房租赁条例第十条 + 裁判常识',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '押金返还期限与逾期主张',
     tag: '押金扣减',
     text: '合同应约定押金返还时间，通常为退租交接后数日内。逾期不退且无正当理由的，租客可催告、投诉或起诉，并可主张资金占用利息。',
     source: '住房租赁条例第十条 + 民法典',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '提前解约通知方式与期限',
@@ -243,21 +243,21 @@ export const knowledgeBaseItems = [
     tag: '中介争议',
     text: '经纪机构应明码标价，服务项目、内容和收费标准应在经营场所公示。中介费应在合同中明确约定，不得隐瞒收费项目或重复收费。',
     source: '住房租赁条例第二十一条 + 房地产经纪管理办法',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '虚假房源与中介责任',
     tag: '中介争议',
     text: '经纪机构不得发布虚假房源、隐瞒房屋重要信息或骗取费用。发现虚假房源可要求退费、向住建部门或12345投诉，造成损失的可主张赔偿。',
     source: '住房租赁条例第二十一条 + 房地产经纪管理办法第二十五条',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '房东合规收租与账务留痕',
     tag: '房东视角',
     text: '房东应按合同约定收租，开具收据或发票，保留转账记录和账务明细。不得擅自加价收取水电费。收款账户应与出租人一致，代收需有书面授权。',
     source: '住房租赁条例第十条 + 民法典第七百二十一条',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '房东催告与合法解约流程',
@@ -271,14 +271,14 @@ export const knowledgeBaseItems = [
     tag: '房东视角',
     text: '房东入住和退租时应与租客共同验房，记录墙面地板、门窗家电、水电表读数和已有瑕疵，双方签字确认。退租扣款应有照片、维修清单和票据支撑。',
     source: '住房租赁条例 + 产品流程库',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
   {
     title: '房东合法扣款与证据链',
     tag: '房东视角',
     text: '房东扣减押金应有明确项目、实际损失和有效凭证，不得扩大扣减范围。正常损耗不得扣款，维修费用应合理必要。建议退租时当面核对并书面确认扣款明细。',
     source: '住房租赁条例第十条 + 裁判常识',
-    sourceUrl: 'https://www.mee.gov.cn/zcwj/gwywj/202507/t20250722_1123995.shtml',
+    sourceUrl: 'https://www.gov.cn/gongbao/2025/issue_12186/202507/content_7034094.html',
   },
 ]
 

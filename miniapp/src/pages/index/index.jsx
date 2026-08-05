@@ -15,6 +15,16 @@ import {
   restoreBackupArchive,
   restoreLocalData,
 } from '../../utils/localDataManager'
+import {
+  ensureDefaultHouse,
+  loadHouses,
+  getActiveHouseId,
+  createHouse,
+  renameHouse,
+  deleteHouse,
+  switchHouse,
+  clearCurrentHouseData,
+} from '../../features/houseProfile'
 import { buildBusinessReportBundle, buildBusinessReportDocx, BUSINESS_REPORT_MODULES } from '../../utils/businessReportExport'
 import { writeAndShare, writePackageFile } from '../../utils/evidencePackageExport'
 import './index.css'
@@ -78,6 +88,16 @@ export default function Index() {
   // 备份/恢复稳定提示（不只依赖 Toast）
   const [backupMessage, setBackupMessage] = useState(null)
   const [preparedExports, setPreparedExports] = useState({ report: null, allReports: null, backup: null })
+  // 多房源档案状态
+  const [houses, setHouses] = useState(() => {
+    ensureDefaultHouse()
+    return loadHouses()
+  })
+  const [activeHouseId, setActiveHouseIdState] = useState(getActiveHouseId)
+  const [showHouseManager, setShowHouseManager] = useState(false)
+  const [houseRenameId, setHouseRenameId] = useState(null)
+  const [houseRenameValue, setHouseRenameValue] = useState('')
+  const activeHouse = houses.find((item) => item.id === activeHouseId) || houses[0] || null
   const result = useMemo(() => calculateDeposit(deposit), [deposit])
   const hasDepositAmount = Number(deposit.depositAmount) > 0
   const storageUsageLabel = storageInfo
@@ -88,6 +108,9 @@ export default function Index() {
   Taro.useShareAppMessage(() => ({ title: '租小审：租房全流程风险审查与证据助手', path: '/pages/index/index' }))
 
   const refreshLocalState = async () => {
+    ensureDefaultHouse()
+    setHouses(loadHouses())
+    setActiveHouseIdState(getActiveHouseId())
     setWorkflow(loadWorkflowContext())
     setStorageInfo(getLocalStorageInfo())
     setDataUsage(await getLocalDataUsage())
@@ -97,6 +120,115 @@ export default function Index() {
     setPreparedExports({ report: null, allReports: null, backup: null })
     refreshLocalState()
   })
+
+  const refreshHouses = () => {
+    setHouses(loadHouses())
+    setActiveHouseIdState(getActiveHouseId())
+  }
+
+  const handleCreateHouse = () => {
+    Taro.showModal({
+      title: '新建房源档案',
+      editable: true,
+      placeholderText: '例如：朝阳区A套、张先生房',
+      success: ({ confirm, content }) => {
+        if (!confirm) return
+        const house = createHouse(content)
+        refreshHouses()
+        refreshLocalState()
+        Taro.showToast({ title: `已创建并切换到「${house.name}」`, icon: 'none' })
+      },
+    })
+  }
+
+  const handleSwitchHouse = (houseId) => {
+    if (houseId === activeHouseId) {
+      setShowHouseManager(false)
+      return
+    }
+    Taro.showModal({
+      title: '切换房源档案',
+      content: '切换前请确认当前页面的编辑已保存。切换后页面将刷新显示新房源的数据。',
+      confirmText: '确认切换',
+      cancelText: '取消',
+      success: ({ confirm }) => {
+        if (!confirm) return
+        const result = switchHouse(houseId)
+        if (!result.ok) {
+          Taro.showToast({ title: '切换失败，请重试', icon: 'none' })
+          return
+        }
+        refreshHouses()
+        refreshLocalState()
+        setShowHouseManager(false)
+        Taro.showToast({ title: `已切换到「${result.house.name}」`, icon: 'none' })
+      },
+    })
+  }
+
+  const handleStartRenameHouse = (houseId, currentName) => {
+    setHouseRenameId(houseId)
+    setHouseRenameValue(currentName)
+  }
+
+  const handleConfirmRenameHouse = () => {
+    if (!houseRenameId) return
+    const result = renameHouse(houseRenameId, houseRenameValue)
+    if (!result.ok) {
+      Taro.showToast({ title: '重命名失败', icon: 'none' })
+      return
+    }
+    setHouseRenameId(null)
+    setHouseRenameValue('')
+    refreshHouses()
+    Taro.showToast({ title: '已重命名', icon: 'success' })
+  }
+
+  const handleCancelRenameHouse = () => {
+    setHouseRenameId(null)
+    setHouseRenameValue('')
+  }
+
+  const handleDeleteHouse = (houseId, houseName) => {
+    Taro.showModal({
+      title: '删除房源档案',
+      content: `「${houseName}」的合同、验房、证据包、补贴和 AI 对话记录将被删除，照片文件会保留以便其他房源引用。删除后无法恢复，确认删除？`,
+      confirmText: '确认删除',
+      confirmColor: '#c9372d',
+      cancelText: '取消',
+      success: ({ confirm }) => {
+        if (!confirm) return
+        const result = deleteHouse(houseId)
+        if (!result.ok) {
+          Taro.showToast({ title: '删除失败', icon: 'none' })
+          return
+        }
+        refreshHouses()
+        refreshLocalState()
+        Taro.showToast({ title: '已删除', icon: 'success' })
+      },
+    })
+  }
+
+  const handleClearCurrentHouse = () => {
+    Taro.showModal({
+      title: '清除当前房源数据',
+      content: `将清除「${activeHouse?.name || '当前房源'}」的合同、验房、证据包、补贴和 AI 对话。其他房源不受影响。清除后无法恢复，确认清除？`,
+      confirmText: '确认清除',
+      confirmColor: '#c9372d',
+      cancelText: '取消',
+      success: ({ confirm }) => {
+        if (!confirm) return
+        const result = clearCurrentHouseData()
+        if (!result.ok) {
+          Taro.showToast({ title: '清除失败', icon: 'none' })
+          return
+        }
+        refreshLocalState()
+        Taro.showToast({ title: '当前房源已清空', icon: 'success' })
+      },
+    })
+  }
 
   const openModule = (id) => {
     const path = id === 'review' ? '/pages/contract/index' : '/pages/' + id + '/index'
@@ -397,8 +529,61 @@ export default function Index() {
         </View>
         <View className='home-status-badge'>
           <View className='status-dot' />
-          <Text>原始资料本机保存 · AI 脱敏联网</Text>
+          <Text>本机保存 · 脱敏 AI</Text>
         </View>
+      </View>
+
+      <View className='home-house card'>
+        <View className='home-house-head'>
+          <View className='home-house-info'>
+            <Text className='eyebrow'>当前房源</Text>
+            <Text className='home-house-name'>{activeHouse?.name || '默认房源'}</Text>
+          </View>
+          <Button
+            className='btn-secondary house-switch-btn'
+            aria-expanded={showHouseManager}
+            onClick={() => setShowHouseManager((current) => !current)}
+          >
+            {showHouseManager ? '收起' : '管理'}
+          </Button>
+        </View>
+        {showHouseManager ? (
+          <View className='home-house-manager'>
+            <View className='home-house-list'>
+              {houses.map((house) => (
+                <View
+                  key={house.id}
+                  className={`house-row ${house.id === activeHouseId ? 'house-row-active' : ''}`}
+                >
+                  {houseRenameId === house.id ? (
+                    <View className='house-rename'>
+                      <Input
+                        className='house-rename-input'
+                        value={houseRenameValue}
+                        focus
+                        onInput={(event) => setHouseRenameValue(event.detail.value)}
+                      />
+                      <Button className='btn-secondary house-rename-btn' onClick={handleConfirmRenameHouse}>保存</Button>
+                      <Button className='btn-secondary house-rename-btn' onClick={handleCancelRenameHouse}>取消</Button>
+                    </View>
+                  ) : (
+                    <Button className='house-row-main' onClick={() => handleSwitchHouse(house.id)}>
+                      <Text className='house-row-name'>{house.name}</Text>
+                      {house.id === activeHouseId ? <Text className='house-row-badge'>当前</Text> : null}
+                    </Button>
+                  )}
+                  {houseRenameId === house.id ? null : (
+                    <View className='house-row-actions'>
+                      <Button className='btn-link house-action-btn' onClick={() => handleStartRenameHouse(house.id, house.name)}>重命名</Button>
+                      <Button className='btn-link house-action-btn house-action-danger' onClick={() => handleDeleteHouse(house.id, house.name)}>删除</Button>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+            <Button className='btn-primary house-create-btn' onClick={handleCreateHouse}>新建房源档案</Button>
+          </View>
+        ) : null}
       </View>
 
       <View className='home-current card'>
@@ -567,6 +752,7 @@ export default function Index() {
                   <Button className='btn-secondary data-button' onClick={preparedExports.backup ? () => handleSharePrepared('backup') : handleExportBackup}>{preparedExports.backup ? '分享恢复用备份' : '生成恢复用备份'}</Button>
                   <Button className='btn-secondary data-button' onClick={handleImportBackup}>导入恢复用备份</Button>
                   <Button className='btn-secondary data-button' disabled={!dataUsage?.unreferencedCount} onClick={handleCleanupUnusedFiles}>清理无用文件</Button>
+                  <Button className='btn-danger data-button' onClick={handleClearCurrentHouse}>清除当前房源</Button>
                   <Button className='btn-danger data-button' onClick={handleClearLocalData}>清除全部数据</Button>
                 </View>
               </View>

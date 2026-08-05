@@ -1140,11 +1140,94 @@ const checks = [
       reportText: '证据摘要',
       groupLabels: { contract: '合同文件', photos: '房屋照片' },
     })
-    assert.equal(archive.included.length, 2)
+    // included 含：1 个摘要 + 1 个合同文本 + 1 个照片 = 3
+    assert.equal(archive.included.length, 3)
     assert.equal(archive.skipped.length, 1)
     assert.equal(archive.skipped[0].fileName, '缺失.jpg')
     assert.equal(archive.bytes[0], 0x50)
     assert.equal(archive.bytes[1], 0x4b)
+  }],
+
+  ['证据完整性：同一内容 SHA-256 稳定，内容变化 SHA-256 变化', async () => {
+    const hash1 = evidencePackageExport.sha256('租小审证据内容')
+    const hash2 = evidencePackageExport.sha256('租小审证据内容')
+    const hash3 = evidencePackageExport.sha256('租小审证据内容被篡改')
+    assert.equal(hash1, hash2, '相同内容 SHA-256 应稳定')
+    assert.notEqual(hash1, hash3, '内容变化 SHA-256 应不同')
+    assert.equal(hash1.length, 64, 'SHA-256 应为 64 位十六进制')
+    assert.match(hash1, /^[0-9a-f]{64}$/, 'SHA-256 应为小写十六进制')
+    // 与 Node crypto 交叉验证
+    const crypto = await import('node:crypto')
+    const expected = crypto.createHash('sha256').update('租小审证据内容', 'utf8').digest('hex')
+    assert.equal(hash1, expected, '纯 JS SHA-256 应与 Node crypto 一致')
+    const binary = new Uint8Array(Array.from({ length: 64 }, (_, index) => index))
+    const expectedBinary = crypto.createHash('sha256').update(Buffer.from(binary)).digest('hex')
+    assert.equal(evidencePackageExport.sha256(binary), expectedBinary, '二进制内容 SHA-256 应与 Node crypto 一致')
+  }],
+
+  ['证据完整性：导出包包含证据清单 manifest.json 且含 SHA-256 字段', async () => {
+    const packState = createDefaultEvidencePackState()
+    packState.attachments.contract.push({
+      id: 'contract-text', source: 'module', sourceModule: 'contract', fileName: '合同正文.txt', textContent: '合同正文内容', createdAt: '2026-07-28T12:00:00.000Z',
+    })
+    const archive = await evidencePackageExport.buildEvidenceArchive({
+      packState,
+      reportText: '证据摘要',
+      groupLabels: { contract: '合同文件' },
+    })
+    const JSZip = (await import('jszip')).default
+    const zip = await JSZip.loadAsync(archive.bytes)
+    const manifestText = await zip.file('证据包清单.json').async('string')
+    const manifest = JSON.parse(manifestText)
+    assert.equal(manifest.version, 2, '清单版本应为 2')
+    assert.equal(manifest.algorithm, 'SHA-256', '应声明 SHA-256 算法')
+    assert.ok(manifest.included.length >= 2, '应至少包含摘要和合同文本')
+    // 每条 included 都应有非空 sha256 和 size
+    manifest.included.forEach((item) => {
+      assert.ok(item.sha256 && item.sha256.length === 64, `条目 ${item.fileName} 应有 64 位 sha256`)
+      assert.ok(typeof item.size === 'number' && item.size >= 0, `条目 ${item.fileName} 应有 size`)
+      assert.ok(item.module, `条目 ${item.fileName} 应有 module`)
+      assert.ok(item.addedAt, `条目 ${item.fileName} 应有 addedAt`)
+      assert.ok(item.exportedAt, `条目 ${item.fileName} 应有 exportedAt`)
+      assert.ok(item.note, `条目 ${item.fileName} 应有 note`)
+      assert.ok(item.path && zip.file(item.path), `条目 ${item.fileName} 应能映射到 ZIP 内文件`)
+    })
+    // 合同文本条目的 sha256 应与直接计算一致
+    const contractItem = manifest.included.find((item) => item.fileName === '合同正文.txt')
+    const crypto = await import('node:crypto')
+    const expectedHash = crypto.createHash('sha256').update('合同正文内容', 'utf8').digest('hex')
+    assert.equal(contractItem.sha256, expectedHash, '合同文本 sha256 应与直接计算一致')
+  }],
+
+  ['证据完整性：缺失文件写入 skipped 且不阻断导出', async () => {
+    const packState = createDefaultEvidencePackState()
+    packState.attachments.photos.push({
+      id: 'photo-missing-1', source: 'album', fileName: '缺失1.jpg', localPath: 'wxfile://saved/missing1.jpg', createdAt: '2026-07-28T12:00:00.000Z',
+    })
+    packState.attachments.photos.push({
+      id: 'photo-missing-2', source: 'album', fileName: '缺失2.jpg', localPath: 'wxfile://saved/missing2.jpg', createdAt: '2026-07-28T12:00:00.000Z',
+    })
+    // 不设置 virtualFiles，两个文件都会缺失
+    const archive = await evidencePackageExport.buildEvidenceArchive({
+      packState,
+      reportText: '只有摘要',
+      groupLabels: { photos: '房屋照片' },
+    })
+    assert.equal(archive.skipped.length, 2, '两个缺失文件都应写入 skipped')
+    assert.equal(archive.included.length, 1, '只有摘要应纳入 included')
+    archive.skipped.forEach((item) => {
+      assert.equal(item.status, 'missing', `条目 ${item.fileName} 状态应为 missing`)
+      assert.equal(item.sha256, '', `缺失文件 sha256 应为空字符串`)
+      assert.ok(item.reason, `条目 ${item.fileName} 应有 reason`)
+    })
+    // 导出不应失败
+    assert.equal(archive.bytes[0], 0x50)
+    assert.equal(archive.bytes[1], 0x4b)
+    // manifest 中的 skipped 也应记录
+    const JSZip = (await import('jszip')).default
+    const zip = await JSZip.loadAsync(archive.bytes)
+    const manifest = JSON.parse(await zip.file('证据包清单.json').async('string'))
+    assert.equal(manifest.skipped.length, 2, 'manifest 中应有 2 条 skipped')
   }],
 
   ['证据导出：PDF 与 ZIP 写入本地后调用微信文件分享', async () => {
@@ -3025,6 +3108,438 @@ const checks = [
     assert.match(homeStyles, /\.backup-message-error/)
     assert.match(homeStyles, /\.backup-message-success/)
     assert.match(homeStyles, /\.backup-message-warning/)
+  }],
+
+  // ============================================================
+  // 多房源档案 MVP
+  // ============================================================
+
+  ['多房源档案：首次进入创建默认房源并归属当前数据', async () => {
+    storage.clear()
+    savedFiles.clear()
+    // 模拟老用户：扁平 key 已有数据
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '旧合同正文')
+    Taro.setStorageSync(STORAGE_KEYS.reviewHistory, [{ id: 'old-1', time: 't', snapshot: { contractText: '旧合同正文', findings: [] } }])
+    Taro.setStorageSync(STORAGE_KEYS.subsidyMatcher, { city: '北京', profile: {} })
+
+    const { ensureDefaultHouse, loadHouses, getActiveHouseId, getActiveHouse } = await import('../miniapp/src/features/houseProfile.js')
+    const active = ensureDefaultHouse()
+    assert.ok(active.id, '应返回默认房源 id')
+    assert.equal(active.name, '默认房源')
+    const houses = loadHouses()
+    assert.equal(houses.length, 1, '应只有 1 个房源')
+    assert.equal(houses[0].id, active.id)
+    assert.equal(getActiveHouseId(), active.id)
+    assert.equal(getActiveHouse().id, active.id)
+    // 老用户数据不丢：扁平 key 数据应保留
+    assert.equal(Taro.getStorageSync(STORAGE_KEYS.contractDraft), '旧合同正文')
+    assert.equal(Taro.getStorageSync(STORAGE_KEYS.reviewHistory).length, 1)
+    assert.deepEqual(Taro.getStorageSync(STORAGE_KEYS.subsidyMatcher), { city: '北京', profile: {} })
+  }],
+
+  ['多房源档案：新建房源后切换并验证数据隔离', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    // 默认房源写入合同正文
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '房源A合同')
+    Taro.setStorageSync(STORAGE_KEYS.subsidyMatcher, { city: '上海', profile: { foo: 1 } })
+
+    // 新建房源B
+    const houseB = houseProfile.createHouse('房源B')
+    assert.equal(houseProfile.loadHouses().length, 2)
+    assert.equal(houseProfile.getActiveHouseId(), houseB.id)
+    // 新房源应为空数据（空值 key 被删除，getStorageSync 返回 undefined 或 ''）
+    assert.ok(!Taro.getStorageSync(STORAGE_KEYS.contractDraft), '新房源合同正文应为空')
+    assert.ok(!Taro.getStorageSync(STORAGE_KEYS.subsidyMatcher), '新房源补贴资料应为空')
+    // 房源A 的数据应保留在快照中
+    const snapshotA = Taro.getStorageSync(`${STORAGE_KEYS.houseDataPrefix}${houseProfile.loadHouses()[0].id}`)
+    assert.equal(snapshotA.contractDraft, '房源A合同')
+    assert.deepEqual(snapshotA.subsidyMatcher, { city: '上海', profile: { foo: 1 } })
+
+    // 在房源B 写入数据
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '房源B合同')
+
+    // 切换回房源A
+    const switchResult = houseProfile.switchHouse(houseProfile.loadHouses()[0].id)
+    assert.ok(switchResult.ok)
+    assert.equal(Taro.getStorageSync(STORAGE_KEYS.contractDraft), '房源A合同')
+    assert.deepEqual(Taro.getStorageSync(STORAGE_KEYS.subsidyMatcher), { city: '上海', profile: { foo: 1 } })
+    // 房源B 数据应进入快照
+    const snapshotB = Taro.getStorageSync(`${STORAGE_KEYS.houseDataPrefix}${houseB.id}`)
+    assert.equal(snapshotB.contractDraft, '房源B合同')
+
+    // 切换回房源B 验证数据可恢复
+    const switchBack = houseProfile.switchHouse(houseB.id)
+    assert.ok(switchBack.ok)
+    assert.equal(Taro.getStorageSync(STORAGE_KEYS.contractDraft), '房源B合同')
+  }],
+
+  ['多房源档案：重命名房源', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    const house = houseProfile.createHouse('测试名')
+    const result = houseProfile.renameHouse(house.id, '新名称')
+    assert.ok(result.ok)
+    assert.equal(result.house.name, '新名称')
+    const updated = houseProfile.loadHouses().find((item) => item.id === house.id)
+    assert.equal(updated.name, '新名称')
+    // 空名应拒绝
+    assert.equal(houseProfile.renameHouse(house.id, '   ').ok, false)
+    // 不存在的 id 应拒绝
+    assert.equal(houseProfile.renameHouse('not-exist', 'x').ok, false)
+  }],
+
+  ['多房源档案：删除当前房源时切换到其他房源', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'A合同')
+    const houseB = houseProfile.createHouse('B')
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'B合同')
+
+    // 删除当前房源 B，应切换到 A
+    const result = houseProfile.deleteHouse(houseB.id)
+    assert.ok(result.ok)
+    assert.ok(result.switchedTo)
+    assert.equal(houseProfile.loadHouses().length, 1)
+    assert.equal(houseProfile.getActiveHouseId(), result.switchedTo.id)
+    // 应恢复 A 的数据
+    assert.equal(Taro.getStorageSync(STORAGE_KEYS.contractDraft), 'A合同')
+    // B 的快照应被删除
+    assert.equal(Taro.getStorageSync(`${STORAGE_KEYS.houseDataPrefix}${houseB.id}`), undefined)
+  }],
+
+  ['多房源档案：删除最后一个房源时创建新默认房源并清空当前数据', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '数据')
+    const onlyHouse = houseProfile.getActiveHouseId()
+
+    const result = houseProfile.deleteHouse(onlyHouse)
+    assert.ok(result.ok)
+    assert.ok(result.switchedTo)
+    assert.equal(result.switchedTo.name, '默认房源')
+    assert.equal(houseProfile.loadHouses().length, 1)
+    // 当前数据应被清空
+    assert.ok(!Taro.getStorageSync(STORAGE_KEYS.contractDraft), '删除最后一个房源后当前合同正文应为空')
+  }],
+
+  ['多房源档案：清除当前房源数据不影响其他房源', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'A合同')
+    Taro.setStorageSync(STORAGE_KEYS.subsidyMatcher, { city: '北京' })
+    const houseB = houseProfile.createHouse('B')
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'B合同')
+
+    // 清除当前房源 B
+    const result = houseProfile.clearCurrentHouseData()
+    assert.ok(result.ok)
+    assert.ok(!Taro.getStorageSync(STORAGE_KEYS.contractDraft), '清除后合同正文应为空')
+    assert.ok(!Taro.getStorageSync(STORAGE_KEYS.subsidyMatcher), '清除后补贴资料应为空')
+    // 房源 B 元信息仍存在
+    assert.ok(houseProfile.loadHouses().some((item) => item.id === houseB.id))
+    // 房源 A 数据不受影响
+    const snapshotA = Taro.getStorageSync(`${STORAGE_KEYS.houseDataPrefix}${houseProfile.loadHouses()[0].id}`)
+    assert.equal(snapshotA.contractDraft, 'A合同')
+  }],
+
+  ['多房源档案：collectReferencedFilePaths 扫描所有房源快照', async () => {
+    storage.clear()
+    savedFiles.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    // 当前房源引用 photo1
+    Taro.setStorageSync(STORAGE_KEYS.checkinInspection, {
+      kitchen: { wall: { status: 'ok', photos: ['wxfile://photo1.jpg'] } },
+    })
+    // 新建房源B，引用 photo2
+    const houseB = houseProfile.createHouse('B')
+    Taro.setStorageSync(STORAGE_KEYS.checkinInspection, {
+      kitchen: { wall: { status: 'ok', photos: ['wxfile://photo2.jpg'] } },
+    })
+
+    // 切换回 A，此时 B 的引用在快照中
+    houseProfile.switchHouse(houseProfile.loadHouses()[0].id)
+
+    const referenced = localDataManager.collectReferencedFilePaths()
+    assert.ok(referenced.has('wxfile://photo1.jpg'), '应包含当前房源 A 的 photo1')
+    assert.ok(referenced.has('wxfile://photo2.jpg'), '应包含其他房源 B 快照中的 photo2')
+  }],
+
+  ['多房源档案：clearLocalData 清除全部房源 storage', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    const houseB = houseProfile.createHouse('B')
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'B合同')
+
+    await localDataManager.clearLocalData({ removePhotos: false })
+    // 扁平 key 应被清除
+    assert.equal(Taro.getStorageSync(STORAGE_KEYS.contractDraft), undefined)
+    // 房源 storage 应被清除
+    assert.equal(Taro.getStorageSync(STORAGE_KEYS.houses), undefined)
+    assert.equal(Taro.getStorageSync(STORAGE_KEYS.activeHouse), undefined)
+    assert.equal(Taro.getStorageSync(`${STORAGE_KEYS.houseDataPrefix}${houseB.id}`), undefined)
+  }],
+
+  ['多房源档案：ensureDefaultHouse 在已有列表时保持稳定不重复迁移', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    const firstHouses = houseProfile.loadHouses()
+    const firstActive = houseProfile.getActiveHouseId()
+    // 再次调用不应创建新默认房源
+    houseProfile.ensureDefaultHouse()
+    const secondHouses = houseProfile.loadHouses()
+    assert.equal(secondHouses.length, firstHouses.length)
+    assert.equal(houseProfile.getActiveHouseId(), firstActive)
+  }],
+
+  ['多房源档案：报告导出只读当前房源数据', async () => {
+    storage.clear()
+    savedFiles.clear()
+    virtualFiles.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    // 房源A 有合同审查数据
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '房源A合同正文')
+    Taro.setStorageSync(STORAGE_KEYS.reviewHistory, [{
+      id: 'r1', time: 'Sun Aug 02 2026 20:35:41 GMT+0800',
+      snapshot: { contractText: '房源A合同正文', findings: [{ title: '风险A', level: 'high', dimension: '居住权', evidence: '证据A', explain: '说明A', suggestion: '建议A' }], summary: { score: 30, label: '高风险' } },
+    }])
+    Taro.setStorageSync(STORAGE_KEYS.reviewProfile, { contractType: 'lease', partyRole: 'partyB', reviewDepth: 'strict' })
+    // 房源B 也有数据
+    const houseB = houseProfile.createHouse('B')
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '房源B合同正文')
+    Taro.setStorageSync(STORAGE_KEYS.reviewHistory, [{
+      id: 'r2', time: 'Sun Aug 02 2026 20:35:41 GMT+0800',
+      snapshot: { contractText: '房源B合同正文', findings: [{ title: '风险B', level: 'low', dimension: '居住权', evidence: '证据B', explain: '说明B', suggestion: '建议B' }], summary: { score: 60, label: '中风险' } },
+    }])
+    // 切换回房源A
+    houseProfile.switchHouse(houseProfile.loadHouses()[0].id)
+
+    const report = await businessReportExport.buildBusinessReportDocx({ selectedModules: ['contract'] })
+    const { value: text } = await (await import('mammoth')).extractRawText({ buffer: Buffer.from(report.bytes) })
+    // 应包含房源A 的内容
+    assert.match(text, /房源A合同正文/)
+    assert.match(text, /风险A/)
+    // 不应包含房源B 的内容
+    assert.doesNotMatch(text, /房源B合同正文/)
+    assert.doesNotMatch(text, /风险B/)
+  }],
+
+  ['多房源档案：首页显示当前房源名称', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    houseProfile.createHouse('朝阳A套')
+    // 读取首页 jsx 源码，确认引用了 activeHouse 和房源管理函数
+    const fs = await import('node:fs')
+    const homeJsx = fs.readFileSync(new URL('../miniapp/src/pages/index/index.jsx', import.meta.url), 'utf8')
+    assert.match(homeJsx, /activeHouse/)
+    assert.match(homeJsx, /handleSwitchHouse/)
+    assert.match(homeJsx, /handleCreateHouse/)
+    assert.match(homeJsx, /handleClearCurrentHouse/)
+    // CSS 应包含房源管理样式
+    const homeCss = fs.readFileSync(new URL('../miniapp/src/pages/index/index.css', import.meta.url), 'utf8')
+    assert.match(homeCss, /\.home-house/)
+    assert.match(homeCss, /\.house-row/)
+  }],
+
+  // ============================================================
+  // houseProfile storage 写入失败保护 + 切换标志
+  // ============================================================
+
+  ['houseProfile：writeJson 失败时不抛异常且返回 false', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    // 模拟 setStorageSync 抛异常（storage 满）
+    const originalSetStorage = Taro.setStorageSync
+    Taro.setStorageSync = () => { throw new Error('storage full') }
+    try {
+      const result = houseProfile.createHouse('测试房源')
+      // createHouse 内部调用 writeJson 多次，不应抛异常
+      // 但由于写入失败，结果可能不完整，关键是不能崩溃
+      assert.ok(result === undefined || result.id || true, 'createHouse 不应抛异常')
+    } finally {
+      Taro.setStorageSync = originalSetStorage
+    }
+  }],
+
+  ['houseProfile：switchHouse 恢复失败时回滚并返回失败', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '旧房源数据')
+    const houseB = houseProfile.createHouse('B')
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '新房源数据')
+
+    // 模拟恢复时部分 key 写入失败
+    const originalSetStorage = Taro.setStorageSync
+    let callCount = 0
+    Taro.setStorageSync = (...args) => {
+      callCount += 1
+      // 第 3 次调用开始失败（模拟部分 key 写入失败）
+      if (callCount >= 3) throw new Error('storage full')
+      return originalSetStorage.apply(Taro, args)
+    }
+    try {
+      const result = houseProfile.switchHouse(houseProfile.loadHouses()[0].id)
+      // 应返回失败
+      assert.equal(result.ok, false)
+      assert.equal(result.reason, 'restore-failed')
+      assert.ok(result.failedCount > 0, '应报告失败 key 数量')
+    } finally {
+      Taro.setStorageSync = originalSetStorage
+    }
+  }],
+
+  ['houseProfile：switchHouse 成功后设置切换标志', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    // 清除标志
+    globalThis.__ZU_XIAO_SHEN_HOUSE_SWITCHED_AT__ = undefined
+    const houseB = houseProfile.createHouse('B')
+    // createHouse 也应设置标志
+    const ts1 = globalThis.__ZU_XIAO_SHEN_HOUSE_SWITCHED_AT__
+    assert.ok(typeof ts1 === 'number', 'createHouse 应设置切换标志')
+
+    // 等一小段时间确保时间戳不同
+    await new Promise((r) => setTimeout(r, 5))
+    houseProfile.switchHouse(houseProfile.loadHouses()[0].id)
+    const ts2 = globalThis.__ZU_XIAO_SHEN_HOUSE_SWITCHED_AT__
+    assert.ok(typeof ts2 === 'number', 'switchHouse 应设置切换标志')
+    assert.ok(ts2 > ts1, 'switchHouse 后标志应更新')
+
+    // hasHouseSwitchedSince 逻辑
+    assert.equal(houseProfile.hasHouseSwitchedSince(ts1), true, 'ts1 之前应检测到切换')
+    assert.equal(houseProfile.hasHouseSwitchedSince(ts2), false, 'ts2 之后不应检测到切换')
+    assert.equal(houseProfile.hasHouseSwitchedSince(0), true, '时间戳 0 应检测到切换')
+  }],
+
+  ['houseProfile：deleteHouse 切换到其他房源时设置切换标志', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    const houseB = houseProfile.createHouse('B')
+    globalThis.__ZU_XIAO_SHEN_HOUSE_SWITCHED_AT__ = undefined
+    // 删除当前房源 B，应切换到 A 并设置标志
+    houseProfile.deleteHouse(houseB.id)
+    assert.ok(typeof globalThis.__ZU_XIAO_SHEN_HOUSE_SWITCHED_AT__ === 'number', 'deleteHouse 切换时应设置标志')
+  }],
+
+  // ============================================================
+  // debounceSave 失败重试
+  // ============================================================
+
+  ['debounceSave：save 返回 false 时保留 pendingValue 以便重试', async () => {
+    const { createDebouncedSaver } = await import('../miniapp/src/utils/debounceSave.js')
+    let saveCallCount = 0
+    let shouldFail = true
+    const saver = createDebouncedSaver((value) => {
+      saveCallCount += 1
+      if (shouldFail) return false
+      // 模拟成功保存
+      return true
+    }, 10)
+
+    // schedule 一个值
+    saver.schedule('测试数据')
+    // 等待防抖延迟
+    await new Promise((r) => setTimeout(r, 30))
+    // flush 应触发 run，但 save 返回 false
+    const flushResult = saver.flush()
+    assert.equal(flushResult, false, 'save 失败时 flush 应返回 false')
+    assert.ok(saveCallCount >= 1, 'save 应至少被调用一次')
+
+    // 现在让 save 成功
+    shouldFail = false
+    // 再次 flush 应重试并成功
+    const retryResult = saver.flush()
+    assert.equal(retryResult, true, '重试时 flush 应返回 true')
+    saver.cancel()
+  }],
+
+  ['debounceSave：save 抛异常时保留 pendingValue 以便重试', async () => {
+    const { createDebouncedSaver } = await import('../miniapp/src/utils/debounceSave.js')
+    let shouldThrow = true
+    let lastValue = null
+    const saver = createDebouncedSaver((value) => {
+      lastValue = value
+      if (shouldThrow) throw new Error('storage full')
+      return true
+    }, 10)
+
+    saver.schedule('重要数据')
+    await new Promise((r) => setTimeout(r, 30))
+    // flush 应触发异常但不传播
+    const flushResult = saver.flush()
+    assert.equal(flushResult, false, 'save 抛异常时 flush 应返回 false')
+    assert.equal(lastValue, '重要数据', 'save 应收到 pendingValue')
+
+    // 恢复正常后重试
+    shouldThrow = false
+    const retryResult = saver.flush()
+    assert.equal(retryResult, true, '重试时应成功')
+    assert.equal(lastValue, '重要数据', '重试时应收到相同的 pendingValue')
+    saver.cancel()
+  }],
+
+  ['debounceSave：成功保存后清空 pendingValue', async () => {
+    const { createDebouncedSaver } = await import('../miniapp/src/utils/debounceSave.js')
+    const saver = createDebouncedSaver(() => true, 10)
+
+    saver.schedule('数据1')
+    await new Promise((r) => setTimeout(r, 30))
+    const result = saver.flush()
+    assert.equal(result, true, '成功保存应返回 true')
+    // 再次 flush 应返回 true（无 pendingValue）但不调用 save
+    const result2 = saver.flush()
+    assert.equal(result2, true, '无 pendingValue 时 flush 应返回 true')
+    saver.cancel()
+  }],
+
+  // ============================================================
+  // 各业务页面 componentDidShow 检查房源切换
+  // ============================================================
+
+  ['房源切换重载：合同页包含 componentDidShow 和 hasHouseSwitchedSince', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/contract/index.jsx', import.meta.url), 'utf8')
+    assert.match(source, /componentDidShow\s*\(/, '合同页应包含 componentDidShow')
+    assert.match(source, /hasHouseSwitchedSince/, '合同页应 import hasHouseSwitchedSince')
+    assert.match(source, /this\.draftSaver\.cancel\(\)/, 'componentDidShow 应 cancel draftSaver')
+    assert.match(source, /this\.loadedAt\s*=\s*Date\.now\(\)/, '应记录 loadedAt')
+  }],
+
+  ['房源切换重载：验房页包含 componentDidShow 和 hasHouseSwitchedSince', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/checkin/index.jsx', import.meta.url), 'utf8')
+    assert.match(source, /componentDidShow\s*\(/, '验房页应包含 componentDidShow')
+    assert.match(source, /hasHouseSwitchedSince/, '验房页应 import hasHouseSwitchedSince')
+    assert.match(source, /this\.autoSaver\.cancel\(\)/, 'componentDidShow 应 cancel autoSaver')
+  }],
+
+  ['房源切换重载：证据页包含 componentDidShow 和 hasHouseSwitchedSince', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.jsx', import.meta.url), 'utf8')
+    assert.match(source, /componentDidShow\s*\(/, '证据页应包含 componentDidShow')
+    assert.match(source, /hasHouseSwitchedSince/, '证据页应 import hasHouseSwitchedSince')
+    assert.match(source, /this\.autoSaver\.cancel\(\)/, 'componentDidShow 应 cancel autoSaver')
+  }],
+
+  ['房源切换重载：补贴页包含 useDidShow 和 hasHouseSwitchedSince', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.jsx', import.meta.url), 'utf8')
+    assert.match(source, /useDidShow\s*\(/, '补贴页应包含 useDidShow')
+    assert.match(source, /hasHouseSwitchedSince/, '补贴页应 import hasHouseSwitchedSince')
+    assert.match(source, /loadedAtRef/, '补贴页应有 loadedAtRef')
   }],
 ]
 

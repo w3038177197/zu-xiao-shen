@@ -17,6 +17,10 @@ export const STORAGE_KEYS = {
   subsidyMatcher: 'zu-xiao-shen-subsidy-matcher',
   localOnlyMode: 'zu-xiao-shen-local-only-mode',
   accountId: 'zu-xiao-shen-account-id',
+  // 多房源档案：列表 / 当前房源 id / 单个房源的完整业务数据快照
+  houses: 'zu-xiao-shen-houses',
+  activeHouse: 'zu-xiao-shen-active-house',
+  houseDataPrefix: 'zu-xiao-shen-house-data:',
 }
 
 export const REMOTE_AI_CONFIG = {

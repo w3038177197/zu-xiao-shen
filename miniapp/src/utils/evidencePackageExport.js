@@ -70,6 +70,68 @@ export function crc32(value) {
   return (crc ^ 0xffffffff) >>> 0
 }
 
+// SHA-256 纯 JS 实现（小程序环境无 Node crypto，Taro 可能无 SubtleCrypto）
+// 仅用于本机证据完整性校验；不是电子签名或公证存证。
+const SHA256_K = [
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+]
+
+function rotr(value, bits) {
+  return ((value >>> bits) | (value << (32 - bits))) >>> 0
+}
+
+export function sha256(data) {
+  const bytes = toBytes(data)
+  const H = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  ]
+  const l = bytes.length
+  const bitLen = l * 8
+  // 填充：0x80 + 0x00... + 8 字节大端长度
+  const padLen = ((l + 9 + 63) >> 6) << 6
+  const padded = new Uint8Array(padLen)
+  padded.set(bytes)
+  padded[l] = 0x80
+  // 64 位大端长度（仅低 32 位有效，文件不会超过 512MB）
+  padded[padLen - 4] = (bitLen >>> 24) & 0xff
+  padded[padLen - 3] = (bitLen >>> 16) & 0xff
+  padded[padLen - 2] = (bitLen >>> 8) & 0xff
+  padded[padLen - 1] = bitLen & 0xff
+
+  for (let offset = 0; offset < padLen; offset += 64) {
+    const W = new Array(64)
+    for (let i = 0; i < 16; i += 1) {
+      W[i] = ((padded[offset + i * 4] << 24) | (padded[offset + i * 4 + 1] << 16) | (padded[offset + i * 4 + 2] << 8) | padded[offset + i * 4 + 3]) >>> 0
+    }
+    for (let i = 16; i < 64; i += 1) {
+      const s0 = rotr(W[i - 15], 7) ^ rotr(W[i - 15], 18) ^ (W[i - 15] >>> 3)
+      const s1 = rotr(W[i - 2], 17) ^ rotr(W[i - 2], 19) ^ (W[i - 2] >>> 10)
+      W[i] = (W[i - 16] + s0 + W[i - 7] + s1) >>> 0
+    }
+    let [a, b, c, d, e, f, g, h] = H
+    for (let i = 0; i < 64; i += 1) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)
+      const ch = (e & f) ^ (~e & g)
+      const t1 = (h + S1 + ch + SHA256_K[i] + W[i]) >>> 0
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)
+      const maj = (a & b) ^ (a & c) ^ (b & c)
+      const t2 = (S0 + maj) >>> 0
+      h = g; g = f; f = e; e = (d + t1) >>> 0
+      d = c; c = b; b = a; a = (t1 + t2) >>> 0
+    }
+    H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0
+    H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0
+  }
+  return H.map((v) => v.toString(16).padStart(8, '0')).join('')
+}
+
 function toDosDateTime(dateValue) {
   const date = dateValue instanceof Date ? dateValue : new Date(dateValue || Date.now())
   const year = Math.max(1980, date.getFullYear())
@@ -293,6 +355,7 @@ export async function buildEvidenceArchive({ packState, reportText, groupLabels 
   const included = []
   const skipped = []
   let totalBytes = 0
+  const exportedAt = new Date().toISOString()
 
   const addEntry = (name, data) => {
     const bytes = toBytes(data)
@@ -305,7 +368,28 @@ export async function buildEvidenceArchive({ packState, reportText, groupLabels 
     entries.push({ name: uniqueArchivePath(name, usedPaths), data: bytes })
   }
 
-  addEntry('退租证据包摘要.txt', reportText)
+  // 摘要文本也纳入完整性清单
+  const summaryBytes = utf8Bytes(reportText || '')
+  const summaryPath = uniqueArchivePath('退租证据包摘要.txt', usedPaths)
+  totalBytes += summaryBytes.length
+  if (totalBytes > MAX_ARCHIVE_BYTES) {
+    const error = new Error('证据附件合计超过 35MB，请删除部分大文件后重试')
+    error.code = 'archive-too-large'
+    throw error
+  }
+  entries.push({ name: summaryPath, data: summaryBytes })
+  included.push({
+    fileName: '退租证据包摘要.txt',
+    size: summaryBytes.length,
+    module: 'summary',
+    addedAt: exportedAt,
+    exportedAt,
+    note: '证据包文字摘要',
+    sha256: sha256(summaryBytes),
+    status: 'included',
+    path: summaryPath,
+  })
+
   for (const [group, attachments] of Object.entries(packState?.attachments || {})) {
     const groupName = sanitizePackageFileName(groupLabels[group] || group, '其他材料')
     for (const attachment of Array.isArray(attachments) ? attachments : []) {
@@ -324,20 +408,41 @@ export async function buildEvidenceArchive({ packState, reportText, groupLabels 
           throw error
         }
         entries.push({ name: path, data: bytes })
-        included.push({ group, fileName, path, source: attachment?.source || 'unknown', size: bytes.length })
+        included.push({
+          fileName,
+          size: bytes.length,
+          module: group,
+          addedAt: attachment?.createdAt || exportedAt,
+          exportedAt,
+          note: attachment?.source ? `来源：${attachment.source}` : '证据附件',
+          sha256: sha256(bytes),
+          status: 'included',
+          path,
+        })
       } catch (error) {
         if (error?.code === 'archive-too-large') throw error
-        skipped.push({ group, fileName, reason: getMiniappErrorMessage(error) || '文件读取失败' })
+        skipped.push({
+          fileName,
+          module: group,
+          addedAt: attachment?.createdAt || exportedAt,
+          exportedAt,
+          note: getMiniappErrorMessage(error) || '文件读取失败',
+          sha256: '',
+          status: 'missing',
+          reason: getMiniappErrorMessage(error) || '文件读取失败',
+        })
       }
     }
   }
 
   addEntry('证据包清单.json', JSON.stringify({
-    version: 1,
-    generatedAt: new Date().toISOString(),
+    version: 2,
+    generatedAt: exportedAt,
+    purpose: '完整性证明：记录每个附件的 SHA-256，便于证明文件未被篡改',
+    algorithm: 'SHA-256',
     included,
     skipped,
-    notice: '本压缩包由租小审在本机生成，请核对附件完整性后再发送。',
+    notice: '本压缩包由租小审在本机生成。请核对本清单中各文件的 SHA-256 与实际接收文件是否一致后再使用。',
   }, null, 2))
 
   return { bytes: createZipArchive(entries), included, skipped }

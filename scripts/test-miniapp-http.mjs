@@ -645,6 +645,51 @@ check('OCR 签名拒绝：伪造图片返回 415', async ({ baseUrl, token }) =>
   assert.equal(data.code, 'invalid-image-signature')
 })
 
+check('AI/OCR 冒烟监测：返回 success/provider/model/耗时，不输出 Key 和合同正文', async ({ baseUrl, token, sensitiveProbe }) => {
+  const response = await fetch(`${baseUrl}/api/ai/smoke`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const data = await response.json()
+  assert.equal(response.status, 200, `smoke 接口应返回 200，实际 ${response.status}`)
+  // 顶层结构
+  assert.ok(data.checkedAt, '应返回 checkedAt 时间')
+  assert.ok(typeof data.totalElapsedMs === 'number', '应返回 totalElapsedMs')
+  // AI 部分
+  assert.ok(data.ai, '应返回 ai 对象')
+  assert.ok(data.ai.provider, '应返回 ai.provider')
+  assert.ok(data.ai.model, '应返回 ai.model')
+  assert.ok(typeof data.ai.elapsedMs === 'number', '应返回 ai.elapsedMs')
+  assert.equal(data.ai.success, true, 'mock upstream 下 AI 应成功')
+  // OCR 部分
+  assert.ok(data.ocr, '应返回 ocr 对象')
+  assert.ok(typeof data.ocr.elapsedMs === 'number', '应返回 ocr.elapsedMs')
+  assert.ok(data.ocr.mode, '应返回 ocr.mode')
+  // 不泄露敏感数据：不输出 API Key、合同正文
+  const json = JSON.stringify(data)
+  assert.ok(!json.includes('test-api-key'), 'smoke 输出不得包含 API Key')
+  assert.ok(!json.includes(sensitiveProbe.contractClause), 'smoke 输出不得包含合同正文')
+  assert.ok(!json.includes(sensitiveProbe.phone), 'smoke 输出不得包含手机号')
+})
+
+check('AI/OCR 冒烟监测：上游失败时返回明确失败原因而非健康', async ({ baseUrl, token, upstreamState }) => {
+  // 用 failNext 触发一次性 500，比 mode=error 更稳定（避免连接重置）
+  upstreamState.failNext = 1
+  try {
+    const response = await fetch(`${baseUrl}/api/ai/smoke`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const data = await response.json()
+    assert.equal(response.status, 200, 'smoke 接口本身应返回 200，失败体现在结果字段')
+    assert.equal(data.ai.success, false, '上游 500 时 AI 应标记为失败')
+    assert.ok(data.ai.errorType, '失败时应返回 errorType')
+    assert.ok(data.ai.message, '失败时应返回 message')
+    assert.ok(data.ai.message.length <= 200, 'message 应限制在 200 字符以内')
+  } finally {
+    upstreamState.failNext = 0
+    upstreamState.mode = 'success'
+  }
+})
+
 main().catch((error) => {
   console.error('Miniapp HTTP integration test failed:', error)
   process.exit(1)

@@ -6,12 +6,19 @@ export function createDebouncedSaver(save, delay = 800) {
     timer = null
     if (pendingValue === undefined) return true
     const value = pendingValue
-    pendingValue = undefined
     try {
-      return save(value) !== false
-    } catch {
+      if (save(value) === false) {
+        // save 返回 false 表示失败，保留 pendingValue 以便下次重试
+        console.warn('[debounceSave] 保存返回 false，pendingValue 已保留')
+        return false
+      }
+    } catch (error) {
+      // save 抛异常，保留 pendingValue 以便下次重试
+      console.warn('[debounceSave] 保存异常', String(error?.message || error).slice(0, 100))
       return false
     }
+    pendingValue = undefined
+    return true
   }
 
   return {

@@ -67,6 +67,196 @@
   border-color: #1a4d3a;
 }
 
+/* 多房源档案卡片 */
+.home-house {
+  background: #fff;
+  border: 1px solid #e6ebe6;
+}
+
+.home-house-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+}
+
+.home-house-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.home-house .eyebrow {
+  margin-bottom: 0;
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.home-house-name {
+  display: block;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #1a4d3a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.house-switch-btn {
+  width: auto;
+  min-width: 108px;
+  min-height: 56px;
+  margin: 0;
+  padding: 0 22px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  font-size: 24px;
+  line-height: 54px;
+}
+
+.house-switch-btn::after {
+  border: 0;
+}
+
+.home-house-manager {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #e0e6e0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.home-house-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.house-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 76px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #f6f7f6;
+  border: 1px solid transparent;
+}
+
+.house-row-active {
+  border-color: #1a4d3a;
+  background: #eef5f0;
+}
+
+.house-row-main {
+  width: auto;
+  min-height: 52px;
+  margin: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  text-align: left;
+  line-height: normal;
+  min-width: 0;
+}
+
+.house-row-main::after {
+  border: none;
+}
+
+.house-row-name {
+  display: block;
+  font-size: 28px;
+  line-height: 1.35;
+  color: #2a3a2a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.house-row-badge {
+  font-size: 22px;
+  line-height: 1.2;
+  color: #1a4d3a;
+  background: #d6e9dc;
+  padding: 4px 10px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.house-row-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.house-action-btn {
+  min-height: 48px;
+  margin: 0;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: #5a7a5a;
+  font-size: 24px;
+  line-height: 48px;
+}
+
+.house-action-btn::after {
+  border: none;
+}
+
+.house-action-danger {
+  color: #c9372d;
+}
+
+.house-rename {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.house-rename-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 56px;
+  font-size: 26px;
+  padding: 0 12px;
+  background: #fff;
+  border: 1px solid #c9d6c9;
+  border-radius: 6px;
+}
+
+.house-rename-btn {
+  width: auto;
+  min-width: 76px;
+  min-height: 52px;
+  margin: 0;
+  padding: 0 12px;
+  font-size: 24px;
+  line-height: 50px;
+  flex-shrink: 0;
+}
+
+.house-create-btn {
+  min-height: 76px;
+  margin-top: 4px;
+  line-height: 76px;
+}
+
 .home-current .eyebrow {
   color: #a8d4bd;
 }
