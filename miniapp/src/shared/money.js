@@ -1,6 +1,7 @@
 export function parseMoney(value) {
-  const amount = Number(String(value).replace(/[^\d.]/g, ''))
-  return Number.isFinite(amount) ? amount : 0
+  const match = String(value).replace(/,/g, '').match(/-?\d+(?:\.\d+)?/)
+  const amount = Number(match?.[0] || 0)
+  return Number.isFinite(amount) ? Math.max(0, amount) : 0
 }
 
 export function formatMoney(value) {

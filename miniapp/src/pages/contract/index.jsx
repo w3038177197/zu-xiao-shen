@@ -61,6 +61,7 @@ export default class ContractReview extends Component {
   activeReviewTask = null
 
   reviewRun = 0
+  importRun = 0
 
   state = {
     contractText: '',
@@ -99,6 +100,9 @@ export default class ContractReview extends Component {
     if (!hasHouseSwitchedSince(this.loadedAt || 0)) return
     this.cancelActiveReview()
     this.draftSaver.cancel()
+    // 取消进行中的导入任务，避免旧房源导入结果在切换后写入新房源草稿
+    this.activeImportTask?.cancel?.()
+    this.activeImportTask = null
     const savedProfile = loadStored(PROFILE_KEY, DEFAULT_PROFILE)
     const savedHistory = loadStored(HISTORY_KEY, [])
     this.setState({
@@ -113,16 +117,25 @@ export default class ContractReview extends Component {
       activeProfile: null,
       isAnalyzing: false,
       analysisStage: 'idle',
+      // 同步重置导入状态，与 componentWillUnmount 保持一致
+      isImporting: false,
+      importProgress: null,
     })
     this.loadedAt = Date.now()
   }
 
   componentDidHide() {
+    this.activeImportTask?.cancel?.()
+    this.activeImportTask = null
+    this.importRun += 1
+    this.cancelActiveReview()
     this.draftSaver.flush()
   }
 
   componentWillUnmount() {
     this.activeImportTask?.cancel?.()
+    this.activeImportTask = null
+    this.importRun += 1
     this.cancelActiveReview()
     if (globalThis.__ZU_XIAO_SHEN_CLEARING__) this.draftSaver.cancel()
     else this.draftSaver.flush()
@@ -373,13 +386,17 @@ export default class ContractReview extends Component {
 
   runRemoteImport = async (file, startImport = startRemoteDocumentImport) => {
     if (!await this.confirmRemoteParse(file.name)) return
+    const run = ++this.importRun
     this.setState({ importProgress: { fileName: file.name, progress: 0 } })
     const options = {
-      onProgress: (progress) => this.setState({ importProgress: { fileName: file.name, progress } }),
+      onProgress: (progress) => {
+        if (run === this.importRun) this.setState({ importProgress: { fileName: file.name, progress } })
+      },
     }
     const task = startImport(file, options)
     this.activeImportTask = task
     const result = await task.promise
+    if (run !== this.importRun || this.activeImportTask !== task) return
     this.applyImportedContract({ ...result, fileName: result.fileName || file.name })
   }
 

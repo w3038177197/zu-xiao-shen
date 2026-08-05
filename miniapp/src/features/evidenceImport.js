@@ -26,6 +26,15 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function todayForFileName() {
+  const now = new Date()
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-')
+}
+
 // 读取验房状态中的所有照片，构建图片引用列表
 export function buildCheckinPhotoRefs() {
   const checkinState = loadCheckinInspectionState()
@@ -45,7 +54,9 @@ export function buildCheckinPhotoRefs() {
           localPath: path,
           source: 'module',
           sourceModule: 'checkin',
-          sourcePath: `${roomKey}.${itemKey}.photos[${idx}]`,
+          // sourcePath 用照片文件路径而非数组索引，避免验房页删除照片后
+          // 索引移位导致重新导入时误判为重复（旧引用指向错误照片）。
+          sourcePath: `${roomKey}.${itemKey}.photo:${path}`,
           createdAt: nowIso(),
         })
       })
@@ -80,7 +91,7 @@ export function buildCheckinReportRef() {
   const checkinState = loadCheckinInspectionState()
   if (!hasCheckinContent(checkinState)) return null
   const summary = getCheckinContextSummary(checkinState)
-  const dateStr = new Date().toLocaleDateString('zh-CN')
+  const dateStr = todayForFileName()
   const textContent = [
     '租小审 验房报告',
     `生成时间：${new Date().toLocaleString('zh-CN', { hour12: false })}`,
@@ -156,7 +167,9 @@ export function buildReviewReportRefs() {
       ]
       return {
         id: genRefId(),
-        fileName: `审查报告-${entry.time || '未知时间'}.txt`,
+        // entry.time 来自 toLocaleString('zh-CN')，含 "/" 和 ":" 会被文件系统当路径分隔符，
+        // 拼文件名前先替换为安全字符，避免文件创建失败或写入意外目录。
+        fileName: `审查报告-${(entry.time || '未知时间').replace(/[/:\\]/g, '-')}.txt`,
         fileType: 'file',
         size: lines.join('\n').length,
         textContent: lines.join('\n'),

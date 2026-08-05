@@ -832,6 +832,8 @@ function deriveCriterion(policy, profile, key) {
       const educationStatus = resolveProfileStatement(profile, satisfiedPhrases, [
         '未取得本科学历', '没有本科学历', '无本科学历', '非本科',
         '未取得硕士学历', '没有硕士学历', '无硕士学历',
+        '未取得博士学历', '没有博士学历', '无博士学历',
+        '未取得大专学历', '没有大专学历', '无大专学历', '非大专',
       ])
       return {
         key: 'education',

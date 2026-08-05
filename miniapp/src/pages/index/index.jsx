@@ -133,10 +133,18 @@ export default function Index() {
       placeholderText: '例如：朝阳区A套、张先生房',
       success: ({ confirm, content }) => {
         if (!confirm) return
-        const house = createHouse(content)
+        const result = createHouse(content)
+        // createHouse 成功返回 house 对象，失败返回 { ok: false, reason }
+        if (result && result.ok === false) {
+          const msg = result.reason === 'snapshot-save-failed'
+            ? '存储空间不足，无法保存当前房源数据，已中止创建'
+            : '创建失败，请重试'
+          Taro.showToast({ title: msg, icon: 'none' })
+          return
+        }
         refreshHouses()
         refreshLocalState()
-        Taro.showToast({ title: `已创建并切换到「${house.name}」`, icon: 'none' })
+        Taro.showToast({ title: `已创建并切换到「${result.name}」`, icon: 'none' })
       },
     })
   }
@@ -155,7 +163,12 @@ export default function Index() {
         if (!confirm) return
         const result = switchHouse(houseId)
         if (!result.ok) {
-          Taro.showToast({ title: '切换失败，请重试', icon: 'none' })
+          const msg = result.reason === 'snapshot-save-failed'
+            ? '存储空间不足，无法保存当前房源数据，已中止切换'
+            : result.reason === 'restore-failed'
+              ? '切换失败，部分数据可能不完整，请重试'
+              : '切换失败，请重试'
+          Taro.showToast({ title: msg, icon: 'none' })
           return
         }
         refreshHouses()
@@ -456,7 +469,7 @@ export default function Index() {
 
     const confirmation = await Taro.showModal({
       title: choice.tapIndex === 0 ? '备份已保存，确认清除？' : '确认彻底清除？',
-      content: '将删除合同原文与审查记录、AI 对话、验房记录和照片、证据包与附件、补贴资料、登录会话以及小程序生成的本地文件。清除后需通过恢复用备份才能找回。',
+      content: '将删除合同原文与审查记录、AI 对话、验房记录和照片、证据包与附件、补贴资料、登录会话，以及小程序生成的本地临时文件。已生成的 Word 报告、TXT、PDF、ZIP 等导出成品会保留，需手动删除。清除后需通过恢复用备份才能找回业务数据。',
       confirmText: '彻底清除',
       confirmColor: '#c9372d',
       cancelText: '取消',

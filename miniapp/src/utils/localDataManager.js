@@ -171,10 +171,29 @@ export function formatLocalDataExport() {
   }, null, 2)
 }
 
-export async function clearLocalData({ removePhotos = true } = {}) {
+// 用户主动生成的导出成品文件名前缀。彻底清除业务数据时默认保留这些文件，
+// 避免用户"先导出报告 → 未分享走 → 点彻底清除 → 报告丢失"的预期外损失。
+// 恢复过程的中间临时文件（.zu-xiao-shen-restore-）不在保留范围，仍会删除。
+const EXPORT_FILE_PREFIXES = [
+  '租小审-',
+  '验房报告-',
+  '合同正文',
+  '审查报告-',
+  '退租证据包摘要',
+  '全部Word报告-',
+  '修订版房屋租赁合同-',
+]
+
+function isExportArtifact(name) {
+  if (typeof name !== 'string' || !name) return false
+  return EXPORT_FILE_PREFIXES.some((prefix) => name.startsWith(prefix))
+}
+
+export async function clearLocalData({ removePhotos = true, keepExports = true } = {}) {
   const errors = []
   let removedFiles = 0
   let removedGeneratedFiles = 0
+  let skippedExports = 0
   let storageKeys = [
     ...DATA_KEYS.map(([key]) => STORAGE_KEYS[key]),
     ...CLEAR_ONLY_KEYS.map((key) => STORAGE_KEYS[key]),
@@ -223,6 +242,14 @@ export async function clearLocalData({ removePhotos = true } = {}) {
         })
         await Promise.all(files.map((name) => new Promise((resolve) => {
           const filePath = `${userDataPath}/${name}`
+          // 保留用户主动生成的导出成品（Word 报告、TXT、PDF、ZIP 等），
+          // 只删除恢复中间产物和其他临时文件。用户清除的是业务数据，
+          // 不应连带删除已生成但尚未分享走的导出报告。
+          if (keepExports && isExportArtifact(name)) {
+            skippedExports += 1
+            resolve()
+            return
+          }
           fs.unlink({
             filePath,
             success: () => { removedGeneratedFiles += 1; resolve() },
@@ -244,7 +271,7 @@ export async function clearLocalData({ removePhotos = true } = {}) {
       errors.push(new Error('当前基础库不支持清理小程序文件目录'))
     }
   }
-  return { ok: errors.length === 0, errors, removedFiles, removedGeneratedFiles }
+  return { ok: errors.length === 0, errors, removedFiles, removedGeneratedFiles, skippedExports }
 }
 
 export function getLocalStorageInfo() {
@@ -395,6 +422,60 @@ function collectFilePathRefs(value, refs, seen) {
   Object.values(value).forEach((item) => collectFilePathRefs(item, refs, seen))
 }
 
+function readStorageKeys() {
+  try {
+    return Taro.getStorageInfoSync()?.keys || []
+  } catch {
+    return []
+  }
+}
+
+function collectHouseProfileBackup() {
+  const snapshots = {}
+  collectAllHouseSnapshots().forEach(({ houseId, snapshot }) => {
+    if (houseId) snapshots[houseId] = sanitizeSensitiveFields(snapshot)
+  })
+  return {
+    houses: sanitizeSensitiveFields(parseValue(Taro.getStorageSync(STORAGE_KEYS.houses)) || []),
+    activeHouse: String(parseValue(Taro.getStorageSync(STORAGE_KEYS.activeHouse)) || ''),
+    snapshots,
+  }
+}
+
+function normalizeHouseProfiles(value) {
+  if (!value || typeof value !== 'object') return null
+  const houses = Array.isArray(value.houses) ? value.houses : []
+  const activeHouse = String(value.activeHouse || '')
+  const snapshots = value.snapshots && typeof value.snapshots === 'object' ? value.snapshots : {}
+  return { houses, activeHouse, snapshots }
+}
+
+function houseProfileStorageKeys(houseProfiles) {
+  const keys = new Set([STORAGE_KEYS.houses, STORAGE_KEYS.activeHouse])
+  readStorageKeys().forEach((key) => {
+    if (typeof key === 'string' && key.startsWith(STORAGE_KEYS.houseDataPrefix)) keys.add(key)
+  })
+  Object.keys(houseProfiles?.snapshots || {}).forEach((houseId) => {
+    keys.add(`${STORAGE_KEYS.houseDataPrefix}${houseId}`)
+  })
+  return [...keys]
+}
+
+function restoreHouseProfileStorage(houseProfiles, storageKeys) {
+  const target = new Map([
+    [STORAGE_KEYS.houses, houseProfiles.houses],
+    [STORAGE_KEYS.activeHouse, houseProfiles.activeHouse],
+  ])
+  Object.entries(houseProfiles.snapshots || {}).forEach(([houseId, snapshot]) => {
+    if (!houseId || houseId === houseProfiles.activeHouse) return
+    target.set(`${STORAGE_KEYS.houseDataPrefix}${houseId}`, snapshot)
+  })
+  storageKeys.forEach((storageKey) => {
+    if (target.has(storageKey)) Taro.setStorageSync(storageKey, target.get(storageKey))
+    else Taro.removeStorageSync(storageKey)
+  })
+}
+
 // 检查本机持久文件清单中是否包含指定路径
 async function checkExistingFilePaths(pathList) {
   if (!pathList.length) return { checked: [], missing: [] }
@@ -449,10 +530,11 @@ export function backupLocalData() {
     },
     exportedAt: new Date().toISOString(),
     data,
+    houseProfiles: collectHouseProfileBackup(),
     authStates,
     summary,
     notes: [
-      '本备份仅包含本机资料的引用信息和元数据。',
+      '本备份包含当前房源和其他房源档案的本机资料引用信息和元数据。',
       '照片、附件等本地文件不包含在 JSON 内，恢复后如发现文件缺失需要重新添加。',
       '不导出 session token、openid、云端密钥、API key 等敏感凭据。',
     ],
@@ -503,6 +585,7 @@ function collectPackageFiles(parsed) {
     else if (value && typeof value === 'object') Object.values(value).forEach(walk)
   }
   walk(parsed?.data)
+  walk(parsed?.houseProfiles)
   return [...files.values()]
 }
 
@@ -620,6 +703,7 @@ export async function buildLocalBackupArchive({ format = 'docx' } = {}) {
     backupFormat: BACKUP_FORMAT,
     fileManifest: [...included, ...skipped],
     data: replaceLocalPaths(parsed.data, pathMap),
+    houseProfiles: replaceLocalPaths(parsed.houseProfiles, pathMap),
     notes: [
       '本整包备份包含本机可读取的合同审查、验房、证据包、AI 对话和补贴资料。',
       '验房照片和证据附件以二进制文件放在 files/ 目录；缺失或读取失败的文件会列入 manifest.json。',
@@ -694,7 +778,11 @@ export async function restoreBackupArchive(bytes) {
       written.push(localPath)
       tokenMap.set(`backup-file://${item.id}`, localPath)
     }
-    const restoredJson = JSON.stringify({ ...parsed, data: replaceBackupTokens(parsed.data, tokenMap) })
+    const restoredJson = JSON.stringify({
+      ...parsed,
+      data: replaceBackupTokens(parsed.data, tokenMap),
+      houseProfiles: replaceBackupTokens(parsed.houseProfiles, tokenMap),
+    })
     const result = await restoreLocalData(restoredJson)
     if (!result.ok) throw new Error(result.error || '本地数据恢复失败')
     return { ...result, backupFormat: BACKUP_FORMAT, restoredFiles: written.length, missingFiles: (manifest.skipped || []).map((item) => item.fileName || item.id) }
@@ -744,6 +832,7 @@ export function parseBackupSummary(backupJsonString) {
 
   const data = parsed.data && typeof parsed.data === 'object' ? parsed.data : {}
   const authStates = parsed.authStates && typeof parsed.authStates === 'object' ? parsed.authStates : {}
+  const houseProfiles = normalizeHouseProfiles(parsed.houseProfiles)
 
   // 结构校验：data 必须是对象，且至少包含一个已知 key（或为空对象，表示空备份）
   const knownKeys = new Set([...DATA_KEYS.map(([k]) => k), ...AUTH_STATE_KEYS.map(([k]) => k)])
@@ -761,6 +850,9 @@ export function parseBackupSummary(backupJsonString) {
     if (count > 0 || key in data || key in authStates) {
       items.push({ key, label, count })
     }
+  }
+  if (houseProfiles) {
+    items.push({ key: 'houseProfiles', label: '房源档案', count: houseProfiles.houses.length })
   }
 
   return {
@@ -794,6 +886,7 @@ export async function restoreLocalData(backupJsonString) {
 
   const data = parsed.data && typeof parsed.data === 'object' ? parsed.data : {}
   const authStates = parsed.authStates && typeof parsed.authStates === 'object' ? parsed.authStates : {}
+  const houseProfiles = normalizeHouseProfiles(parsed.houseProfiles)
 
   // 1. 先保存 prevState 快照（用于失败回滚）
   const prevState = {}
@@ -801,11 +894,34 @@ export async function restoreLocalData(backupJsonString) {
     ...DATA_KEYS.map(([k]) => k),
     ...AUTH_STATE_KEYS.map(([k]) => k),
   ]
+  const houseStorageKeys = houseProfiles ? houseProfileStorageKeys(houseProfiles) : []
+  const existingStorageKeys = new Set(readStorageKeys())
+  const prevHouseState = new Map()
+  const prevReadErrors = []
   for (const key of allKeysToRestore) {
     try {
       prevState[key] = Taro.getStorageSync(STORAGE_KEYS[key])
     } catch {
-      prevState[key] = null
+      prevReadErrors.push(key)
+    }
+  }
+  for (const storageKey of houseStorageKeys) {
+    try {
+      prevHouseState.set(storageKey, {
+        exists: existingStorageKeys.has(storageKey),
+        value: Taro.getStorageSync(storageKey),
+      })
+    } catch {
+      prevReadErrors.push(storageKey)
+    }
+  }
+  if (prevReadErrors.length > 0) {
+    return {
+      ok: false,
+      restoredKeys: [],
+      rolledBack: false,
+      missingFiles: [],
+      error: `恢复前读取本地数据失败（首个：${prevReadErrors[0]}），未修改当前数据`,
     }
   }
 
@@ -819,10 +935,22 @@ export async function restoreLocalData(backupJsonString) {
     try {
       // 对于审查历史等列表类型，按 id 去重合并，避免重复导入产生重复记录
       const merged = mergeWithoutDuplicates(prevState[key], newValue)
-      Taro.setStorageSync(STORAGE_KEYS[key], JSON.stringify(merged))
+      // 直接存对象/数组，让 Taro 原生序列化。
+      // 之前用 JSON.stringify 会导致读取时拿到字符串而非对象，与业务代码的读取方式不兼容
+      // （reviewHistory 检查 Array.isArray，reviewProfile 检查 typeof === 'object'，
+      // subsidyMatcher 检查 .city 属性，字符串都不满足条件会导致数据"隐形丢失"）
+      Taro.setStorageSync(STORAGE_KEYS[key], merged)
       restoredKeys.push(key)
     } catch (error) {
       writeErrors.push({ key, error })
+    }
+  }
+  if (houseProfiles) {
+    try {
+      restoreHouseProfileStorage(houseProfiles, houseStorageKeys)
+      restoredKeys.push('houseProfiles')
+    } catch (error) {
+      writeErrors.push({ key: 'houseProfiles', error })
     }
   }
 
@@ -835,6 +963,14 @@ export async function restoreLocalData(backupJsonString) {
         } else {
           Taro.setStorageSync(STORAGE_KEYS[key], prevState[key])
         }
+      } catch {
+        // 回滚失败也只能尽力而为
+      }
+    }
+    for (const [storageKey, previous] of prevHouseState) {
+      try {
+        if (previous.exists) Taro.setStorageSync(storageKey, previous.value)
+        else Taro.removeStorageSync(storageKey)
       } catch {
         // 回滚失败也只能尽力而为
       }
@@ -855,6 +991,7 @@ export async function restoreLocalData(backupJsonString) {
   for (const { value } of restoredSnapshot) {
     collectFilePathRefs(value, refs, seen)
   }
+  if (houseProfiles) collectFilePathRefs(houseProfiles, refs, seen)
   const { missing, listUnavailable } = await checkExistingFilePaths(refs)
 
   return {

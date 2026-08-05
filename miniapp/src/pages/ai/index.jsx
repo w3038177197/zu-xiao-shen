@@ -10,6 +10,7 @@ import {
 import { REMOTE_AI_CONFIG, STORAGE_KEYS } from '../../constants/appConfig'
 import { copyText } from '../../utils/copyText'
 import { consumeAiTaskHandoff } from '../../utils/aiTaskHandoff'
+import { hasHouseSwitchedSince } from '../../features/houseProfile'
 import {
   clearMiniappSession,
   confirmRemoteConsent,
@@ -59,6 +60,10 @@ export default function AiAssistant() {
   const [showContextOptions, setShowContextOptions] = useState(false)
   const pendingRef = useRef(null)
   const sendPreparingRef = useRef(false)
+  // 记录页面最近一次可见时间，用于检测房源切换后重载聊天记录。
+  // AI 页是 navigateTo 进入不销毁，切换房源后若不重载 messages，
+  // 旧房源聊天会随 useEffect [messages] 写回 storage，覆盖新房源 aiChat。
+  const loadedAtRef = useRef(Date.now())
 
   useEffect(() => {
     try {
@@ -109,6 +114,11 @@ export default function AiAssistant() {
 
   Taro.useShareAppMessage(() => ({ title: '租小审：租房问题随时问', path: '/pages/ai/index' }))
   Taro.useDidShow(() => {
+    // 房源切换重载：与合同/验房/证据/补贴页保持一致，避免跨房源聊天串档
+    if (hasHouseSwitchedSince(loadedAtRef.current)) {
+      setMessages(loadChat())
+    }
+    loadedAtRef.current = Date.now()
     const nextContext = loadAllModuleContext()
     const task = consumeAiTaskHandoff()
     setContext(nextContext)

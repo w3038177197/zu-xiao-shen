@@ -294,7 +294,7 @@ export default function SubsidyMatcher() {
           <View className='policy-card' key={`${policy.city}-${policy.policy}`}>
             <View className='policy-head'>
               <Text>{policy.type}</Text>
-              <Text className={`match-status ${hasProfile ? STATUS_TONE[policy.matchStatus] : 'pending'}`}>{hasProfile ? `${subsidyMatchStatusLabel(policy.matchStatus)} · 参考 ${policy.matchScore} 分` : '填写资料后判断'}</Text>
+              <Text className={`match-status ${hasProfile || policy.matchStatus === 'unsatisfied' ? STATUS_TONE[policy.matchStatus] : 'pending'}`}>{hasProfile || policy.matchStatus === 'unsatisfied' ? `${subsidyMatchStatusLabel(policy.matchStatus)} · 参考 ${policy.matchScore} 分` : '填写资料后判断'}</Text>
             </View>
             <Text className='policy-title'>{policy.policy}</Text>
             <Text className='policy-amount'>{policy.amount}</Text>

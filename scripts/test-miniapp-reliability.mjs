@@ -409,20 +409,31 @@ const checks = [
     assert.equal(storage.size, 0, '仍有 Storage 使用痕迹未清除')
   }],
 
-  ['清除全部数据会删除验房照片、证据附件和导出文件', async () => {
+  ['清除全部数据会删除验房照片、证据附件，但保留导出成品文件', async () => {
     savedFiles.clear()
     virtualFiles.clear()
     savedFiles.set('wxfile://saved/checkin-photo.jpg', { size: 2048 })
     savedFiles.set('wxfile://saved/evidence-file.pdf', { size: 4096 })
+    // 导出成品（Word 报告、TXT、ZIP）应被保留，避免用户清除业务数据时丢失已生成的报告
     virtualFiles.set('wxfile://userdata/租小审-恢复用备份.docx', { data: new Uint8Array([1]) })
-    virtualFiles.set('wxfile://userdata/exports/合同分析报告.docx', { data: new Uint8Array([2]) })
+    virtualFiles.set('wxfile://userdata/验房报告-2026-08-05.txt', { data: new Uint8Array([2]) })
+    virtualFiles.set('wxfile://userdata/租小审-全部Word报告-20260805.zip', { data: new Uint8Array([3]) })
+    // 恢复中间临时文件应被删除（非导出成品）
+    virtualFiles.set('wxfile://userdata/.zu-xiao-shen-restore-abc123', { data: new Uint8Array([4]) })
 
     const result = await localDataManager.clearLocalData()
     assert.equal(result.ok, true)
-    assert.equal(result.removedFiles, 2)
-    assert.equal(result.removedGeneratedFiles, 2)
+    assert.equal(result.removedFiles, 2, 'saved 照片/附件应被删除')
+    // 3 个导出成品保留，1 个临时文件删除
+    assert.equal(result.removedGeneratedFiles, 1, '只删除恢复临时文件')
+    assert.equal(result.skippedExports, 3, '保留 3 个导出成品')
     assert.equal(savedFiles.size, 0)
-    assert.equal([...virtualFiles.keys()].some((filePath) => filePath.startsWith('wxfile://userdata/')), false)
+    // 导出成品仍在
+    assert.ok(virtualFiles.has('wxfile://userdata/租小审-恢复用备份.docx'), '恢复用备份应保留')
+    assert.ok(virtualFiles.has('wxfile://userdata/验房报告-2026-08-05.txt'), '验房报告应保留')
+    assert.ok(virtualFiles.has('wxfile://userdata/租小审-全部Word报告-20260805.zip'), '全部报告 ZIP 应保留')
+    // 临时文件已删
+    assert.ok(!virtualFiles.has('wxfile://userdata/.zu-xiao-shen-restore-abc123'), '恢复临时文件应删除')
   }],
   ['隐私说明与实际上传行为一致：区分本机保存与服务端上传，且服务端仅内存处理', async () => {
     const fs = await import('node:fs')
@@ -2665,12 +2676,15 @@ const checks = [
     assert.equal(result.rolledBack, false)
 
     // 验证写入内容
-    const draft = JSON.parse(storage.get(STORAGE_KEYS.contractDraft))
+    // restoreLocalData 直接用 Taro.setStorageSync 存对象/数组（修复了之前 JSON.stringify
+    // 导致读取时拿到字符串、与业务代码 Array.isArray/typeof 检查不兼容的"隐形丢失" bug）。
+    // mock storage 保留原类型，所以这里直接读取对象，不再 JSON.parse。
+    const draft = storage.get(STORAGE_KEYS.contractDraft)
     assert.equal(draft.text, '恢复的合同草稿')
-    const history = JSON.parse(storage.get(STORAGE_KEYS.reviewHistory))
+    const history = storage.get(STORAGE_KEYS.reviewHistory)
     assert.equal(history.length, 1)
     assert.equal(history[0].id, 'r1')
-    const consent = JSON.parse(storage.get(STORAGE_KEYS.aiRemoteConsent))
+    const consent = storage.get(STORAGE_KEYS.aiRemoteConsent)
     assert.equal(consent, true)
   }],
 
@@ -2771,13 +2785,13 @@ const checks = [
     // 第一次导入
     const r1 = await localDataManager.restoreLocalData(backup)
     assert.equal(r1.ok, true)
-    const history1 = JSON.parse(storage.get(STORAGE_KEYS.reviewHistory))
+    const history1 = storage.get(STORAGE_KEYS.reviewHistory)
     assert.equal(history1.length, 2, '第一次导入应有 2 条')
 
     // 第二次导入同一备份
     const r2 = await localDataManager.restoreLocalData(backup)
     assert.equal(r2.ok, true)
-    const history2 = JSON.parse(storage.get(STORAGE_KEYS.reviewHistory))
+    const history2 = storage.get(STORAGE_KEYS.reviewHistory)
     assert.equal(history2.length, 2, '重复导入不应产生重复记录')
     // id 不重复
     const ids = history2.map((h) => h.id).sort()
@@ -2813,7 +2827,7 @@ const checks = [
     assert.ok(result.missingFiles.includes('wxfile://saved/missing_attachment.pdf'))
 
     // 数据本身应已写入（引用信息保留，不崩溃）
-    const checkin = JSON.parse(storage.get(STORAGE_KEYS.checkinInspection))
+    const checkin = storage.get(STORAGE_KEYS.checkinInspection)
     assert.equal(checkin.rooms[0].photos[0], 'wxfile://saved/missing_photo_1.jpg')
   }],
 
@@ -2895,19 +2909,19 @@ const checks = [
     assert.equal(result.ok, true, `端到端恢复应成功: ${result.error}`)
 
     // 验证一致
-    const draft = JSON.parse(storage.get(STORAGE_KEYS.contractDraft))
+    const draft = storage.get(STORAGE_KEYS.contractDraft)
     assert.equal(draft.text, '端到端合同草稿')
     assert.deepEqual(draft.parties, ['张三', '李四'])
 
-    const history = JSON.parse(storage.get(STORAGE_KEYS.reviewHistory))
+    const history = storage.get(STORAGE_KEYS.reviewHistory)
     assert.equal(history.length, 2)
     assert.equal(history[0].id, 'e2e-1')
     assert.deepEqual(history[0].findings, ['a', 'b'])
 
-    const profile = JSON.parse(storage.get(STORAGE_KEYS.reviewProfile))
+    const profile = storage.get(STORAGE_KEYS.reviewProfile)
     assert.equal(profile.strictMode, true)
 
-    const consent = JSON.parse(storage.get(STORAGE_KEYS.aiRemoteConsent))
+    const consent = storage.get(STORAGE_KEYS.aiRemoteConsent)
     assert.equal(consent, true)
   }],
 
@@ -2964,7 +2978,7 @@ const checks = [
     const restored = await localDataManager.restoreBackupArchive(archive.bytes)
     assert.equal(restored.ok, true, restored.error)
     assert.equal(restored.restoredFiles, 1)
-    const restoredState = JSON.parse(storage.get(STORAGE_KEYS.checkinInspection))
+    const restoredState = storage.get(STORAGE_KEYS.checkinInspection)
     assert.match(restoredState.living.wall.photos[0], /^wxfile:\/\/saved\//)
     assert.notEqual(restoredState.living.wall.photos[0], photoPath)
   }],
@@ -3355,17 +3369,18 @@ const checks = [
   // houseProfile storage 写入失败保护 + 切换标志
   // ============================================================
 
-  ['houseProfile：writeJson 失败时不抛异常且返回 false', async () => {
+  ['houseProfile：writeJson 失败时不抛异常且返回失败结果', async () => {
     storage.clear()
     const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
     // 模拟 setStorageSync 抛异常（storage 满）
     const originalSetStorage = Taro.setStorageSync
     Taro.setStorageSync = () => { throw new Error('storage full') }
     try {
       const result = houseProfile.createHouse('测试房源')
-      // createHouse 内部调用 writeJson 多次，不应抛异常
-      // 但由于写入失败，结果可能不完整，关键是不能崩溃
-      assert.ok(result === undefined || result.id || true, 'createHouse 不应抛异常')
+      // createHouse 应返回 { ok: false, reason: 'snapshot-save-failed' }，不抛异常
+      assert.ok(result && result.ok === false, 'createHouse 写入失败应返回 ok:false')
+      assert.equal(result.reason, 'snapshot-save-failed', '应返回 snapshot-save-failed 原因')
     } finally {
       Taro.setStorageSync = originalSetStorage
     }
@@ -3379,14 +3394,20 @@ const checks = [
     const houseB = houseProfile.createHouse('B')
     Taro.setStorageSync(STORAGE_KEYS.contractDraft, '新房源数据')
 
-    // 模拟恢复时部分 key 写入失败
+    // 模拟 restoreDataSnapshot 阶段部分 key 写入失败。
+    // saveHouseSnapshot 写入 houseData: 前缀的 key，让它成功；
+    // 扁平 key（contractDraft 等）写入失败，模拟 restore 阶段失败。
     const originalSetStorage = Taro.setStorageSync
-    let callCount = 0
-    Taro.setStorageSync = (...args) => {
-      callCount += 1
-      // 第 3 次调用开始失败（模拟部分 key 写入失败）
-      if (callCount >= 3) throw new Error('storage full')
-      return originalSetStorage.apply(Taro, args)
+    Taro.setStorageSync = (key, ...args) => {
+      if (typeof key === 'string' && (
+        key.startsWith(STORAGE_KEYS.houseDataPrefix)
+        || key === STORAGE_KEYS.houses
+        || key === STORAGE_KEYS.activeHouse
+      )) {
+        return originalSetStorage.call(Taro, key, ...args)
+      }
+      // 扁平 key 写入失败
+      throw new Error('storage full')
     }
     try {
       const result = houseProfile.switchHouse(houseProfile.loadHouses()[0].id)
@@ -3516,6 +3537,9 @@ const checks = [
     assert.match(source, /hasHouseSwitchedSince/, '合同页应 import hasHouseSwitchedSince')
     assert.match(source, /this\.draftSaver\.cancel\(\)/, 'componentDidShow 应 cancel draftSaver')
     assert.match(source, /this\.loadedAt\s*=\s*Date\.now\(\)/, '应记录 loadedAt')
+    // 切换时应取消进行中的导入任务，避免旧房源导入结果覆盖新房源草稿
+    assert.match(source, /componentDidShow[\s\S]*?this\.activeImportTask\?\.cancel\?\.\(\)/,
+      'componentDidShow 应取消 activeImportTask')
   }],
 
   ['房源切换重载：验房页包含 componentDidShow 和 hasHouseSwitchedSince', async () => {
@@ -3540,6 +3564,524 @@ const checks = [
     assert.match(source, /useDidShow\s*\(/, '补贴页应包含 useDidShow')
     assert.match(source, /hasHouseSwitchedSince/, '补贴页应 import hasHouseSwitchedSince')
     assert.match(source, /loadedAtRef/, '补贴页应有 loadedAtRef')
+  }],
+
+  ['房源切换重载：AI 页 useDidShow 检查切换并重载 messages', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/ai/index.jsx', import.meta.url), 'utf8')
+    assert.match(source, /hasHouseSwitchedSince/, 'AI 页应 import hasHouseSwitchedSince')
+    assert.match(source, /loadedAtRef/, 'AI 页应有 loadedAtRef')
+    // useDidShow 中应检查切换并重载 messages，避免旧房源聊天覆盖新房源 aiChat
+    assert.match(source, /useDidShow\s*\([\s\S]*?hasHouseSwitchedSince\(loadedAtRef\.current\)[\s\S]*?setMessages\(loadChat\(\)\)/,
+      'useDidShow 应检查房源切换并 setMessages(loadChat())')
+  }],
+
+  ['错误边界：App 包裹 ErrorBoundary 并注册全局错误回调', async () => {
+    const fs = await import('node:fs')
+    const appSource = fs.readFileSync(new URL('../miniapp/src/app.js', import.meta.url), 'utf8')
+    const boundaryPath = new URL('../miniapp/src/components/AppErrorBoundary.jsx', import.meta.url)
+    const boundaryExists = fs.existsSync(boundaryPath)
+    assert.ok(boundaryExists, '应存在 AppErrorBoundary 组件')
+    const boundarySource = fs.readFileSync(boundaryPath, 'utf8')
+
+    // app.js 应 import 并包裹 AppErrorBoundary
+    assert.match(appSource, /AppErrorBoundary/, 'app.js 应 import AppErrorBoundary')
+    assert.match(appSource, /<AppErrorBoundary>/, 'app.js 应用 <AppErrorBoundary> 包裹 children')
+
+    // app.js 应注册全局错误回调，真机错误不再静默失败
+    assert.match(appSource, /Taro\.onError/, 'app.js 应注册 Taro.onError')
+    assert.match(appSource, /Taro\.onUnhandledRejection/, 'app.js 应注册 Taro.onUnhandledRejection')
+
+    // ErrorBoundary 应实现 getDerivedStateFromError 和 componentDidCatch
+    assert.match(boundarySource, /getDerivedStateFromError/, 'ErrorBoundary 应实现 getDerivedStateFromError')
+    assert.match(boundarySource, /componentDidCatch/, 'ErrorBoundary 应实现 componentDidCatch')
+    // fallback UI 应有重试和返回首页按钮
+    assert.match(boundarySource, /重试/, 'fallback UI 应有重试按钮')
+    assert.match(boundarySource, /返回首页/, 'fallback UI 应有返回首页按钮')
+    assert.match(boundarySource, /reLaunch/, '返回首页应调用 reLaunch')
+  }],
+
+  // ============================================================
+  // 数据丢失保护修复验证
+  // ============================================================
+
+  ['houseProfile：clearCurrentHouseData 标记切换，通知页面重载', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '清除前的合同')
+    globalThis.__ZU_XIAO_SHEN_HOUSE_SWITCHED_AT__ = undefined
+    houseProfile.clearCurrentHouseData()
+    // 应设置切换标志
+    assert.ok(typeof globalThis.__ZU_XIAO_SHEN_HOUSE_SWITCHED_AT__ === 'number',
+      'clearCurrentHouseData 应调用 markHouseSwitched')
+    // 扁平 key 应被清空（删除后 getStorageSync 返回 undefined 或 ''，均视为已清空）
+    assert.ok(!Taro.getStorageSync(STORAGE_KEYS.contractDraft),
+      'clearCurrentHouseData 应清空扁平 key')
+  }],
+
+  ['houseProfile：capture 读失败时用 undefined 标记，restore 跳过 undefined 不删除', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    // 写入一些数据
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '重要合同数据')
+    Taro.setStorageSync(STORAGE_KEYS.reviewHistory, [{ id: 1, title: 'test' }])
+
+    // 模拟 contractDraft 读取失败
+    const originalGetStorage = Taro.getStorageSync
+    Taro.getStorageSync = (key) => {
+      if (key === STORAGE_KEYS.contractDraft) throw new Error('read error')
+      return originalGetStorage.call(Taro, key)
+    }
+    let snapshot
+    try {
+      snapshot = houseProfile.captureCurrentDataSnapshot()
+    } finally {
+      Taro.getStorageSync = originalGetStorage
+    }
+    // contractDraft 应为 undefined（读取失败），不是 null
+    assert.equal(snapshot.contractDraft, undefined, '读取失败应为 undefined')
+    // reviewHistory 应正常读取
+    assert.ok(Array.isArray(snapshot.reviewHistory), '其他 key 应正常读取')
+
+    // restore 时 undefined 的 key 应被跳过，不删除
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '新数据')
+    const failed = houseProfile.restoreDataSnapshot(snapshot)
+    // contractDraft 应保留为新数据，不被删除
+    assert.equal(Taro.getStorageSync(STORAGE_KEYS.contractDraft), '新数据',
+      'undefined 的 key 应被跳过，不删除')
+  }],
+
+  ['houseProfile：createHouse saveHouseSnapshot 失败时不清空扁平 key', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '不应丢失的数据')
+
+    // 模拟 houseData: 前缀的 key 写入失败（saveHouseSnapshot 失败）
+    const originalSetStorage = Taro.setStorageSync
+    Taro.setStorageSync = (key, ...args) => {
+      if (typeof key === 'string' && key.startsWith(STORAGE_KEYS.houseDataPrefix)) {
+        throw new Error('storage full')
+      }
+      return originalSetStorage.call(Taro, key, ...args)
+    }
+    try {
+      const result = houseProfile.createHouse('新房源')
+      // 应返回失败
+      assert.ok(result && result.ok === false, '应返回 ok:false')
+      assert.equal(result.reason, 'snapshot-save-failed')
+      // 扁平 key 不应被清空
+      assert.equal(Taro.getStorageSync(STORAGE_KEYS.contractDraft), '不应丢失的数据',
+        'saveHouseSnapshot 失败时扁平 key 不应被清空')
+    } finally {
+      Taro.setStorageSync = originalSetStorage
+    }
+  }],
+
+  ['houseProfile：switchHouse saveHouseSnapshot 失败时不清空扁平 key', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    houseProfile.ensureDefaultHouse()
+    const houseB = houseProfile.createHouse('B')
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '当前房源数据')
+
+    // 模拟 houseData: 前缀的 key 写入失败
+    const originalSetStorage = Taro.setStorageSync
+    Taro.setStorageSync = (key, ...args) => {
+      if (typeof key === 'string' && key.startsWith(STORAGE_KEYS.houseDataPrefix)) {
+        throw new Error('storage full')
+      }
+      return originalSetStorage.call(Taro, key, ...args)
+    }
+    try {
+      const result = houseProfile.switchHouse(houseProfile.loadHouses()[0].id)
+      assert.ok(result && result.ok === false, '应返回 ok:false')
+      assert.equal(result.reason, 'snapshot-save-failed')
+      // 扁平 key 不应被清空
+      assert.equal(Taro.getStorageSync(STORAGE_KEYS.contractDraft), '当前房源数据',
+        'saveHouseSnapshot 失败时扁平 key 不应被清空')
+    } finally {
+      Taro.setStorageSync = originalSetStorage
+    }
+  }],
+
+  ['restoreLocalData：恢复后数据类型正确（对象/数组，非字符串）', async () => {
+    storage.clear()
+    const localDataManager = await import('../miniapp/src/utils/localDataManager.js')
+    const { backupLocalData } = localDataManager
+    // 写入测试数据
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '合同正文')
+    Taro.setStorageSync(STORAGE_KEYS.reviewHistory, [{ id: 'r1', findings: [], summary: { score: 30 } }])
+    Taro.setStorageSync(STORAGE_KEYS.reviewProfile, { contractType: 'lease', partyRole: 'partyB' })
+    Taro.setStorageSync(STORAGE_KEYS.subsidyMatcher, { city: '杭州', profile: '应届生' })
+
+    // 备份
+    const backup = await backupLocalData()
+
+    // 清空后恢复
+    storage.clear()
+    const result = await localDataManager.restoreLocalData(backup)
+    assert.equal(result.ok, true, '恢复应成功')
+
+    // 验证数据类型正确（不是字符串）
+    const history = Taro.getStorageSync(STORAGE_KEYS.reviewHistory)
+    assert.ok(Array.isArray(history), 'reviewHistory 应为数组，不是字符串')
+    assert.equal(history[0].id, 'r1')
+
+    const profile = Taro.getStorageSync(STORAGE_KEYS.reviewProfile)
+    assert.equal(typeof profile, 'object', 'reviewProfile 应为对象')
+    assert.equal(profile.contractType, 'lease')
+
+    const subsidy = Taro.getStorageSync(STORAGE_KEYS.subsidyMatcher)
+    assert.equal(typeof subsidy, 'object', 'subsidyMatcher 应为对象')
+    assert.equal(subsidy.city, '杭州')
+  }],
+
+  ['首页：createHouse 失败时显示正确提示', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/index/index.jsx', import.meta.url), 'utf8')
+    // 应处理 createHouse 返回的 { ok: false }
+    assert.match(source, /result\.ok\s*===\s*false/, '应检查 createHouse 返回的 ok:false')
+    assert.match(source, /snapshot-save-failed/, '应处理 snapshot-save-failed 原因')
+  }],
+
+  ['houseProfile：createHouse 保存房源列表失败时不清空扁平 key', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    const houseA = houseProfile.ensureDefaultHouse()
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '列表失败时不应丢')
+
+    const originalSetStorage = Taro.setStorageSync
+    Taro.setStorageSync = (key, ...args) => {
+      if (key === STORAGE_KEYS.houses) throw new Error('storage full')
+      return originalSetStorage.call(Taro, key, ...args)
+    }
+    try {
+      const result = houseProfile.createHouse('B')
+      assert.ok(result && result.ok === false, '应返回 ok:false')
+      assert.equal(result.reason, 'houses-save-failed')
+      assert.equal(Taro.getStorageSync(STORAGE_KEYS.contractDraft), '列表失败时不应丢')
+      assert.equal(Taro.getStorageSync(STORAGE_KEYS.activeHouse), houseA.id)
+    } finally {
+      Taro.setStorageSync = originalSetStorage
+    }
+  }],
+
+  ['houseProfile：switchHouse 保存 active 失败时不恢复目标快照', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    const houseA = houseProfile.ensureDefaultHouse()
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'A合同')
+    const houseB = houseProfile.createHouse('B')
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'B合同')
+
+    const originalSetStorage = Taro.setStorageSync
+    Taro.setStorageSync = (key, ...args) => {
+      if (key === STORAGE_KEYS.activeHouse) throw new Error('storage full')
+      return originalSetStorage.call(Taro, key, ...args)
+    }
+    try {
+      const result = houseProfile.switchHouse(houseA.id)
+      assert.ok(result && result.ok === false, '应返回 ok:false')
+      assert.equal(result.reason, 'active-save-failed')
+      assert.equal(Taro.getStorageSync(STORAGE_KEYS.contractDraft), 'B合同',
+        'active 写失败时不应把 A 的快照恢复到当前扁平 key')
+      assert.equal(Taro.getStorageSync(STORAGE_KEYS.activeHouse), houseB.id)
+    } finally {
+      Taro.setStorageSync = originalSetStorage
+    }
+  }],
+
+  ['restoreLocalData：恢复前旧状态读取失败时不写入新数据', async () => {
+    storage.clear()
+    const localDataManager = await import('../miniapp/src/utils/localDataManager.js')
+    const backup = JSON.stringify({
+      version: 1,
+      exportedAt: '2026-08-05T00:00:00.000Z',
+      appName: '租小审',
+      data: {
+        contractDraft: '备份里的合同',
+        reviewHistory: [{ id: 'new' }],
+      },
+    })
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, '原合同')
+
+    const originalGetStorage = Taro.getStorageSync
+    Taro.getStorageSync = (key) => {
+      if (key === STORAGE_KEYS.reviewHistory) throw new Error('read failed')
+      return originalGetStorage.call(Taro, key)
+    }
+    try {
+      const result = await localDataManager.restoreLocalData(backup)
+      assert.equal(result.ok, false)
+      assert.match(result.error, /恢复前读取本地数据失败/)
+      assert.equal(storage.get(STORAGE_KEYS.contractDraft), '原合同')
+      assert.equal(storage.get(STORAGE_KEYS.reviewHistory), undefined)
+    } finally {
+      Taro.getStorageSync = originalGetStorage
+    }
+  }],
+  ['H1：彻底清除默认保留修订版合同导出文件', async () => {
+    storage.clear()
+    virtualFiles.clear()
+    savedFiles.clear()
+    const revisedPath = Taro.env.USER_DATA_PATH + '/修订版房屋租赁合同-20260805-1200.docx'
+    const tempPath = Taro.env.USER_DATA_PATH + '/.zu-xiao-shen-restore-temp.json'
+    virtualFiles.set(revisedPath, { data: 'docx' })
+    virtualFiles.set(tempPath, { data: 'temp' })
+
+    const result = await localDataManager.clearLocalData()
+
+    assert.equal(result.ok, true)
+    assert.equal(virtualFiles.has(revisedPath), true, '修订版合同导出成品应保留')
+    assert.equal(virtualFiles.has(tempPath), false, '恢复中间产物仍应删除')
+    assert.ok(result.skippedExports >= 1)
+  }],
+
+  ['H2：合同页隐藏时取消 AI 复核和远程导入', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/contract/index.jsx', import.meta.url), 'utf8')
+
+    assert.match(source, /componentDidHide\s*\(\)\s*{[\s\S]*?this\.activeImportTask\?\.cancel\?\.\(\)/)
+    assert.match(source, /componentDidHide\s*\(\)\s*{[\s\S]*?this\.importRun\s*\+=\s*1/)
+    assert.match(source, /componentDidHide\s*\(\)\s*{[\s\S]*?this\.cancelActiveReview\(\)/)
+    assert.match(source, /runRemoteImport[\s\S]*?const run = \+\+this\.importRun/)
+    assert.match(source, /runRemoteImport[\s\S]*?run !== this\.importRun \|\| this\.activeImportTask !== task/)
+  }],
+
+  ['H3：deleteHouse 恢复失败时不返回成功且不串档', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    const houseA = houseProfile.ensureDefaultHouse()
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'A contract')
+    const houseB = houseProfile.createHouse('B')
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'B contract')
+
+    const originalSetStorage = Taro.setStorageSync
+    Taro.setStorageSync = (key, ...args) => {
+      if (key === STORAGE_KEYS.contractDraft) throw new Error('storage full')
+      return originalSetStorage.call(Taro, key, ...args)
+    }
+    try {
+      const result = houseProfile.deleteHouse(houseB.id)
+      assert.equal(result.ok, false)
+      assert.equal(result.reason, 'restore-failed')
+      assert.equal(storage.get(STORAGE_KEYS.activeHouse), houseB.id)
+      assert.equal(storage.get(STORAGE_KEYS.contractDraft), 'B contract')
+      assert.ok(houseProfile.loadHouses().some((item) => item.id === houseB.id))
+      assert.ok(houseProfile.loadHouses().some((item) => item.id === houseA.id))
+    } finally {
+      Taro.setStorageSync = originalSetStorage
+    }
+  }],
+
+  ['H4：负数押金扣款按 0 处理，不增加应退金额', async () => {
+    const miniappMoney = await import('../miniapp/src/shared/money.js')
+    const webMoney = await import('../src/utils/money.js')
+    for (const money of [miniappMoney, webMoney]) {
+      assert.equal(money.parseMoney('-200'), 0)
+      const result = money.calculateDepositReturn({
+        depositAmount: '1000',
+        unpaidFees: '-200',
+        repairCost: '-300',
+        cleaningCost: '-100',
+        hasVoucher: 'yes',
+        normalWear: 'no',
+      })
+      assert.equal(result.totalDeduction, 0)
+      assert.equal(result.estimatedReturn, 1000)
+    }
+  }],
+
+  ['H5：多房源备份恢复覆盖活跃和非活跃房源', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    const houseA = houseProfile.ensureDefaultHouse()
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'A contract')
+    Taro.setStorageSync(STORAGE_KEYS.reviewHistory, [{ id: 'a' }])
+    const houseB = houseProfile.createHouse('B')
+    Taro.setStorageSync(STORAGE_KEYS.contractDraft, 'B contract')
+    Taro.setStorageSync(STORAGE_KEYS.reviewHistory, [{ id: 'b' }])
+
+    const backupJson = localDataManager.backupLocalData()
+    const parsed = JSON.parse(backupJson)
+    assert.equal(parsed.houseProfiles.houses.length, 2)
+    assert.equal(parsed.houseProfiles.activeHouse, houseB.id)
+    assert.equal(parsed.houseProfiles.snapshots[houseA.id].contractDraft, 'A contract')
+    assert.equal(parsed.houseProfiles.snapshots[houseB.id].contractDraft, 'B contract')
+
+    storage.clear()
+    const result = await localDataManager.restoreLocalData(backupJson)
+
+    assert.equal(result.ok, true, result.error || '')
+    assert.ok(result.restoredKeys.includes('houseProfiles'))
+    assert.equal(storage.get(STORAGE_KEYS.activeHouse), houseB.id)
+    assert.equal(storage.get(STORAGE_KEYS.contractDraft), 'B contract')
+    assert.equal(storage.get(STORAGE_KEYS.houseDataPrefix + houseA.id).contractDraft, 'A contract')
+
+    const switchResult = houseProfile.switchHouse(houseA.id)
+    assert.equal(switchResult.ok, true)
+    assert.equal(storage.get(STORAGE_KEYS.contractDraft), 'A contract')
+    assert.deepEqual(storage.get(STORAGE_KEYS.reviewHistory), [{ id: 'a' }])
+  }],
+
+  ['M1：ensureDefaultHouse 修复无效 active 时加载第一个房源快照', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    // 建两个房源，B 是 active，扁平 key 是 B 的数据
+    storage.set(STORAGE_KEYS.houses, [
+      { id: 'h-A', name: 'A', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+      { id: 'h-B', name: 'B', createdAt: '2026-01-01', updatedAt: '2026-01-01' },
+    ])
+    storage.set(STORAGE_KEYS.activeHouse, 'h-B')
+    storage.set(STORAGE_KEYS.contractDraft, 'B contract')
+    storage.set(STORAGE_KEYS.houseDataPrefix + 'h-A', { contractDraft: 'A contract' })
+    // 模拟 active 失效：activeHouse 指向不存在的房源
+    storage.set(STORAGE_KEYS.activeHouse, 'h-invalid')
+    // ensureDefaultHouse 应切到第一个房源 A，并加载 A 的快照
+    houseProfile.ensureDefaultHouse()
+    assert.equal(houseProfile.getActiveHouseId(), 'h-A', '应切到第一个房源 A')
+    assert.equal(storage.get(STORAGE_KEYS.contractDraft), 'A contract', '应加载 A 的快照')
+  }],
+
+  ['M2：clearCurrentHouseData 部分清空失败时回滚', async () => {
+    storage.clear()
+    const houseProfile = await import('../miniapp/src/features/houseProfile.js')
+    storage.set(STORAGE_KEYS.houses, [{ id: 'h-1', name: 'A', createdAt: 'now', updatedAt: 'now' }])
+    storage.set(STORAGE_KEYS.activeHouse, 'h-1')
+    storage.set(STORAGE_KEYS.contractDraft, '原合同数据')
+    storage.set(STORAGE_KEYS.reviewHistory, [{ id: 'x' }])
+    // 模拟 removeStorageSync 对 contractDraft 失败（清空时第一个 key 删失败）
+    const originalRemove = Taro.removeStorageSync
+    Taro.removeStorageSync = (key) => {
+      if (key === STORAGE_KEYS.contractDraft) throw new Error('storage busy')
+      return originalRemove.call(Taro, key)
+    }
+    let result
+    try {
+      result = houseProfile.clearCurrentHouseData()
+    } finally {
+      Taro.removeStorageSync = originalRemove
+    }
+    assert.equal(result.ok, false, '清空失败应返回 ok:false')
+    assert.equal(result.reason, 'clear-failed')
+    // 回滚后数据应保留
+    assert.equal(storage.get(STORAGE_KEYS.contractDraft), '原合同数据', '回滚后原数据应保留')
+    assert.deepEqual(storage.get(STORAGE_KEYS.reviewHistory), [{ id: 'x' }], '回滚后 reviewHistory 应保留')
+  }],
+
+  ['M3：证据包照片引用 sourcePath 基于文件路径而非索引', async () => {
+    storage.clear()
+    const evidenceImport = await import('../miniapp/src/features/evidenceImport.js')
+    // 验房数据：3 张照片（room key 用真实值 living，item key 用真实值 wall）
+    storage.set(STORAGE_KEYS.checkinInspection, {
+      living: { wall: { photos: ['path-A', 'path-B', 'path-C'] } },
+    })
+    const refs1 = evidenceImport.buildCheckinPhotoRefs()
+    assert.equal(refs1.length, 3)
+    assert.ok(refs1[0].sourcePath.includes('path-A'), 'sourcePath 应含文件路径')
+    assert.ok(!refs1[0].sourcePath.includes('photos[0]'), 'sourcePath 不应含数组索引')
+    // 删除第一张照片后，剩余照片的引用 sourcePath 应稳定（基于路径，不因索引移位变化）
+    storage.set(STORAGE_KEYS.checkinInspection, {
+      living: { wall: { photos: ['path-B', 'path-C'] } },
+    })
+    const refs2 = evidenceImport.buildCheckinPhotoRefs()
+    assert.equal(refs2.length, 2)
+    assert.ok(refs2[0].sourcePath.includes('path-B'), '删除后 path-B 的 sourcePath 应仍含 path-B')
+    assert.ok(refs2[1].sourcePath.includes('path-C'), '删除后 path-C 的 sourcePath 应仍含 path-C')
+  }],
+
+  ['M4：审查报告文件名不含斜杠和冒号', async () => {
+    storage.clear()
+    const evidenceImport = await import('../miniapp/src/features/evidenceImport.js')
+    // entry.time 模拟 toLocaleString('zh-CN') 输出，含 "/" 和 ":"
+    storage.set(STORAGE_KEYS.reviewHistory, [{
+      id: 'r-1',
+      time: '2026/8/5 14:30:25',
+      score: 60,
+      label: '中风险',
+      count: 3,
+      snapshot: {
+        contractText: '合同',
+        findings: [{ title: '风险1', level: 'high', explain: '说明', suggestion: '建议' }],
+        summary: { score: 60, label: '中风险', advice: '建议' },
+      },
+    }])
+    const refs = evidenceImport.buildReviewReportRefs()
+    assert.ok(refs.length >= 1, '应生成审查报告引用')
+    const fileName = refs[0].fileName
+    assert.ok(!fileName.includes('/'), `文件名不应含 /，实际：${fileName}`)
+    assert.ok(!fileName.includes(':'), `文件名不应含 :，实际：${fileName}`)
+    assert.ok(fileName.includes('审查报告'), '文件名应含审查报告前缀')
+    assert.ok(fileName.endsWith('.txt'), '文件名应以 .txt 结尾')
+  }],
+
+  ['M5：补贴学历否定词覆盖博士和大专', async () => {
+    const { subsidyPolicies, evaluateSubsidyMatch } = await import('../miniapp/src/shared/subsidyPolicies.js')
+    const eduPolicy = subsidyPolicies.find((p) => p.keywords && p.keywords.some((k) => ['本科', '硕士', '博士', '大专'].includes(k)))
+    if (!eduPolicy) {
+      // 没有学历政策就跳过（不能断言，避免政策库变化导致测试失败）
+      return
+    }
+    const match1 = evaluateSubsidyMatch(eduPolicy, '未取得博士学历')
+    assert.ok(match1.criteria && match1.criteria.some((c) => c.key === 'education' && c.status === 'unsatisfied'),
+      '未取得博士学历应判 unsatisfied')
+    const match2 = evaluateSubsidyMatch(eduPolicy, '没有大专学历')
+    assert.ok(match2.criteria && match2.criteria.some((c) => c.key === 'education' && c.status === 'unsatisfied'),
+      '没有大专学历应判 unsatisfied')
+  }],
+
+  ['M6：补贴停止受理政策在无 profile 时显示真实状态', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.jsx', import.meta.url), 'utf8')
+    // UI 应在 matchStatus === unsatisfied 时无论 hasProfile 都显示真实状态
+    assert.match(source, /hasProfile \|\| policy\.matchStatus === 'unsatisfied'/,
+      '停止政策（unsatisfied）应在无 profile 时也显示真实状态，而非"填写资料后判断"')
+  }],
+
+  ['M7：parseMoney 异常输入不崩溃且返回合理值', async () => {
+    const { parseMoney } = await import('../miniapp/src/shared/money.js')
+    assert.equal(parseMoney('--100'), 0, '负数归 0（Math.max 保护）')
+    assert.equal(parseMoney('1-2'), 1, '1-2 取第一个数字')
+    assert.equal(parseMoney('1.2.3'), 1.2, '1.2.3 取 1.2')
+    assert.equal(parseMoney('abc'), 0, '无数字返回 0')
+    assert.equal(parseMoney(''), 0, '空字符串返回 0')
+    assert.equal(parseMoney(null), 0, 'null 返回 0')
+    assert.equal(parseMoney(undefined), 0, 'undefined 返回 0')
+    assert.equal(parseMoney('1,234.56'), 1234.56, '千分位逗号应被处理')
+  }],
+
+  ['M8：calculateDepositReturn 负数/超大数边界', async () => {
+    const { calculateDepositReturn } = await import('../miniapp/src/shared/money.js')
+    // 负押金归 0
+    const r1 = calculateDepositReturn({ depositAmount: '-100', unpaidFees: '', repairCost: '', cleaningCost: '', hasVoucher: 'no', normalWear: 'yes' })
+    assert.equal(r1.estimatedReturn, 0, '负押金应退 0')
+    assert.equal(r1.totalDeduction, 0, '负押金扣款应 0')
+    // 负扣款归 0，不应增加应退
+    const r2 = calculateDepositReturn({ depositAmount: '1000', unpaidFees: '-200', repairCost: '', cleaningCost: '', hasVoucher: 'no', normalWear: 'yes' })
+    assert.equal(r2.totalDeduction, 0, '负扣款应归 0')
+    assert.equal(r2.estimatedReturn, 1000, '负扣款不应增加应退金额')
+    // 超大数不崩溃
+    const r3 = calculateDepositReturn({ depositAmount: '999999999', unpaidFees: '100', repairCost: '', cleaningCost: '', hasVoucher: 'no', normalWear: 'yes' })
+    assert.ok(r3.estimatedReturn >= 0, '超大数应返回非负值')
+    assert.ok(r3.totalDeduction >= 0, '超大数扣款应非负')
+  }],
+
+  ['M9：合同审查空 findings 评分正确', async () => {
+    const contractReview = await import('../miniapp/src/features/contractReview.js')
+    const summary = contractReview.getRiskSummary([])
+    assert.equal(summary.score, 0, '空 findings 评分应为 0')
+    assert.ok(['低风险', '暂无风险'].includes(summary.label), '空 findings 应为低风险或暂无风险')
+    assert.ok(['safe', 'low'].includes(summary.tone), '空 findings tone 应为 safe 或 low')
+  }],
+
+  ['M10：补贴匹配空 profile 返回 pending', async () => {
+    const { subsidyPolicies, evaluateSubsidyMatch } = await import('../miniapp/src/shared/subsidyPolicies.js')
+    const policy = subsidyPolicies.find((p) => p.city === '北京') || subsidyPolicies[0]
+    const match = evaluateSubsidyMatch(policy, '')
+    assert.equal(match.status, 'pending', '空 profile 应返回 pending')
+    assert.ok(match.score >= 0, '空 profile 分数应非负')
   }],
 ]
 
