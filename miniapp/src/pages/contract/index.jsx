@@ -34,7 +34,7 @@ import {
   getRemoteAiError,
   startRemoteContractReviewRequest,
 } from '../../utils/remoteAiRequest'
-import { hasHouseSwitchedSince } from '../../features/houseProfile'
+import { getActiveHouseId, hasHouseSwitchedSince } from '../../features/houseProfile'
 import './index.css'
 
 const STORAGE_KEY = 'zu-xiao-shen-contract-draft'
@@ -128,7 +128,6 @@ export default class ContractReview extends Component {
     this.activeImportTask?.cancel?.()
     this.activeImportTask = null
     this.importRun += 1
-    this.cancelActiveReview()
     this.draftSaver.flush()
   }
 
@@ -243,10 +242,12 @@ export default class ContractReview extends Component {
     }
 
     const run = ++this.reviewRun
+    const reviewHouseId = getActiveHouseId()
+    const isCurrentReviewRun = () => run === this.reviewRun && getActiveHouseId() === reviewHouseId
     const profile = { ...this.state.profile }
     this.setState({ isAnalyzing: true, analysisStage: 'prepare', operationNotice: '', lastAnalysisFailed: false })
     const useAi = contractText.length <= 60_000
-    if (run !== this.reviewRun) return
+    if (!isCurrentReviewRun()) return
     this.setState({ analysisStage: 'local' })
     let localResult
     try {
@@ -258,7 +259,7 @@ export default class ContractReview extends Component {
       localResult = { contractText, findings, summary, dimensions, adoptedItems: [], revisedDraft: '', activeProfile, profile }
     } catch (error) {
       console.error('本地审查失败:', error)
-      if (run !== this.reviewRun) return
+      if (!isCurrentReviewRun()) return
       this.setState({
         isAnalyzing: false,
         analysisStage: 'idle',
@@ -270,7 +271,7 @@ export default class ContractReview extends Component {
     }
 
     const finishReview = (result, operationNotice = '') => {
-      if (run !== this.reviewRun) return
+      if (!isCurrentReviewRun()) return
       this.setState({
         ...result,
         isAnalyzing: false,
@@ -293,13 +294,13 @@ export default class ContractReview extends Component {
         finishReview(localResult, '合同超过 60000 字，本次已保留本地规则审查结果；请按章节拆分后进行综合审查。')
         return
       }
-      if (run !== this.reviewRun) return
+      if (!isCurrentReviewRun()) return
       const payload = buildRemoteContractReviewPayload({ contractText, profile: localResult.activeProfile, localFindings: localResult.findings })
       const request = startRemoteContractReviewRequest(payload)
       this.activeReviewTask = request
       this.setState({ analysisStage: 'ai' })
       const remoteResult = await request.promise
-      if (run !== this.reviewRun || this.activeReviewTask !== request) return
+      if (!isCurrentReviewRun() || this.activeReviewTask !== request) return
       const findings = mergeFindings(localResult.findings, remoteResult.findings)
       const result = {
         ...localResult,
@@ -313,7 +314,7 @@ export default class ContractReview extends Component {
           ? `综合审查完成：本地规则与 AI 已协作核验，AI 补充 ${Math.max(0, findings.length - localResult.findings.length)} 个风险点。`
         : '综合审查完成：AI 已结合本地线索和知识库核验，未补充有可靠原文证据的新风险。')
     } catch (error) {
-      if (run !== this.reviewRun) return
+      if (!isCurrentReviewRun()) return
       const failure = getRemoteAiError(error)
       finishReview(localResult, failure.cancelled
         ? '综合审查已取消，本地规则审查结果已保留。'
@@ -557,8 +558,13 @@ export default class ContractReview extends Component {
 
   render() {
     const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, analysisStage, isImporting, importProgress, expandedIndex, showHistory, operationNotice, lastImportSource, lastAnalysisFailed, isExportingRevised } = this.state
-    const lowCount = Math.max(0, findings.length - (summary?.highCount || 0) - (summary?.mediumCount || 0))
-    const groupedFindings = groupFindingsByTheme(findings)
+    const adoptedIds = new Set(adoptedItems.map((item) => item.id))
+    const pendingFindings = findings.filter((finding) => !adoptedIds.has(finding.id))
+    const activeSummary = adoptedItems.length ? getRiskSummary(pendingFindings) : summary
+    const activeDimensions = adoptedItems.length ? getDimensionScores(pendingFindings).filter((item) => item.score > 0) : dimensions
+    const lowCount = Math.max(0, pendingFindings.length - (activeSummary?.highCount || 0) - (activeSummary?.mediumCount || 0))
+    const groupedFindings = groupFindingsByTheme(pendingFindings)
+    const pendingAdoptableCount = pendingFindings.filter((finding) => finding.replacement).length
     const reviewDepthHint = reviewDepthOptions.find((item) => item.value === profile.reviewDepth)?.desc
     const operationNoticeIsError = lastAnalysisFailed || Boolean(lastImportSource) || /失败|未完成|已取消|超过 60000 字/.test(operationNotice)
 
@@ -641,54 +647,54 @@ export default class ContractReview extends Component {
           {isAnalyzing && analysisStage === 'ai' && this.activeReviewTask ? <Button className='btn-danger' onClick={this.cancelAiReview}>取消 AI 复核</Button> : null}
         </View>
 
-        {summary ? (
+        {activeSummary ? (
           <View className='card result-card'>
             <Text className='eyebrow'>风险总览</Text>
             <Text className='section-title'>审查结果</Text>
-            <View className={`summary-card ${summary.tone}`}>
+            <View className={`summary-card ${activeSummary.tone}`}>
               <View>
-                <Text className='risk-score'>{summary.score}</Text>
+                <Text className='risk-score'>{activeSummary.score}</Text>
                 <Text className='risk-label'>风险评分</Text>
               </View>
               <View className='summary-copy'>
-                <Text className='risk-level'>{summary.label}</Text>
-                <Text className='risk-description'>{summary.advice}</Text>
+                <Text className='risk-level'>{activeSummary.label}</Text>
+                <Text className='risk-description'>{adoptedItems.length ? '已采纳的建议已移入下方修订成果区，当前仅统计待处理风险。' : activeSummary.advice}</Text>
               </View>
             </View>
             <View className='stats-row'>
-              <View className='stat-item'><Text>{findings.length}</Text><Text>风险点</Text></View>
-              <View className='stat-item high'><Text>{summary.highCount}</Text><Text>高风险</Text></View>
-              <View className='stat-item medium'><Text>{summary.mediumCount}</Text><Text>中风险</Text></View>
+              <View className='stat-item'><Text>{pendingFindings.length}</Text><Text>待处理</Text></View>
+              <View className='stat-item high'><Text>{activeSummary.highCount}</Text><Text>高风险</Text></View>
+              <View className='stat-item medium'><Text>{activeSummary.mediumCount}</Text><Text>中风险</Text></View>
               <View className='stat-item'><Text>{lowCount}</Text><Text>低风险</Text></View>
             </View>
-            {summary.coverage ? (
+            {activeSummary.coverage ? (
               <View className='audit-coverage'>
                 <View className='audit-coverage-head'>
                   <Text className='finding-label'>条款维度完整度</Text>
-                  <Text className='audit-coverage-value'>{summary.coverage.percent}%</Text>
+                  <Text className='audit-coverage-value'>{activeSummary.coverage.percent}%</Text>
                 </View>
-                <View className='dimension-bar'><View className='dimension-fill low' style={{ width: `${summary.coverage.percent}%` }} /></View>
-                <Text className='caption'>已核对 {summary.coverage.label}。覆盖率不等于合同安全结论。</Text>
+                <View className='dimension-bar'><View className='dimension-fill low' style={{ width: `${activeSummary.coverage.percent}%` }} /></View>
+                <Text className='caption'>已核对 {activeSummary.coverage.label}。覆盖率不等于合同安全结论。</Text>
               </View>
             ) : null}
-            {(summary.missingCount || summary.consistencyCount) ? (
+            {(activeSummary.missingCount || activeSummary.consistencyCount) ? (
               <View className='audit-alerts'>
                 <View className='audit-alert-head'>
                   <Text className='finding-label'>还需要人工确认</Text>
-                  <Text className='caption'>{summary.missingCount || 0} 项缺失 · {summary.consistencyCount || 0} 项矛盾</Text>
+                  <Text className='caption'>{activeSummary.missingCount || 0} 项缺失 · {activeSummary.consistencyCount || 0} 项矛盾</Text>
                 </View>
-                {[...(summary.missingFindings || []), ...(summary.consistencyFindings || [])].slice(0, 4).map((item) => (
+                {[...(activeSummary.missingFindings || []), ...(activeSummary.consistencyFindings || [])].slice(0, 4).map((item) => (
                   <View className='audit-alert-item' key={item.id}>
                     <Text className='audit-alert-title'>{item.title}</Text>
                     <Text className='caption'>{item.explanation}</Text>
                   </View>
                 ))}
-                {[...(summary.missingFindings || []), ...(summary.consistencyFindings || [])].length > 4 ? <Text className='caption'>其余项目已写入导出报告。</Text> : null}
+                {[...(activeSummary.missingFindings || []), ...(activeSummary.consistencyFindings || [])].length > 4 ? <Text className='caption'>其余项目已写入导出报告。</Text> : null}
               </View>
             ) : null}
-            {dimensions.length ? (
+            {activeDimensions.length ? (
               <View className='dimension-list'>
-                {dimensions.map((item) => (
+                {activeDimensions.map((item) => (
                   <View className='dimension-item' key={item.key}>
                     <View className='dimension-head'>
                       <Text>{item.label}</Text>
@@ -702,14 +708,14 @@ export default class ContractReview extends Component {
           </View>
         ) : null}
 
-        {findings.length ? (
+        {pendingFindings.length ? (
           <View className='card findings-card'>
             <View className='card-header'>
               <View>
                 <Text className='eyebrow'>逐条建议</Text>
                 <Text className='section-title'>修改与沟通方案</Text>
               </View>
-              <Button className='btn-secondary btn-adopt-all' onClick={this.handleAdoptAll}>全部采纳</Button>
+              <Button className='btn-secondary btn-adopt-all' disabled={!pendingAdoptableCount} onClick={this.handleAdoptAll}>全部采纳</Button>
             </View>
             {groupedFindings.map((group) => (
               <View className='finding-group' key={group.title}>
@@ -802,10 +808,10 @@ export default class ContractReview extends Component {
           </View>
         ) : null}
 
-        {summary && !findings.length ? (
+        {activeSummary && !pendingFindings.length ? (
           <View className='card empty-result'>
-            <Text className='empty-title'>未发现明显风险条款</Text>
-            <Text className='body-text'>仍建议人工复核押金、维修、解除和费用条款。</Text>
+            <Text className='empty-title'>{adoptedItems.length ? '待处理风险已全部采纳' : '未发现明显风险条款'}</Text>
+            <Text className='body-text'>{adoptedItems.length ? '已采纳项已移入修订成果区；写回编辑区后可再次审查确认。' : '仍建议人工复核押金、维修、解除和费用条款。'}</Text>
           </View>
         ) : null}
 

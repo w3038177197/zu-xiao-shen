@@ -30,6 +30,29 @@ const STATUS_ICON = {
   unsatisfied: '×',
 }
 
+function detectProfileCities(text) {
+  const value = String(text || '')
+  if (!value.trim()) return []
+  return subsidyCities.filter((item) => value.includes(item) || value.includes(`${item}市`))
+}
+
+function formatGeneratedAt(value) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '刚刚' : date.toLocaleString('zh-CN')
+}
+
+function getFirstFailedCriterion(policy) {
+  return policy.criteria?.find((item) => item.status === 'unsatisfied')
+}
+
+function getPolicyStatusText(policy, hasProfile) {
+  if (!hasProfile && policy.matchStatus !== 'unsatisfied') return '填写资料后判断'
+  const label = subsidyMatchStatusLabel(policy.matchStatus)
+  if (policy.matchStatus !== 'unsatisfied') return label
+  const failed = getFirstFailedCriterion(policy)
+  return failed?.label ? `${label}：${failed.label}` : label
+}
+
 function getInitialState() {
   try {
     const saved = Taro.getStorageSync(STORAGE_KEY)
@@ -60,6 +83,7 @@ export default function SubsidyMatcher() {
   const [aiAnalysis, setAiAnalysis] = useState(null)
   const [aiError, setAiError] = useState(null)
   const [isAiExpanded, setIsAiExpanded] = useState(false)
+  const [profileFocus, setProfileFocus] = useState(false)
   const [remotePolicies, setRemotePolicies] = useState([])
   const [policySync, setPolicySync] = useState({ loading: true, generatedAt: '', failed: false, refreshIntervalHours: 24 })
   const pendingAiRef = useRef(null)
@@ -100,6 +124,11 @@ export default function SubsidyMatcher() {
   const topScore = hasProfile ? (matches[0]?.matchScore || 0) : null
   const satisfiedCount = matches.filter((m) => m.matchStatus === 'satisfied').length
   const pendingCount = matches.filter((m) => m.matchStatus === 'pending').length
+  const profileCities = useMemo(() => detectProfileCities(profile), [profile])
+  const conflictCity = hasProfile ? profileCities.find((item) => item !== city) : ''
+  const topStatus = matches[0]?.matchStatus
+  const heroPrimary = !hasProfile ? '待填写' : !matches.length ? '暂无政策' : conflictCity ? '不满足' : subsidyMatchStatusLabel(topStatus)
+  const heroSecondary = !hasProfile ? '个人情况' : conflictCity ? '城市不一致' : matches.length ? `参考匹配度 ${topScore} 分` : '官方线索'
 
   useEffect(() => {
     try {
@@ -229,7 +258,7 @@ export default function SubsidyMatcher() {
     <ScrollView className='subsidy-page' scrollY>
       <View className='card subsidy-hero'>
         <View><Text className='eyebrow'>补贴匹配</Text><Text className='page-title'>毕业生租房补贴线索匹配</Text><Text className='body-text'>按城市和个人情况逐项判断满足 / 待确认 / 不满足，给出缺失条件。政策强时效，申请前请再次核对。</Text></View>
-        <View className='score-box'><Text>{hasProfile ? (matches.length ? `${topScore} 分` : '暂无政策') : '待填写'}</Text><Text>{hasProfile ? '匹配结果' : '个人情况'}</Text><Text>{city} · {matches.length} 条</Text></View>
+        <View className={`score-box score-box-${conflictCity ? 'unsatisfied' : topStatus || 'pending'}`}><Text>{heroPrimary}</Text><Text>{heroSecondary}</Text><Text>{city} · {matches.length} 条</Text></View>
       </View>
 
       <View className='card panel'>
@@ -251,8 +280,18 @@ export default function SubsidyMatcher() {
         ) : null}
         <Text className='city-count'>当前选择：{city}。可搜索 {subsidyCities.length} 个已收录政策城市。</Text>
         <Text className='field-label'>个人情况</Text>
-        <Textarea className='profile-input' aria-label='个人情况' name='subsidyProfile' adjustPosition cursorSpacing={20} value={profile} maxlength={500} placeholder='例如：2025 年本科毕业，已就业并连续缴纳 6 个月社保，本市无房…' onInput={(event) => setProfile(event.detail.value)} />
+        <Textarea className='profile-input' aria-label='个人情况' name='subsidyProfile' adjustPosition cursorSpacing={20} focus={profileFocus} value={profile} maxlength={500} placeholder='例如：2025 年本科毕业，已就业并连续缴纳 6 个月社保，本市无房…' onBlur={() => setProfileFocus(false)} onInput={(event) => setProfile(event.detail.value)} />
         <Text className={hasProfile ? 'auto-match-note' : 'profile-empty-hint'}>{hasProfile ? '修改城市或个人情况后，结果会自动更新' : '请填写真实情况后再查看匹配判断，页面不会再使用演示身份代替你。'}</Text>
+        {conflictCity ? (
+          <View className='city-conflict-card'>
+            <Text className='city-conflict-title'>识别到城市不一致</Text>
+            <Text className='city-conflict-copy'>当前选择：{city}；个人情况里提到：{conflictCity}。请确认以哪个城市为准。</Text>
+            <View className='city-conflict-actions'>
+              <Button onClick={() => selectCity(conflictCity)}>改为{conflictCity}重新匹配</Button>
+              <Button onClick={() => setProfileFocus(true)}>保留{city}，修改个人情况</Button>
+            </View>
+          </View>
+        ) : null}
         {matches.length && hasProfile ? (
           <View className='match-summary'>
             <Text className={`match-pill ${STATUS_TONE.satisfied}`}>满足 {satisfiedCount}</Text>
@@ -260,7 +299,7 @@ export default function SubsidyMatcher() {
             <Text className={`match-pill ${STATUS_TONE.unsatisfied}`}>不满足 {matches.length - satisfiedCount - pendingCount}</Text>
           </View>
         ) : null}
-        {hasProfile && matches.length ? <Button className='ai-task-btn' disabled={isAiAnalyzing} onClick={() => explainWithAi()}>{isAiAnalyzing ? '正在分析匹配结果…' : '让 AI 解释匹配结果'}</Button> : null}
+        {hasProfile && matches.length ? <Button className='ai-task-btn' disabled={isAiAnalyzing} onClick={() => explainWithAi()}>{isAiAnalyzing ? '正在生成申请建议…' : '生成申请建议'}</Button> : null}
         {isAiAnalyzing || aiAnalysis ? (
           <View className='inline-ai-panel'>
             <View className='inline-ai-head'><Text>AI 匹配解释</Text><Text>{isAiAnalyzing ? '分析中' : aiAnalysis?.meta}</Text></View>
@@ -288,13 +327,16 @@ export default function SubsidyMatcher() {
 
       <View className='card panel'>
         <View className='result-head'><View><Text className='eyebrow'>官方政策</Text><Text className='section-title'>{city}政策线索</Text></View><Text className='count'>{matches.length} 条</Text></View>
-        {matches.length ? <Text className={policySync.failed ? 'freshness stale' : 'freshness'}>{policySync.loading ? '正在检查官网可访问性…' : policySync.failed ? '官网实时核验暂不可用，已显示人工核对版本；政策内容仍以官网正文为准' : `官网核验${formatRefreshInterval(policySync.refreshIntervalHours)}刷新 · ${new Date(policySync.generatedAt).toLocaleString('zh-CN')} · 政策内容仍以官网正文为准`}</Text> : null}
+        {matches.length ? <Text className={policySync.failed ? 'freshness stale' : 'freshness'}>{policySync.loading ? '正在检查官网…' : policySync.failed ? '官网核验暂不可用 · 已显示人工核对版本' : `官网已核验 · ${formatGeneratedAt(policySync.generatedAt)}`}</Text> : null}
         {!matches.length ? <Text className='no-match-hint'>当前城市暂无收录线索，请前往当地人社、住建或政务服务官网查询。</Text> : null}
         {matches.map((policy) => (
           <View className='policy-card' key={`${policy.city}-${policy.policy}`}>
             <View className='policy-head'>
               <Text>{policy.type}</Text>
-              <Text className={`match-status ${hasProfile || policy.matchStatus === 'unsatisfied' ? STATUS_TONE[policy.matchStatus] : 'pending'}`}>{hasProfile || policy.matchStatus === 'unsatisfied' ? `${subsidyMatchStatusLabel(policy.matchStatus)} · 参考 ${policy.matchScore} 分` : '填写资料后判断'}</Text>
+              <View className='match-status-wrap'>
+                <Text className={`match-status ${hasProfile || policy.matchStatus === 'unsatisfied' ? STATUS_TONE[policy.matchStatus] : 'pending'}`}>{getPolicyStatusText(policy, hasProfile)}</Text>
+                {hasProfile || policy.matchStatus === 'unsatisfied' ? <Text className='match-score-note'>参考匹配度 {policy.matchScore} 分</Text> : null}
+              </View>
             </View>
             <Text className='policy-title'>{policy.policy}</Text>
             <Text className='policy-amount'>{policy.amount}</Text>
@@ -316,8 +358,25 @@ export default function SubsidyMatcher() {
               </View>
             ) : null}
 
+            {hasProfile && policy.matchStatus === 'unsatisfied' ? (
+              <View className='next-steps'>
+                <Text>下一步建议</Text>
+                {conflictCity ? (
+                  <>
+                    <Text>如果实际申请 {conflictCity} 补贴，请切换到 {conflictCity} 重新匹配。</Text>
+                    <Text>如果要看 {city} 政策，请把个人情况中的 {conflictCity} 改为 {city}，并补充当地就业、租住、无房情况。</Text>
+                  </>
+                ) : (
+                  <>
+                    <Text>先补齐上方“不满足 / 待确认”的条件，再核对官网申报入口。</Text>
+                    <Text>提交前以官网最新办事指南和经办部门口径为准。</Text>
+                  </>
+                )}
+              </View>
+            ) : null}
+
             <View className='policy-detail'><Text>常见条件</Text><Text>{policy.condition}</Text></View>
-            <View className='materials'>{policy.materials.slice(0, 6).map((item) => <Text key={item}>✓ {item}</Text>)}</View>
+            <View className='materials'><Text className='materials-title'>需准备材料</Text>{policy.materials.slice(0, 6).map((item) => <Text key={item}>{item}</Text>)}</View>
             <Text className={policy.liveReview?.mayHaveChanged || policy.freshness.stale ? 'freshness stale' : 'freshness'}>{policy.liveReview?.mayHaveChanged ? '官网页面在人工核对后有更新，请打开官网确认最新条件' : policy.liveReview?.status === 'available' ? `官网可访问 · 政策内容人工核对于 ${policy.checkedAt}` : policy.freshness.label}</Text>
             <View className='policy-foot'><Text>{policy.sourceName}</Text><Button className='copy-url-btn' onClick={() => copyOfficialUrl(policy)}>复制官网链接</Button></View>
             <Text className='policy-url' userSelect>{policy.applyUrl || policy.sourceUrl}</Text>

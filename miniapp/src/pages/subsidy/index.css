@@ -44,6 +44,14 @@
   font-variant-numeric: tabular-nums;
 }
 
+.score-box-unsatisfied {
+  background: #7a2e23;
+}
+
+.score-box-pending {
+  background: #5c6a60;
+}
+
 /* Panel */
 .panel {
   padding-bottom: 28px;
@@ -193,6 +201,53 @@
   border-radius: 8px;
   background: #fff4e0;
   color: #b86e00;
+}
+
+.city-conflict-card {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #f5c4c0;
+  border-radius: 8px;
+  background: #fff7f6;
+}
+
+.city-conflict-title,
+.city-conflict-copy {
+  display: block;
+  font-size: 22px;
+  line-height: 1.5;
+}
+
+.city-conflict-title {
+  margin-bottom: 6px;
+  color: #c9372d;
+  font-weight: 700;
+}
+
+.city-conflict-copy {
+  color: #5c6a60;
+}
+
+.city-conflict-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.city-conflict-actions button {
+  min-height: 58px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1a4d3a;
+  font-size: 22px;
+  line-height: 58px;
+}
+
+.city-conflict-actions button::after {
+  border-color: #c8e6d8;
 }
 
 /* Match summary */
@@ -409,6 +464,21 @@
   font-weight: 600;
 }
 
+.match-status-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+  max-width: 280px;
+}
+
+.match-score-note {
+  color: #66746b;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
 .match-status.satisfied {
   background: #e8f5ef;
   color: #1a4d3a;
@@ -529,6 +599,26 @@
   color: #b86e00;
 }
 
+.next-steps {
+  margin: 18px 0;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fff4e0;
+}
+
+.next-steps text {
+  display: block;
+  color: #5c4a1f;
+  font-size: 22px;
+  line-height: 1.5;
+}
+
+.next-steps text:first-child {
+  margin-bottom: 6px;
+  color: #8a5a00;
+  font-weight: 700;
+}
+
 /* Policy detail */
 .policy-detail {
   margin-top: 18px;
@@ -558,11 +648,21 @@
 
 .materials text {
   padding: 8px 14px;
-  border: 1px solid #c8e6d8;
+  border: 1px solid #d8e2dc;
   border-radius: 999px;
-  background: #e8f5ef;
-  color: #1a4d3a;
+  background: #f7f9f7;
+  color: #5c6a60;
   font-size: 22px;
+}
+
+.materials .materials-title {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #1a211c;
+  font-weight: 700;
 }
 
 .freshness {

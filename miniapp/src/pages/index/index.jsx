@@ -127,6 +127,11 @@ export default function Index() {
     refreshLocalState()
   })
 
+  const resetDepositTool = () => {
+    setDeposit(defaultDeposit)
+    setShowDepositDetails(false)
+  }
+
   const refreshHouses = () => {
     setHouses(loadHouses())
     setActiveHouseIdState(getActiveHouseId())
@@ -150,6 +155,7 @@ export default function Index() {
         }
         refreshHouses()
         refreshLocalState()
+        resetDepositTool()
         Taro.showToast({ title: `已创建并切换到「${result.name}」`, icon: 'none' })
       },
     })
@@ -179,6 +185,7 @@ export default function Index() {
         }
         refreshHouses()
         refreshLocalState()
+        resetDepositTool()
         setShowHouseManager(false)
         Taro.showToast({ title: `已切换到「${result.house.name}」`, icon: 'none' })
       },
@@ -224,6 +231,7 @@ export default function Index() {
         }
         refreshHouses()
         refreshLocalState()
+        if (houseId === activeHouseId || result.switchedTo) resetDepositTool()
         Taro.showToast({ title: '已删除', icon: 'success' })
       },
     })
@@ -244,6 +252,7 @@ export default function Index() {
           return
         }
         refreshLocalState()
+        resetDepositTool()
         Taro.showToast({ title: '当前房源已清空', icon: 'success' })
       },
     })

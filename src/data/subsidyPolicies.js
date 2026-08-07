@@ -847,8 +847,10 @@ function deriveCriterion(policy, profile, key) {
         .map(([level]) => level)
       if (minimumRank <= EDUCATION_RANKS.本科) satisfiedPhrases.push('本科及以上')
       const educationStatus = resolveProfileStatement(profile, satisfiedPhrases, [
-        '未取得本科学历', '没有本科学历', '无本科学历', '非本科',
+        '未取得博士学历', '没有博士学历', '无博士学历',
         '未取得硕士学历', '没有硕士学历', '无硕士学历',
+        '未取得本科学历', '没有本科学历', '无本科学历', '非本科',
+        '未取得大专学历', '没有大专学历', '无大专学历',
       ])
       return {
         key: 'education',

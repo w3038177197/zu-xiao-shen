@@ -27,6 +27,7 @@ import { deleteEvidenceAttachmentTransaction } from '../../utils/evidenceAttachm
 import { getCapabilityFailure, showCapabilityFailure } from '../../utils/privacyAuth'
 import { formatMessageBlocks, loadAllModuleContext } from '../../features/aiAssistant'
 import { AI_TASK_PRESETS, buildRemoteAiPayload } from '../../features/remoteAi'
+import { createBasicInfoAiPrompt, parseBasicInfoFromAiReply, parseBasicInfoFromContract } from '../../features/contractBasicInfo'
 import { REMOTE_AI_CONFIG, STORAGE_KEYS } from '../../constants/appConfig'
 import { confirmRemoteConsent, getRemoteAiError, startRemoteAiRequest } from '../../utils/remoteAiRequest'
 import {
@@ -72,25 +73,12 @@ function normalizeStorageText(value) {
   return typeof value?.text === 'string' ? value.text : ''
 }
 
-function firstMoneyAfter(text, labels) {
-  const pattern = new RegExp('(?:' + labels.join('|') + ')[^\\d]{0,16}(\\d+(?:\\.\\d+)?)\\s*元?')
-  const match = text.match(pattern)
-  return match?.[1] || ''
-}
-
-function parseBasicInfoFromContract(text) {
-  const address = (text.match(/(?:房屋坐落|房屋地址|租赁房屋|出租房屋|房屋位于|地址)[:：为\s]*([^。；\n]{4,60})/) || [])[1] || ''
-  return {
-    address: address.trim(),
-    deposit: firstMoneyAfter(text, ['押金', '保证金']),
-    monthlyRent: firstMoneyAfter(text, ['月租金', '每月租金', '租金']),
-  }
-}
-
 export default class EvidencePack extends Component {
   autoSaver = createDebouncedSaver((state) => saveEvidencePackState(state))
   pendingAiRequest = null
+  pendingBasicInfoAiRequest = null
   aiRunId = 0
+  basicInfoAiRunId = 0
 
   state = {
     packState: createDefaultEvidencePackState(),
@@ -104,6 +92,7 @@ export default class EvidencePack extends Component {
     activeStep: 'basic',
     operationNotice: '',
     isAiAnalyzing: false,
+    isBasicInfoAiFilling: false,
     aiCommunication: null,
     aiError: null,
   }
@@ -118,7 +107,9 @@ export default class EvidencePack extends Component {
     if (!hasHouseSwitchedSince(this.loadedAt || 0)) return
     this.autoSaver.cancel()
     this.aiRunId += 1
+    this.basicInfoAiRunId += 1
     this.pendingAiRequest?.cancel()
+    this.pendingBasicInfoAiRequest?.cancel()
     const packState = loadEvidencePackState()
     this.setState({
       packState,
@@ -126,6 +117,7 @@ export default class EvidencePack extends Component {
       aiCommunication: null,
       aiError: null,
       isAiAnalyzing: false,
+      isBasicInfoAiFilling: false,
     })
     this.loadedAt = Date.now()
   }
@@ -136,7 +128,9 @@ export default class EvidencePack extends Component {
 
   componentWillUnmount() {
     this.aiRunId += 1
+    this.basicInfoAiRunId += 1
     this.pendingAiRequest?.cancel()
+    this.pendingBasicInfoAiRequest?.cancel()
     if (globalThis.__ZU_XIAO_SHEN_CLEARING__) this.autoSaver.cancel()
     else this.autoSaver.flush()
   }
@@ -166,31 +160,87 @@ export default class EvidencePack extends Component {
     }), this.scheduleSave)
   }
 
-  handleAutofillFromContract = () => {
-    const contractText = normalizeStorageText(Taro.getStorageSync(STORAGE_KEYS.contractDraft)).trim()
-    if (!contractText) {
-      Taro.showToast({ title: '暂无合同正文可识别', icon: 'none' })
-      return
-    }
-    const parsed = parseBasicInfoFromContract(contractText)
+  applyBasicInfoFields = (parsed, sourceLabel) => {
     const formData = this.state.packState.formData || {}
     const nextFields = {}
-    ;['address', 'deposit', 'monthlyRent'].forEach((field) => {
-      if (!String(formData[field] || '').trim() && parsed[field]) nextFields[field] = parsed[field]
-    })
-    if (!Object.keys(nextFields).length) {
-      Taro.showToast({ title: '未识别到可自动填充的新信息', icon: 'none' })
-      return
+    const labels = {
+      address: '房屋地址',
+      deposit: '押金金额',
+      monthlyRent: '月租金',
+      landlordName: '房东/中介',
+      landlordPhone: '联系电话',
+      checkinDate: '入住日期',
+      checkoutDate: '退租日期',
+      handoverDate: '交接日期',
+      handoverTime: '交接时间',
     }
-    const labels = { address: '房屋地址', deposit: '押金金额', monthlyRent: '月租金' }
+    const fields = Object.keys(labels)
+    fields.forEach((field) => {
+      const value = String(parsed?.[field] || '').trim()
+      if (value && String(formData[field] || '').trim() !== value) nextFields[field] = value
+    })
+    const recognized = fields.some((field) => String(parsed?.[field] || '').trim())
+    if (!recognized) return { recognized: false, applied: false }
+    if (!Object.keys(nextFields).length) return { recognized: true, applied: false }
+    const hasExtraFields = ['landlordName', 'landlordPhone', 'checkinDate', 'checkoutDate', 'handoverDate', 'handoverTime'].some((field) => nextFields[field])
+    const changedLabels = Object.keys(nextFields).map((field) => labels[field]).join('、')
     this.setState((prev) => ({
       packState: {
         ...prev.packState,
         formData: { ...prev.packState.formData, ...nextFields },
       },
-      operationNotice: '已从合同填入：' + Object.keys(nextFields).map((field) => labels[field]).join('、'),
+      operationNotice: '已通过' + sourceLabel + '填入：' + changedLabels,
+      showExtraInfo: prev.showExtraInfo || hasExtraFields,
     }), this.scheduleSave)
-    Taro.showToast({ title: '已从合同填充', icon: 'success' })
+    return { recognized: true, applied: true }
+  }
+
+  handleAutofillFromContract = async () => {
+    if (this.state.isBasicInfoAiFilling) return
+    const contractText = normalizeStorageText(Taro.getStorageSync(STORAGE_KEYS.contractDraft)).trim()
+    if (!contractText) {
+      Taro.showToast({ title: '暂无合同正文可识别', icon: 'none' })
+      return
+    }
+    const localParsed = parseBasicInfoFromContract(contractText)
+    const consent = await Taro.showModal({
+      title: '从合同填充',
+      content: REMOTE_AI_CONFIG.enabled
+        ? '将优先使用 AI 识别当前合同正文片段，提取房屋地址、押金、月租、房东/中介、电话和交接日期等信息。是否继续？'
+        : '联网 AI 未启用，将使用本地规则从合同中提取基础信息。是否继续？',
+      confirmText: REMOTE_AI_CONFIG.enabled ? 'AI 填充' : '本地填充',
+      cancelText: '取消',
+    })
+    if (!consent.confirm) return
+
+    const runId = ++this.basicInfoAiRunId
+    this.setState({ isBasicInfoAiFilling: true })
+    try {
+      let parsed = localParsed
+      let sourceLabel = '合同'
+      if (REMOTE_AI_CONFIG.enabled) {
+        const payload = buildRemoteAiPayload({ prompt: createBasicInfoAiPrompt(contractText) })
+        const request = startRemoteAiRequest(payload)
+        this.pendingBasicInfoAiRequest = request
+        const response = await request.promise
+        const aiParsed = parseBasicInfoFromAiReply(response.reply)
+        parsed = { ...localParsed, ...Object.fromEntries(Object.entries(aiParsed).filter(([, value]) => String(value || '').trim())) }
+        sourceLabel = 'AI'
+      }
+      if (runId !== this.basicInfoAiRunId) return
+      const result = this.applyBasicInfoFields(parsed, sourceLabel)
+      if (!result.recognized) Taro.showToast({ title: '未识别到有效信息', icon: 'none' })
+      else Taro.showToast({ title: result.applied ? '已从合同填充' : '当前信息已是最新', icon: result.applied ? 'success' : 'none' })
+    } catch (error) {
+      if (error?.code === 'cancelled') return
+      const result = this.applyBasicInfoFields(localParsed, '合同')
+      Taro.showToast({ title: result.applied ? 'AI 失败，已本地填充' : getRemoteAiError(error).message, icon: 'none' })
+    } finally {
+      if (runId === this.basicInfoAiRunId) {
+        this.pendingBasicInfoAiRequest = null
+        this.setState({ isBasicInfoAiFilling: false })
+      }
+    }
   }
 
   handleEvidenceToggle = (group, index) => {
@@ -629,7 +679,7 @@ export default class EvidencePack extends Component {
   }
 
   render() {
-    const { packState, currentTab, currentGroup, isSaving, isAttaching, isImporting, textPreview, activeStep, operationNotice, isAiAnalyzing, aiCommunication, aiError } = this.state
+    const { packState, currentTab, currentGroup, isSaving, isAttaching, isImporting, textPreview, activeStep, operationNotice, isAiAnalyzing, isBasicInfoAiFilling, aiCommunication, aiError } = this.state
     const { formData = {}, evidence = {}, actions = [], communicationText = '' } = packState || {}
     const progress = this.getProgress()
     const hasAiContext = progress.totalAttachments > 0
@@ -676,8 +726,8 @@ export default class EvidencePack extends Component {
         {activeStep === 'basic' ? <>
         <View className='card section'>
           <View className='section-head'>
-            <View><Text className='section-title'>基本信息</Text><Text className='section-subtitle'>地址、押金和月租可从本机合同草稿自动识别。</Text></View>
-            <Button className='btn-autofill' onClick={this.handleAutofillFromContract}>从合同填充</Button>
+            <View><Text className='section-title'>基本信息</Text><Text className='section-subtitle'>默认使用 AI 从合同识别基础资料；网络不可用时自动用本地规则兜底。</Text></View>
+            <Button className='btn-autofill' disabled={isBasicInfoAiFilling} onClick={this.handleAutofillFromContract}>{isBasicInfoAiFilling ? 'AI 填充中…' : '从合同填充'}</Button>
           </View>
 
           <View className='form-item'>

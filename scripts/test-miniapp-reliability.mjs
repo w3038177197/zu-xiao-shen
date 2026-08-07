@@ -30,7 +30,7 @@ const [{
   hasModuleReference,
   addModuleReference,
   importModuleReferences,
-}, { createDebouncedSaver }, localDataManager, businessReportExport, revisedContractExport, subsidyData, clipboard, attachmentUtils, textFileExport, evidencePackageExport, evidenceImport, contractReview, demoContractsData, reviewHistory, workflowContext, aiAssistant, contractTextImport, privacyAuth] = await Promise.all([
+}, { createDebouncedSaver }, localDataManager, businessReportExport, revisedContractExport, subsidyData, clipboard, attachmentUtils, textFileExport, evidencePackageExport, evidenceImport, contractReview, demoContractsData, reviewHistory, workflowContext, aiAssistant, contractTextImport, privacyAuth, contractBasicInfo] = await Promise.all([
   import('../miniapp/src/features/checkinInspection.js'),
   import('../miniapp/src/features/evidencePack.js'),
   import('../miniapp/src/utils/debounceSave.js'),
@@ -50,6 +50,7 @@ const [{
   import('../miniapp/src/features/aiAssistant.js'),
   import('../miniapp/src/utils/contractTextImport.js'),
   import('../miniapp/src/utils/privacyAuth.js'),
+  import('../miniapp/src/features/contractBasicInfo.js'),
 ])
 const { STORAGE_KEYS } = await import('../miniapp/src/constants/appConfig.js')
 const { getCheckinItems, getCheckinRooms } = await import('../miniapp/src/constants/checkinConfig.js')
@@ -218,6 +219,36 @@ const checks = [
     assert.equal(state.formData.address, '')
     assert.equal(state.formData.deposit, '')
     assert.equal(state.formData.monthlyRent, '')
+  }],
+  ['证据包从合同填充：不把章节号误识别为月租', () => {
+    const text = [
+      '房屋租赁合同',
+      '出租方（甲方）：恒业房产管理有限公司',
+      '承租方（乙方）：张小明',
+      '一、房屋基本信息',
+      '甲方同意将坐落于阳光花园3栋2单元601室的房屋出租给乙方使用，建筑面积88平方米。',
+      '二、租金及押金',
+      '租金为人民币2800元/月，押金为人民币5600元。',
+    ].join('\n')
+    const parsed = contractBasicInfo.parseBasicInfoFromContract(text)
+    assert.equal(parsed.address, '阳光花园3栋2单元601室')
+    assert.equal(parsed.deposit, '5600')
+    assert.equal(parsed.monthlyRent, '2800')
+    assert.notEqual(parsed.monthlyRent, '1')
+  }],
+  ['证据包从合同填充：AI JSON 可覆盖基础与交接信息', () => {
+    const parsed = contractBasicInfo.parseBasicInfoFromAiReply('AI 返回：{"address":"阳光花园3栋2单元601室","deposit":"5600元","monthlyRent":"2800元/月"}')
+    assert.equal(parsed.address, '阳光花园3栋2单元601室')
+    assert.equal(parsed.deposit, '5600')
+    assert.equal(parsed.monthlyRent, '2800')
+    const richer = contractBasicInfo.parseBasicInfoFromAiReply('AI 返回：{"landlordName":"王先生","landlordPhone":"13800138000","checkinDate":"2026-08-01","checkoutDate":"2027-07-31","handoverDate":"2027-07-31","handoverTime":"14:30"}')
+    assert.equal(richer.landlordName, '王先生')
+    assert.equal(richer.landlordPhone, '13800138000')
+    assert.equal(richer.checkinDate, '2026-08-01')
+    assert.equal(richer.checkoutDate, '2027-07-31')
+    assert.equal(richer.handoverDate, '2027-07-31')
+    assert.equal(richer.handoverTime, '14:30')
+    assert.match(contractBasicInfo.createBasicInfoAiPrompt('租金为人民币2800元/月'), /landlordName/)
   }],
   ['验房模型统一与旧数据迁移', () => {
     const oldState = { livingRoom: { walls: { status: 'defect', photos: Array.from({ length: 8 }, (_, i) => `photo-${i}`) } } }
@@ -2556,6 +2587,7 @@ const checks = [
     const contractStyles = fs.readFileSync(new URL('../miniapp/src/pages/contract/index.css', import.meta.url), 'utf8')
     const evidenceSource = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.jsx', import.meta.url), 'utf8')
     const appStyles = fs.readFileSync(new URL('../miniapp/src/app.css', import.meta.url), 'utf8')
+    const aiStyles = fs.readFileSync(new URL('../miniapp/src/pages/ai/index.css', import.meta.url), 'utf8')
     const evidenceStyles = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.css', import.meta.url), 'utf8')
     assert.match(aiSource, /我会优先联网回答；不可用时自动切换本地分析/)
     assert.match(aiSource, /meta: '租房助手'/)
@@ -2584,6 +2616,7 @@ const checks = [
     assert.match(contractStyles, /\.finding-actions\s*{[^}]*flex-wrap:\s*wrap;/s)
     assert.match(appStyles, /touch-action:\s*manipulation/)
     assert.match(appStyles, /safe-area-inset-bottom/)
+    assert.match(aiStyles, /padding:\s*24px 24px calc\(16px \+ env\(safe-area-inset-bottom\)\)/)
     assert.doesNotMatch(appStyles, /\.sticky-actions\s*{[^}]*position:\s*sticky/s)
     assert.match(evidenceStyles, /overscroll-behavior:\s*contain/)
     assert.match(evidenceSource, /showImportFailure/)
@@ -3399,6 +3432,16 @@ const checks = [
     assert.match(homeCss, /\.house-row/)
   }],
 
+  ['多房源档案：首页切换房源会重置押金结算助手', async () => {
+    const fs = await import('node:fs')
+    const homeJsx = fs.readFileSync(new URL('../miniapp/src/pages/index/index.jsx', import.meta.url), 'utf8')
+    assert.match(homeJsx, /const resetDepositTool = \(\) => \{[\s\S]*setDeposit\(defaultDeposit\)[\s\S]*setShowDepositDetails\(false\)/)
+    assert.match(homeJsx, /handleCreateHouse[\s\S]*resetDepositTool\(\)[\s\S]*已创建并切换/)
+    assert.match(homeJsx, /handleSwitchHouse[\s\S]*resetDepositTool\(\)[\s\S]*已切换到/)
+    assert.match(homeJsx, /handleDeleteHouse[\s\S]*resetDepositTool\(\)[\s\S]*已删除/)
+    assert.match(homeJsx, /handleClearCurrentHouse[\s\S]*resetDepositTool\(\)[\s\S]*当前房源已清空/)
+  }],
+
   // ============================================================
   // houseProfile storage 写入失败保护 + 切换标志
   // ============================================================
@@ -3873,13 +3916,19 @@ const checks = [
     assert.ok(result.skippedExports >= 1)
   }],
 
-  ['H2：合同页隐藏时取消 AI 复核和远程导入', async () => {
+  ['H2：合同页隐藏时保留 AI 复核，只取消远程导入', async () => {
     const fs = await import('node:fs')
     const source = fs.readFileSync(new URL('../miniapp/src/pages/contract/index.jsx', import.meta.url), 'utf8')
 
-    assert.match(source, /componentDidHide\s*\(\)\s*{[\s\S]*?this\.activeImportTask\?\.cancel\?\.\(\)/)
-    assert.match(source, /componentDidHide\s*\(\)\s*{[\s\S]*?this\.importRun\s*\+=\s*1/)
-    assert.match(source, /componentDidHide\s*\(\)\s*{[\s\S]*?this\.cancelActiveReview\(\)/)
+    const didHideStart = source.indexOf('  componentDidHide()')
+    const didHideEnd = source.indexOf('  componentWillUnmount()', didHideStart)
+    assert.ok(didHideStart >= 0 && didHideEnd > didHideStart, '应能定位 componentDidHide 方法体')
+    const didHide = source.slice(didHideStart, didHideEnd)
+    assert.match(didHide, /this\.activeImportTask\?\.cancel\?\.\(\)/)
+    assert.match(didHide, /this\.importRun\s*\+=\s*1/)
+    assert.doesNotMatch(didHide, /cancelActiveReview/)
+    assert.match(source, /const reviewHouseId = getActiveHouseId\(\)/)
+    assert.match(source, /const isCurrentReviewRun = \(\) => run === this\.reviewRun && getActiveHouseId\(\) === reviewHouseId/)
     assert.match(source, /runRemoteImport[\s\S]*?const run = \+\+this\.importRun/)
     assert.match(source, /runRemoteImport[\s\S]*?run !== this\.importRun \|\| this\.activeImportTask !== task/)
   }],
@@ -4072,6 +4121,30 @@ const checks = [
     // UI 应在 matchStatus === unsatisfied 时无论 hasProfile 都显示真实状态
     assert.match(source, /hasProfile \|\| policy\.matchStatus === 'unsatisfied'/,
       '停止政策（unsatisfied）应在无 profile 时也显示真实状态，而非"填写资料后判断"')
+  }],
+
+  ['M6b：补贴页优先提示城市冲突、状态和下一步建议', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.jsx', import.meta.url), 'utf8')
+    const styles = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.css', import.meta.url), 'utf8')
+
+    for (const text of ['识别到城市不一致', '改为', '重新匹配', '保留', '修改个人情况', '参考匹配度', '下一步建议', '生成申请建议']) {
+      assert.ok(source.includes(text), `补贴页应包含冲突处理文案：${text}`)
+    }
+    assert.match(source, /detectProfileCities\(profile\)/, '应从个人情况中识别城市')
+    assert.match(source, /heroPrimary/, '顶部结果应以状态而非分数为主')
+    assert.match(styles, /\.city-conflict-card\s*{/, '城市冲突提示应有独立样式')
+  }],
+
+  ['M6c：补贴材料标签不再用绿色对勾冒充已完成', async () => {
+    const fs = await import('node:fs')
+    const source = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.jsx', import.meta.url), 'utf8')
+    const styles = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.css', import.meta.url), 'utf8')
+
+    assert.ok(source.includes('需准备材料'), '材料区应明确是待准备材料')
+    assert.doesNotMatch(source, /policy\.materials\.slice\(0, 6\)\.map\(\(item\) => <Text key=\{item\}>✓ \{item\}<\/Text>\)/,
+      '材料项不应统一显示绿色对勾')
+    assert.match(styles, /\.materials \.materials-title\s*{/, '材料标题应从普通标签中区分出来')
   }],
 
   ['M7：parseMoney 异常输入不崩溃且返回合理值', async () => {

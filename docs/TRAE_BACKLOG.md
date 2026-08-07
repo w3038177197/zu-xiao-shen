@@ -80,18 +80,7 @@ npm run check:miniapp-deployment
 
 要求：只做小修，不做全站视觉重构；每次修改后跑 npm run smoke:miniapp 和 cd miniapp && npm run build:weapp。
 
-### 6. AI 真实回答 golden cases
-
-目标：补足 RAG 检索通过但最终回答质量不可见的问题。
-
-要做：
-
-- 增加少量真实租房问题样本。
-- 验证回答不能承诺法律结论、不能暗示官方资格已确认、不能发送合同全文。
-- 覆盖租客视角和房东视角。
-- 优先复用现有 scripts/test-miniapp-ai.mjs，不引入新依赖。
-
-### 7. 发布文档最终清理
+### 6. 发布文档最终清理
 
 目标：让 README / HANDOFF / miniapp docs 与当前行为一致。
 
@@ -106,6 +95,7 @@ npm run check:miniapp-deployment
 
 - 服务端 HTTP 集成测试。
 - 服务端结构化日志和脱敏检查。
+- AI 真实回答 golden cases：已在 `scripts/test-miniapp-ai.mjs` 覆盖租客/房东视角、押金争议、补贴资格、验房留证、边界提示和隐私负载。
 - 补贴政策人工复核报告。
 - 整包备份与恢复。
 - 官方租房知识库和 RAG 评测扩充。

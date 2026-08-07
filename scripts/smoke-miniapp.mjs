@@ -106,6 +106,8 @@ check('补贴匹配：城市选择、个人情况输入、匹配结果、本地�
   assert.match(subsidy, /本地降级/, '联网失败时应显示本地降级')
   assert.match(subsidy, /重试联网/, '应有重试联网入口')
   assert.match(subsidy, /请填写真实情况后再查看匹配判断/, '空数据应提示填写真实情况')
+  assert.match(subsidy, /识别到城市不一致/, '城市冲突应前置提示')
+  assert.match(subsidy, /生成申请建议/, 'AI 入口应贴近申请决策')
 })
 
 // ---------- 6. AI 本地降级 ----------

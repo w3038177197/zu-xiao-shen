@@ -183,6 +183,12 @@
   line-height: 58px;
 }
 
+.btn-autofill[disabled] {
+  color: #8d9a92;
+  border-color: #e1e6e2;
+  background: #f5f7f5;
+}
+
 .btn-autofill::after {
   border: 0;
 }

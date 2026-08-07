@@ -271,16 +271,18 @@ function appendRevisionClause(text, item) {
 
 export function applyRevisionItem(text, item, options = {}) {
   const draft = String(text ?? '')
+  const replacement = item.replacement || item.suggestion || ''
+  if (!replacement) return { text: draft, mode: 'unchanged' }
   const rawCandidates = [item.replaceFrom, item.evidence].filter(Boolean)
   const meaningfulCandidates = rawCandidates.filter((candidate) => normalizeForLooseMatch(candidate).length >= 12)
 
-  if (item.replacement && draft.includes(item.replacement)) {
+  if (draft.includes(replacement)) {
     return { text: draft, mode: 'unchanged' }
   }
 
   for (const candidate of meaningfulCandidates) {
     if (draft.includes(candidate)) {
-      return { text: draft.replace(candidate, item.replacement), mode: 'exact' }
+      return { text: draft.replace(candidate, replacement), mode: 'exact' }
     }
   }
 
@@ -288,7 +290,7 @@ export function applyRevisionItem(text, item, options = {}) {
     const range = findLooseTextRange(draft, candidate)
     if (range) {
       return {
-        text: `${draft.slice(0, range.start)}${item.replacement}${draft.slice(range.end)}`,
+        text: `${draft.slice(0, range.start)}${replacement}${draft.slice(range.end)}`,
         mode: 'loose',
       }
     }
@@ -297,13 +299,13 @@ export function applyRevisionItem(text, item, options = {}) {
   const currentClause = Array.isArray(item.hits) ? extractClauseAroundKeyword(draft, item.hits) : ''
   if (currentClause && !rawCandidates.includes(currentClause)) {
     if (draft.includes(currentClause)) {
-      return { text: draft.replace(currentClause, item.replacement), mode: 'clause' }
+      return { text: draft.replace(currentClause, replacement), mode: 'clause' }
     }
 
     const range = findLooseTextRange(draft, currentClause)
     if (range) {
       return {
-        text: `${draft.slice(0, range.start)}${item.replacement}${draft.slice(range.end)}`,
+        text: `${draft.slice(0, range.start)}${replacement}${draft.slice(range.end)}`,
         mode: 'clause',
       }
     }
@@ -311,7 +313,7 @@ export function applyRevisionItem(text, item, options = {}) {
 
   for (const candidate of rawCandidates) {
     if (draft.includes(candidate)) {
-      return { text: draft.replace(candidate, item.replacement), mode: 'exact' }
+      return { text: draft.replace(candidate, replacement), mode: 'exact' }
     }
   }
 
