@@ -936,6 +936,7 @@ export default class EvidencePack extends Component {
             </View>
           </View>
         ) : null}
+        <View className='scroll-bottom-spacer' />
       </ScrollView>
     )
   }

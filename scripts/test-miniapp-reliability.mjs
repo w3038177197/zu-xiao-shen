@@ -30,7 +30,7 @@ const [{
   hasModuleReference,
   addModuleReference,
   importModuleReferences,
-}, { createDebouncedSaver }, localDataManager, businessReportExport, revisedContractExport, subsidyData, clipboard, attachmentUtils, textFileExport, evidencePackageExport, evidenceImport, contractReview, demoContractsData, reviewHistory, workflowContext, aiAssistant, contractTextImport, privacyAuth, contractBasicInfo] = await Promise.all([
+}, { createDebouncedSaver }, localDataManager, businessReportExport, revisedContractExport, subsidyData, clipboard, attachmentUtils, textFileExport, evidencePackageExport, evidenceImport, contractReview, demoContractsData, reviewHistory, workflowContext, aiAssistant, contractTextImport, privacyAuth, contractBasicInfo, fileSystem] = await Promise.all([
   import('../miniapp/src/features/checkinInspection.js'),
   import('../miniapp/src/features/evidencePack.js'),
   import('../miniapp/src/utils/debounceSave.js'),
@@ -51,6 +51,7 @@ const [{
   import('../miniapp/src/utils/contractTextImport.js'),
   import('../miniapp/src/utils/privacyAuth.js'),
   import('../miniapp/src/features/contractBasicInfo.js'),
+  import('../miniapp/src/utils/fileSystem.js'),
 ])
 const { STORAGE_KEYS } = await import('../miniapp/src/constants/appConfig.js')
 const { getCheckinItems, getCheckinRooms } = await import('../miniapp/src/constants/checkinConfig.js')
@@ -214,6 +215,30 @@ Taro.removeSavedFile = async ({ filePath }) => {
 }
 
 const checks = [
+  ['文件系统兼容层优先使用 FileSystemManager，并保留旧 API 回退', async () => {
+    const originalManager = Taro.getFileSystemManager
+    const originalGetFileInfo = Taro.getFileInfo
+    let nativePath = ''
+    try {
+      Taro.getFileSystemManager = () => ({
+        getFileInfo: ({ filePath, success }) => {
+          nativePath = filePath
+          success({ size: 2048 })
+        },
+      })
+      Taro.getFileInfo = async () => { throw new Error('不应调用旧 API') }
+      assert.deepEqual(await fileSystem.getFileInfo('wxfile://native/test.jpg'), { size: 2048 })
+      assert.equal(nativePath, 'wxfile://native/test.jpg')
+
+      Taro.getFileSystemManager = () => ({})
+      Taro.getFileInfo = async ({ filePath }) => ({ size: filePath.length })
+      assert.deepEqual(await fileSystem.getFileInfo('legacy'), { size: 6 })
+    } finally {
+      Taro.getFileSystemManager = originalManager
+      Taro.getFileInfo = originalGetFileInfo
+    }
+  }],
+
   ['证据包默认状态不再预填演示地址和金额', () => {
     const state = createDefaultEvidencePackState()
     assert.equal(state.formData.address, '')
@@ -2585,7 +2610,13 @@ const checks = [
     const remoteRequestSource = fs.readFileSync(new URL('../miniapp/src/utils/remoteAiRequest.js', import.meta.url), 'utf8')
     const contractSource = fs.readFileSync(new URL('../miniapp/src/pages/contract/index.jsx', import.meta.url), 'utf8')
     const contractStyles = fs.readFileSync(new URL('../miniapp/src/pages/contract/index.css', import.meta.url), 'utf8')
+    const checkinSource = fs.readFileSync(new URL('../miniapp/src/pages/checkin/index.jsx', import.meta.url), 'utf8')
+    const checkinStyles = fs.readFileSync(new URL('../miniapp/src/pages/checkin/index.css', import.meta.url), 'utf8')
     const evidenceSource = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.jsx', import.meta.url), 'utf8')
+    const homeSource = fs.readFileSync(new URL('../miniapp/src/pages/index/index.jsx', import.meta.url), 'utf8')
+    const homeStyles = fs.readFileSync(new URL('../miniapp/src/pages/index/index.css', import.meta.url), 'utf8')
+    const subsidySource = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.jsx', import.meta.url), 'utf8')
+    const subsidyStyles = fs.readFileSync(new URL('../miniapp/src/pages/subsidy/index.css', import.meta.url), 'utf8')
     const appStyles = fs.readFileSync(new URL('../miniapp/src/app.css', import.meta.url), 'utf8')
     const aiStyles = fs.readFileSync(new URL('../miniapp/src/pages/ai/index.css', import.meta.url), 'utf8')
     const evidenceStyles = fs.readFileSync(new URL('../miniapp/src/pages/evidence/index.css', import.meta.url), 'utf8')
@@ -2606,8 +2637,14 @@ const checks = [
     assert.doesNotMatch(contractSource, /导出审查报告 TXT|复制审查报告|导出反馈 JSON|textFileExport/)
     assert.match(contractSource, /evidence-location'>\{`\$\{finding\.evidenceLocation\.clause/)
     assert.doesNotMatch(contractSource, />第\$\{finding\.evidenceLocation\.line\}/)
-    assert.doesNotMatch(contractSource, /expandedIndex:\s*0/)
-    assert.match(contractSource, /expandedIndex:\s*expanded \? -1 : index/)
+    assert.doesNotMatch(contractSource, /expandedIndex/)
+    assert.match(contractSource, /const expanded = expandedFindingId === findingId/)
+    assert.match(contractSource, /expandedFindingId:\s*expanded \? '' : findingId/)
+    assert.match(contractSource, /expandedFindingId:\s*''/)
+    assert.match(contractSource, /\.\.\.localResult,\s*isAnalyzing:\s*true,\s*analysisStage:\s*'ai'/s)
+    assert.match(contractSource, /disabled=\{isAnalyzing \|\| adopted\}/)
+    assert.match(contractSource, /disabled=\{isAnalyzing \|\| !pendingAdoptableCount\}/)
+    assert.match(contractSource, /当前结果可先展开查看/)
     assert.match(contractSource, /operationNoticeIsError/)
     assert.match(contractSource, /导出修订合同/)
     assert.match(contractSource, /exportRevisedContract/)
@@ -2616,6 +2653,13 @@ const checks = [
     assert.match(contractStyles, /\.finding-actions\s*{[^}]*flex-wrap:\s*wrap;/s)
     assert.match(appStyles, /touch-action:\s*manipulation/)
     assert.match(appStyles, /safe-area-inset-bottom/)
+    assert.doesNotMatch(homeStyles, /\.home-page\s*\{[^}]*\bpadding(?:-bottom)?:/s)
+    assert.doesNotMatch(contractStyles, /\.contract-page\s*\{[^}]*\bpadding(?:-bottom)?:/s)
+    assert.doesNotMatch(checkinStyles, /\.checkin-page\s*\{[^}]*\bpadding(?:-bottom)?:/s)
+    assert.doesNotMatch(evidenceStyles, /\.evidence-page\s*\{[^}]*\bpadding(?:-bottom)?:/s)
+    assert.doesNotMatch(subsidyStyles, /\.subsidy-page\s*\{[^}]*\bpadding(?:-bottom)?:/s)
+    assert.match(homeSource, /className='home-page-content'/)
+    for (const source of [contractSource, checkinSource, evidenceSource, subsidySource]) assert.match(source, /className='scroll-bottom-spacer'/)
     assert.match(aiStyles, /padding:\s*24px 24px calc\(16px \+ env\(safe-area-inset-bottom\)\)/)
     assert.doesNotMatch(appStyles, /\.sticky-actions\s*{[^}]*position:\s*sticky/s)
     assert.match(evidenceStyles, /overscroll-behavior:\s*contain/)

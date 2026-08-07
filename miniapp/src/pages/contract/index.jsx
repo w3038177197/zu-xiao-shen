@@ -77,7 +77,7 @@ export default class ContractReview extends Component {
     analysisStage: 'idle',
     isImporting: false,
     importProgress: null,
-    expandedIndex: -1,
+    expandedFindingId: '',
     showHistory: false,
     operationNotice: '',
     lastImportSource: '',
@@ -209,7 +209,7 @@ export default class ContractReview extends Component {
       profile: { ...DEFAULT_PROFILE, ...(snap.profile || {}) },
       isAnalyzing: false,
       analysisStage: 'idle',
-      expandedIndex: -1,
+      expandedFindingId: '',
     })
     Taro.showToast({ title: `已恢复 ${entry.time} 的审查`, icon: 'none' })
   }
@@ -278,7 +278,7 @@ export default class ContractReview extends Component {
         analysisStage: 'idle',
         operationNotice,
         lastAnalysisFailed: false,
-        expandedIndex: -1,
+        expandedFindingId: '',
       })
       const historyStatus = this.pushHistory(result)
       const title = historyStatus === 'failed'
@@ -296,9 +296,15 @@ export default class ContractReview extends Component {
       }
       if (!isCurrentReviewRun()) return
       const payload = buildRemoteContractReviewPayload({ contractText, profile: localResult.activeProfile, localFindings: localResult.findings })
+      this.setState({
+        ...localResult,
+        isAnalyzing: true,
+        analysisStage: 'ai',
+        operationNotice: '本地规则审查已完成，AI 正在继续核验；当前结果可先展开查看。',
+        expandedFindingId: '',
+      })
       const request = startRemoteContractReviewRequest(payload)
       this.activeReviewTask = request
-      this.setState({ analysisStage: 'ai' })
       const remoteResult = await request.promise
       if (!isCurrentReviewRun() || this.activeReviewTask !== request) return
       const findings = mergeFindings(localResult.findings, remoteResult.findings)
@@ -463,10 +469,10 @@ export default class ContractReview extends Component {
   }
 
   handleAdopt = (finding) => {
-    if (!finding.replacement) return
+    if (!finding.replacement || this.state.isAnalyzing) return
     this.setState((previous) => {
       const adoptedItems = mergeRevisionItems(previous.adoptedItems, [finding])
-      return { adoptedItems, revisedDraft: createRevisedContractDraft(previous.contractText, adoptedItems) }
+      return { adoptedItems, revisedDraft: createRevisedContractDraft(previous.contractText, adoptedItems), expandedFindingId: '' }
     })
     Taro.showToast({ title: '已采纳，修订稿已更新', icon: 'success' })
   }
@@ -478,6 +484,7 @@ export default class ContractReview extends Component {
   }
 
   handleAdoptAll = () => {
+    if (this.state.isAnalyzing) return
     const adoptedIds = new Set(this.state.adoptedItems.map((item) => item.id))
     const pending = this.state.findings.filter((finding) => finding.replacement && !adoptedIds.has(finding.id))
     if (!pending.length) {
@@ -486,7 +493,7 @@ export default class ContractReview extends Component {
     }
     this.setState((previous) => {
       const adoptedItems = mergeRevisionItems(previous.adoptedItems, pending)
-      return { adoptedItems, revisedDraft: createRevisedContractDraft(previous.contractText, adoptedItems) }
+      return { adoptedItems, revisedDraft: createRevisedContractDraft(previous.contractText, adoptedItems), expandedFindingId: '' }
     })
     Taro.showToast({ title: `已采纳 ${pending.length} 条建议`, icon: 'success' })
   }
@@ -538,7 +545,7 @@ export default class ContractReview extends Component {
       success: ({ confirm }) => {
         if (!confirm) return
         this.draftSaver.cancel()
-        this.updateContract('', { expandedIndex: -1, operationNotice: '', lastImportSource: '' })
+        this.updateContract('', { expandedFindingId: '', operationNotice: '', lastImportSource: '' })
         this.draftSaver.flush()
       },
     })
@@ -557,7 +564,7 @@ export default class ContractReview extends Component {
   }
 
   render() {
-    const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, analysisStage, isImporting, importProgress, expandedIndex, showHistory, operationNotice, lastImportSource, lastAnalysisFailed, isExportingRevised } = this.state
+    const { contractText, findings, summary, dimensions, adoptedItems, revisedDraft, profile, history, isAnalyzing, analysisStage, isImporting, importProgress, expandedFindingId, showHistory, operationNotice, lastImportSource, lastAnalysisFailed, isExportingRevised } = this.state
     const adoptedIds = new Set(adoptedItems.map((item) => item.id))
     const pendingFindings = findings.filter((finding) => !adoptedIds.has(finding.id))
     const activeSummary = adoptedItems.length ? getRiskSummary(pendingFindings) : summary
@@ -715,7 +722,7 @@ export default class ContractReview extends Component {
                 <Text className='eyebrow'>逐条建议</Text>
                 <Text className='section-title'>修改与沟通方案</Text>
               </View>
-              <Button className='btn-secondary btn-adopt-all' disabled={!pendingAdoptableCount} onClick={this.handleAdoptAll}>全部采纳</Button>
+              <Button className='btn-secondary btn-adopt-all' disabled={isAnalyzing || !pendingAdoptableCount} onClick={this.handleAdoptAll}>全部采纳</Button>
             </View>
             {groupedFindings.map((group) => (
               <View className='finding-group' key={group.title}>
@@ -724,11 +731,12 @@ export default class ContractReview extends Component {
                   <Text>{group.items.length} 条</Text>
                 </View>
                 {group.items.map(({ finding, index }) => {
-                  const expanded = expandedIndex === index
+                  const findingId = finding.id || `${finding.title}-${finding.evidence || index}`
+                  const expanded = expandedFindingId === findingId
                   const adopted = adoptedItems.some((item) => item.id === finding.id)
                   return (
-                    <View key={finding.id || index} className={`finding-card risk-${finding.level}`}>
-                  <Button className='finding-header' aria-expanded={expanded} onClick={() => this.setState({ expandedIndex: expanded ? -1 : index })}>
+                    <View key={findingId} className={`finding-card risk-${finding.level}`}>
+                  <Button className='finding-header' aria-expanded={expanded} onClick={() => this.setState({ expandedFindingId: expanded ? '' : findingId })}>
                     <View>
                       <Text className='finding-number'>{String(index + 1).padStart(2, '0')}</Text>
                       <Text className='finding-title'>{finding.title}</Text>
@@ -777,7 +785,7 @@ export default class ContractReview extends Component {
                         </View>
                       ) : null}
                       <View className='finding-actions'>
-                        {finding.replacement ? <Button className='btn-primary' disabled={adopted} onClick={() => this.handleAdopt(finding)}>{adopted ? '已采纳' : '采纳并改写'}</Button> : null}
+                        {finding.replacement ? <Button className='btn-primary' disabled={isAnalyzing || adopted} onClick={() => this.handleAdopt(finding)}>{adopted ? '已采纳' : isAnalyzing ? 'AI 复核中' : '采纳并改写'}</Button> : null}
                         {finding.negotiation ? <Button className='btn-secondary' onClick={() => this.copyText(finding.negotiation, '话术已复制')}>复制话术</Button> : null}
                         <Button className='btn-ghost feedback-button' onClick={() => this.handleFindingFeedback(finding, 'accurate')}>识别准确</Button>
                         <Button className='btn-ghost feedback-button' onClick={() => this.handleFindingFeedback(finding, 'review')}>需要复核</Button>
@@ -846,6 +854,7 @@ export default class ContractReview extends Component {
         ) : null}
 
         <Text className='legal-note'>免责声明：风险提示仅供租房风险自查参考，不构成法律意见或维权结果承诺。</Text>
+        <View className='scroll-bottom-spacer' />
       </ScrollView>
     )
   }

@@ -1,4 +1,5 @@
 import Taro from '@tarojs/taro'
+import { getFileInfo, removeSavedFile, saveFile } from './fileSystem.js'
 
 // 附件大小上限 10MB，与小程序 chooseMessageFile 常用限制一致
 export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
@@ -35,7 +36,7 @@ export async function persistAttachment(tempFilePath, source, originName = '', d
     throw new Error('文件超过 10MB，请选择更小的文件')
   }
   try {
-    const info = await Taro.getFileInfo({ filePath: tempFilePath })
+    const info = await getFileInfo(tempFilePath)
     size = Math.max(size, Number(info.size) || 0)
   } catch {
     // getFileInfo 在个别机型或临时路径上会失败，此时允许 size 为 0 继续保存
@@ -45,9 +46,9 @@ export async function persistAttachment(tempFilePath, source, originName = '', d
     throw new Error('文件超过 10MB，请选择更小的文件')
   }
 
-  const { savedFilePath } = await Taro.saveFile({ tempFilePath })
+  const { savedFilePath } = await saveFile(tempFilePath)
   try {
-    const savedInfo = await Taro.getFileInfo({ filePath: savedFilePath })
+    const savedInfo = await getFileInfo(savedFilePath)
     size = Math.max(size, Number(savedInfo.size) || 0)
     if (size > ATTACHMENT_MAX_BYTES) {
       await removePersistedFile(savedFilePath)
@@ -72,7 +73,7 @@ export async function persistAttachment(tempFilePath, source, originName = '', d
 export async function removePersistedFile(localPath) {
   if (!localPath) return { ok: true, reason: 'empty' }
   try {
-    await Taro.removeSavedFile({ filePath: localPath })
+    await removeSavedFile(localPath)
     return { ok: true, reason: 'removed' }
   } catch (error) {
     const message = String(error?.errMsg || error?.message || '')

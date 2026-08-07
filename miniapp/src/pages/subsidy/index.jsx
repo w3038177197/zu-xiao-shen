@@ -384,6 +384,7 @@ export default function SubsidyMatcher() {
         ))}
         <Text className='legal-note'>提示：本页只提供官方政策线索，不构成申领资格确认。提交申请前应以官方页面和经办部门最新口径为准。</Text>
       </View>
+      <View className='scroll-bottom-spacer' />
     </ScrollView>
   )
 }

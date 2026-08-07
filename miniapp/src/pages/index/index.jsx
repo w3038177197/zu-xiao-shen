@@ -550,6 +550,7 @@ export default function Index() {
 
   return (
     <ScrollView className='home-page' scrollY enhanced showScrollbar={false}>
+      <View className='home-page-content'>
       <View className='home-header'>
         <View className='home-brand'>
           <Text className='home-brand-name'>租小审</Text>
@@ -802,6 +803,7 @@ export default function Index() {
       </View>
 
       <Text className='legal-note'>风险提示仅供租房自查参考，不构成法律意见。</Text>
+      </View>
     </ScrollView>
   )
 }

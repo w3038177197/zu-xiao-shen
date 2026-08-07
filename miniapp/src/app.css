@@ -30,6 +30,11 @@ button::after {
   color: #1a211c;
 }
 
+.scroll-bottom-spacer {
+  height: calc(40px + env(safe-area-inset-bottom));
+  flex: 0 0 auto;
+}
+
 /* 卡片 */
 .card {
   margin: 20px 24px 0;

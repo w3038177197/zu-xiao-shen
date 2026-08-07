@@ -4,6 +4,7 @@ import { REMOTE_AI_CONFIG } from '../constants/appConfig.js'
 import { getCapabilityFailure } from './privacyAuth.js'
 import { ensureMiniappSession } from './remoteAiRequest.js'
 import { isCloudContainerAvailable, startCloudContainerRequest } from './cloudContainer.js'
+import { getFileInfo } from './fileSystem.js'
 
 export const CONTRACT_TEXT_EXTENSIONS = ['txt', 'md']
 export const CONTRACT_DOCUMENT_EXTENSIONS = [...CONTRACT_TEXT_EXTENSIONS, 'docx', 'pdf']
@@ -113,7 +114,7 @@ export async function chooseContractImage(sourceType = 'album') {
     try {
       const compressed = await Taro.compressImage({ src: file.path, quality })
       if (!compressed?.tempFilePath) break
-      const info = await Taro.getFileInfo({ filePath: compressed.tempFilePath })
+      const info = await getFileInfo(compressed.tempFilePath)
       file = validateContractFile({
         ...file,
         path: compressed.tempFilePath,

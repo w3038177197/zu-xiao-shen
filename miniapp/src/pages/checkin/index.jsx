@@ -30,6 +30,7 @@ import {
   replaceCheckinStateAndRemovePhotos,
 } from '../../utils/checkinPhotoTransactions'
 import { hasHouseSwitchedSince } from '../../features/houseProfile'
+import { getFileInfo, removeSavedFile, saveFile } from '../../utils/fileSystem'
 import './index.css'
 
 export default class CheckinInspection extends Component {
@@ -117,7 +118,7 @@ export default class CheckinInspection extends Component {
   savePhotoFile = async (tempPath) => {
     try {
       let sourcePath = tempPath
-      const fileInfo = await Taro.getFileInfo({ filePath: tempPath }).catch(() => null)
+      const fileInfo = await getFileInfo(tempPath).catch(() => null)
       if (fileInfo?.size > CHECKIN_MAX_PHOTO_BYTES) {
         const compressed = await Taro.compressImage({
           src: tempPath,
@@ -128,12 +129,12 @@ export default class CheckinInspection extends Component {
         if (compressed?.tempFilePath) sourcePath = compressed.tempFilePath
       }
 
-      const finalInfo = await Taro.getFileInfo({ filePath: sourcePath }).catch(() => null)
+      const finalInfo = await getFileInfo(sourcePath).catch(() => null)
       if (finalInfo?.size > CHECKIN_MAX_PHOTO_BYTES) return null
-      const saveRes = await Taro.saveFile({ tempFilePath: sourcePath })
-      const savedInfo = await Taro.getFileInfo({ filePath: saveRes.savedFilePath }).catch(() => null)
+      const saveRes = await saveFile(sourcePath)
+      const savedInfo = await getFileInfo(saveRes.savedFilePath).catch(() => null)
       if (savedInfo?.size > CHECKIN_MAX_PHOTO_BYTES) {
-        Taro.removeSavedFile({ filePath: saveRes.savedFilePath }).catch(() => {})
+        removeSavedFile(saveRes.savedFilePath).catch(() => {})
         return null
       }
       return saveRes.savedFilePath
@@ -592,6 +593,7 @@ export default class CheckinInspection extends Component {
             </View>
           </View>
         ) : null}
+        <View className='scroll-bottom-spacer' />
       </ScrollView>
     )
   }

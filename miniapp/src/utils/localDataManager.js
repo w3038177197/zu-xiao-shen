@@ -1,6 +1,7 @@
 import Taro from '@tarojs/taro'
 import { STORAGE_KEYS } from '../constants/appConfig.js'
 import { createZipArchive } from './evidencePackageExport.js'
+import { removeSavedFile, saveFile } from './fileSystem.js'
 import {
   collectAllHouseSnapshots,
   removeAllHouseStorage,
@@ -223,7 +224,7 @@ export async function clearLocalData({ removePhotos = true, keepExports = true }
       const { fileList = [] } = await getSavedFileList()
       await Promise.all(fileList.map(async ({ filePath }) => {
         try {
-          await Taro.removeSavedFile({ filePath })
+          await removeSavedFile(filePath)
           removedFiles += 1
         } catch (error) {
           errors.push(error)
@@ -361,7 +362,7 @@ export async function cleanupUnreferencedSavedFiles() {
     const unreferencedFiles = fileList.filter((file) => !referencedPaths.has(file.filePath))
     await Promise.all(unreferencedFiles.map(async (file) => {
       try {
-        await Taro.removeSavedFile({ filePath: file.filePath })
+        await removeSavedFile(file.filePath)
         removedFiles += 1
         removedBytes += Number(file.size) || 0
       } catch (error) {
@@ -752,8 +753,7 @@ async function saveRestoredFile(id, bytes) {
   const base = Taro.env?.USER_DATA_PATH || 'wxfile://userdata'
   const tempPath = `${base}/.zu-xiao-shen-restore-${id}`
   await writeFileBytes(tempPath, bytes)
-  if (typeof Taro.saveFile !== 'function') return tempPath
-  const result = await Taro.saveFile({ tempFilePath: tempPath })
+  const result = await saveFile(tempPath)
   try { Taro.getFileSystemManager?.().unlink?.({ filePath: tempPath, success: () => {}, fail: () => {} }) } catch {}
   return result.savedFilePath || tempPath
 }
@@ -788,7 +788,7 @@ export async function restoreBackupArchive(bytes) {
     return { ...result, backupFormat: BACKUP_FORMAT, restoredFiles: written.length, missingFiles: (manifest.skipped || []).map((item) => item.fileName || item.id) }
   } catch (error) {
     await Promise.all(written.map(async (filePath) => {
-      try { await Taro.removeSavedFile?.({ filePath }) } catch {}
+      try { await removeSavedFile(filePath) } catch {}
     }))
     return { ok: false, rolledBack: true, missingFiles: [], error: error.message || '整包恢复失败' }
   }

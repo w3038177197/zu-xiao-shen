@@ -1,9 +1,13 @@
 .home-page {
   min-height: 100vh;
   box-sizing: border-box;
-  padding: 24px 24px 48px;
   background: #f6f7f6;
   color: #1a211c;
+}
+
+.home-page-content {
+  min-height: 100vh;
+  padding: 24px 24px calc(48px + env(safe-area-inset-bottom));
 }
 
 .home-page .card {
