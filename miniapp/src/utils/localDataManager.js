@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro'
 import { STORAGE_KEYS } from '../constants/appConfig.js'
-import { createZipArchive } from './evidencePackageExport.js'
+import { createZipArchiveAsync } from './evidencePackageExport.js'
 import { removeSavedFile, saveFile } from './fileSystem.js'
 import {
   collectAllHouseSnapshots,
@@ -724,7 +724,7 @@ export async function buildLocalBackupArchive({ format = 'docx' } = {}) {
   if (format === 'docx') {
     buildDocxEntries(included, skipped, bytesById, transformed.data).entries.forEach((entry) => addEntry(entry.name, entry.data))
   }
-  return { bytes: createZipArchive(entries), included, skipped, totalBytes, format }
+  return { bytes: await createZipArchiveAsync(entries), included, skipped, totalBytes, format }
 }
 
 export function parseBackupPackageSummary(bytes) {

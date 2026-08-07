@@ -76,17 +76,23 @@ function summarizeEvidenceGroups(state) {
   })
 }
 
+let cachedSubsidySummary = null
+
 function summarizeSubsidy(savedState) {
   const city = typeof savedState?.city === 'string' ? savedState.city.trim() : ''
   const profile = typeof savedState?.profile === 'string' ? savedState.profile.trim() : ''
+  const cacheKey = `${city}\n${profile}`
+  if (cachedSubsidySummary?.key === cacheKey) return cachedSubsidySummary.value
   if (!city && !profile) {
-    return { hasData: false, city: '', profile: '', total: 0, satisfied: 0, pending: 0, unsatisfied: 0 }
+    const value = { hasData: false, city: '', profile: '', total: 0, satisfied: 0, pending: 0, unsatisfied: 0 }
+    cachedSubsidySummary = { key: cacheKey, value }
+    return value
   }
 
   const evaluations = subsidyPolicies
     .filter((policy) => policy.city === city)
     .map((policy) => ({ policy, evaluation: evaluateSubsidyMatch(policy, profile) }))
-  return {
+  const value = {
     hasData: Boolean(city || profile),
     city,
     profile,
@@ -101,6 +107,8 @@ function summarizeSubsidy(savedState) {
       criteria: evaluation.criteria.slice(0, 8),
     })),
   }
+  cachedSubsidySummary = { key: cacheKey, value }
+  return value
 }
 
 export function buildWorkflowContext({

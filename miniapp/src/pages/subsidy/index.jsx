@@ -29,6 +29,13 @@ const STATUS_ICON = {
   pending: '?',
   unsatisfied: '×',
 }
+const SUBSIDY_CITY_SEARCH_TEXT = new Map(subsidyCities.map((city) => [
+  city,
+  subsidyPolicies
+    .filter((policy) => policy.city === city)
+    .flatMap((policy) => [policy.city, policy.policy, policy.type, policy.status, ...(policy.keywords || [])])
+    .join(' '),
+]))
 
 function detectProfileCities(text) {
   const value = String(text || '')
@@ -94,11 +101,7 @@ export default function SubsidyMatcher() {
     const query = cityQuery.trim().replace(/市$/, '')
     return subsidyCities.filter((item) => {
       if (!query) return true
-      const searchText = subsidyPolicies
-        .filter((policy) => policy.city === item)
-        .flatMap((policy) => [policy.city, policy.policy, policy.type, policy.status, ...(policy.keywords || [])])
-        .join(' ')
-      return searchText.includes(query)
+      return SUBSIDY_CITY_SEARCH_TEXT.get(item).includes(query)
     }).slice(0, 12)
   }, [cityQuery])
   const policies = remotePolicies.length ? remotePolicies : subsidyPolicies

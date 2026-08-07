@@ -156,6 +156,22 @@ export default class ContractReview extends Component {
     this.draftSaver.schedule(contractText)
   }
 
+  handleContractInput = (event) => {
+    const contractText = event.detail.value
+    const hasReviewState = this.state.isAnalyzing
+      || this.state.lastAnalysisFailed
+      || this.state.findings.length
+      || this.state.summary
+      || this.state.adoptedItems.length
+      || this.state.revisedDraft
+    if (hasReviewState) {
+      this.updateContract(contractText)
+      return
+    }
+    this.setState({ contractText })
+    this.draftSaver.schedule(contractText)
+  }
+
   updateProfile = (key, value) => {
     this.cancelActiveReview()
     this.setState((previous) => {
@@ -606,7 +622,7 @@ export default class ContractReview extends Component {
             cursorSpacing={20}
             placeholder='粘贴正文，或导入 TXT、MD、DOCX、PDF…'
             value={contractText}
-            onInput={(event) => this.updateContract(event.detail.value)}
+            onInput={this.handleContractInput}
             maxlength={-1}
           />
           {contractText.length > 60000 ? <Text className='caption contract-size-warning'>合同超过 60000 字，本地规则仍可审查，但 AI 全文复核需按章节分段。</Text> : null}

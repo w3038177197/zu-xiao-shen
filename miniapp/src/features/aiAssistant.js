@@ -114,17 +114,24 @@ function buildNextStep(prompt, context) {
   return '把对方的具体要求、合同原文或扣款明细发来，我会继续按现有本机资料拆解。'
 }
 
+let cachedLocalReview = null
+
 export function loadAllModuleContext() {
   const context = loadWorkflowContext()
   if (!context.contractText || context.review.isCurrent) return context
   try {
-    const findings = analyzeContract(cleanContractTextForReview(context.contractText))
+    const cleanText = cleanContractTextForReview(context.contractText)
+    const review = cachedLocalReview?.contractText === cleanText
+      ? cachedLocalReview
+      : { contractText: cleanText, findings: analyzeContract(cleanText) }
+    review.summary ||= getRiskSummary(review.findings)
+    cachedLocalReview = review
     return {
       ...context,
       review: {
         ...context.review,
-        findings,
-        summary: getRiskSummary(findings),
+        findings: review.findings,
+        summary: review.summary,
         isLocalAnalysis: true,
       },
     }

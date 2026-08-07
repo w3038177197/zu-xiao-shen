@@ -142,7 +142,7 @@ export default function AiAssistant() {
     const resolved = resolveRemoteContextModules(context, selectedContextModules)
     if (resolved.length) return `已选择 ${resolved.length} 类资料`
     return '仅发送当前问题'
-  }, [context, draft, selectedContextModules])
+  }, [context, selectedContextModules])
 
   const availableRemoteModules = useMemo(() => getAvailableRemoteContextModules(context), [context])
   const effectiveContextModules = useMemo(

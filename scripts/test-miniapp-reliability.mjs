@@ -1253,6 +1253,37 @@ const checks = [
     assert.equal(evidencePackageExport.sha256(binary), expectedBinary, '二进制内容 SHA-256 应与 Node crypto 一致')
   }],
 
+  ['证据完整性：大文件分块哈希保持正确且会让出事件循环', async () => {
+    const binary = new Uint8Array(512 * 1024)
+    for (let index = 0; index < binary.length; index += 4096) binary[index] = index & 0xff
+    let yielded = false
+    setTimeout(() => { yielded = true }, 0)
+    const hash = await evidencePackageExport.sha256Async(binary)
+    assert.equal(hash, evidencePackageExport.sha256(binary))
+    assert.equal(yielded, true)
+  }],
+
+  ['证据完整性：SHA-256 填充边界与标准实现一致', async () => {
+    const crypto = await import('node:crypto')
+    for (const length of [0, 55, 56, 63, 64, 65]) {
+      const binary = Uint8Array.from({ length }, (_, index) => index & 0xff)
+      const expected = crypto.createHash('sha256').update(binary).digest('hex')
+      assert.equal(evidencePackageExport.sha256(binary), expected, `${length} 字节同步 SHA-256 应正确`)
+      assert.equal(await evidencePackageExport.sha256Async(binary), expected, `${length} 字节异步 SHA-256 应正确`)
+    }
+  }],
+
+  ['证据 ZIP：大文件异步打包保持字节一致且会让出事件循环', async () => {
+    const binary = new Uint8Array(512 * 1024)
+    const entries = [{ name: '大文件.bin', data: binary }]
+    const now = new Date('2026-08-07T12:00:00.000Z')
+    let yielded = false
+    setTimeout(() => { yielded = true }, 0)
+    const bytes = await evidencePackageExport.createZipArchiveAsync(entries, now)
+    assert.deepEqual(bytes, evidencePackageExport.createZipArchive(entries, now))
+    assert.equal(yielded, true)
+  }],
+
   ['证据完整性：导出包包含证据清单 manifest.json 且含 SHA-256 字段', async () => {
     const packState = createDefaultEvidencePackState()
     packState.attachments.contract.push({
@@ -2389,6 +2420,8 @@ const checks = [
     assert.ok(context.subsidy.matches.length > 0)
     assert.ok(context.subsidy.matches[0].criteria.length > 0)
     assert.equal(context.linkedSources.length, 4)
+    const cachedContext = workflowContext.buildWorkflowContext({ subsidyState: { city: '杭州', profile: '应届本科毕业生，已缴社保，在杭无房' } })
+    assert.equal(cachedContext.subsidy, context.subsidy)
   }],
 
   ['AI 本地上下文：真实加载四模块并在回答中引用相关资料', () => {
@@ -2435,6 +2468,8 @@ const checks = [
     assert.match(reply, /仅供参考/)
     assert.doesNotMatch(reply, /^(?:结论|重点风险|建议动作|依据|下一步)：/m)
     assert.ok(reply.length <= 500, '本地回答应引用真实资料但避免重复资料目录')
+    const cachedContext = aiAssistant.loadAllModuleContext()
+    assert.equal(cachedContext.review.findings, context.review.findings)
   }],
 
   ['本地知识库：Web 与小程序双源一致且覆盖新增高频主题', async () => {
@@ -2632,6 +2667,8 @@ const checks = [
     assert.match(contractSource, /retryAnalyze/)
     assert.match(contractSource, /const useAi = contractText\.length <= 60_000/)
     assert.match(contractSource, /startRemoteContractReviewRequest\(payload\)/)
+    assert.match(contractSource, /onInput=\{this\.handleContractInput\}/)
+    assert.match(contractSource, /if \(hasReviewState\)/)
     assert.match(contractSource, /点击“开始综合审查”即同意将双重脱敏后的合同文字发送/)
     assert.doesNotMatch(contractSource, /confirmContractReviewConsent|让 AI 解读审查结果|openAiTask/)
     assert.doesNotMatch(contractSource, /导出审查报告 TXT|复制审查报告|导出反馈 JSON|textFileExport/)

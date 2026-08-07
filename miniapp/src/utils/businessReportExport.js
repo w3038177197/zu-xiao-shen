@@ -4,7 +4,7 @@ import { getCheckinDefectRows, getCheckinStats, normalizeCheckinState } from '..
 import { evidenceActions, evidenceGroupMeta, normalizeEvidencePackState } from '../features/evidencePack.js'
 import { redactRemoteContext } from '../features/remoteAi.js'
 import { getLocalDataSnapshot } from './localDataManager.js'
-import { createZipArchive } from './evidencePackageExport.js'
+import { createZipArchiveAsync } from './evidencePackageExport.js'
 
 export const BUSINESS_REPORT_MODULES = ['contract', 'checkin', 'evidence']
 
@@ -434,7 +434,7 @@ export async function buildBusinessReportDocx({ selectedModules, data, fs = Taro
     ...media,
   ]
   return {
-    bytes: createZipArchive(entries, now),
+    bytes: await createZipArchiveAsync(entries, now),
     fileName: getReportFileName(modules, now),
     selectedModules: modules,
     includedPhotos: reportState.includedPhotos,
@@ -451,7 +451,7 @@ export async function buildBusinessReportBundle({ data, fs = Taro.getFileSystemM
   const pad = (value) => String(value).padStart(2, '0')
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
   return {
-    bytes: createZipArchive(reports.map((report, index) => ({ name: `${index + 1}-${report.fileName}`, data: report.bytes })), now),
+    bytes: await createZipArchiveAsync(reports.map((report, index) => ({ name: `${index + 1}-${report.fileName}`, data: report.bytes })), now),
     fileName: `租小审-全部Word报告-${stamp}.zip`,
     reports,
     includedPhotos: reports.reduce((total, report) => total + report.includedPhotos, 0),

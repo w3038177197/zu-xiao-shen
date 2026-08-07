@@ -70,6 +70,18 @@ export function crc32(value) {
   return (crc ^ 0xffffffff) >>> 0
 }
 
+async function crc32Async(value) {
+  const bytes = toBytes(value)
+  if (bytes.length < 256 * 1024) return crc32(bytes)
+  const table = getCrcTable()
+  let crc = 0xffffffff
+  for (let index = 0; index < bytes.length; index += 1) {
+    crc = table[(crc ^ bytes[index]) & 0xff] ^ (crc >>> 8)
+    if (index > 0 && index % (256 * 1024) === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
 // SHA-256 纯 JS 实现（小程序环境无 Node crypto，Taro 可能无 SubtleCrypto）
 // 仅用于本机证据完整性校验；不是电子签名或公证存证。
 const SHA256_K = [
@@ -87,49 +99,83 @@ function rotr(value, bits) {
   return ((value >>> bits) | (value << (32 - bits))) >>> 0
 }
 
-export function sha256(data) {
-  const bytes = toBytes(data)
-  const H = [
+function createSha256State() {
+  return [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
   ]
-  const l = bytes.length
-  const bitLen = l * 8
-  // 填充：0x80 + 0x00... + 8 字节大端长度
-  const padLen = ((l + 9 + 63) >> 6) << 6
-  const padded = new Uint8Array(padLen)
-  padded.set(bytes)
-  padded[l] = 0x80
-  // 64 位大端长度（仅低 32 位有效，文件不会超过 512MB）
-  padded[padLen - 4] = (bitLen >>> 24) & 0xff
-  padded[padLen - 3] = (bitLen >>> 16) & 0xff
-  padded[padLen - 2] = (bitLen >>> 8) & 0xff
-  padded[padLen - 1] = bitLen & 0xff
+}
 
-  for (let offset = 0; offset < padLen; offset += 64) {
-    const W = new Array(64)
-    for (let i = 0; i < 16; i += 1) {
-      W[i] = ((padded[offset + i * 4] << 24) | (padded[offset + i * 4 + 1] << 16) | (padded[offset + i * 4 + 2] << 8) | padded[offset + i * 4 + 3]) >>> 0
-    }
-    for (let i = 16; i < 64; i += 1) {
-      const s0 = rotr(W[i - 15], 7) ^ rotr(W[i - 15], 18) ^ (W[i - 15] >>> 3)
-      const s1 = rotr(W[i - 2], 17) ^ rotr(W[i - 2], 19) ^ (W[i - 2] >>> 10)
-      W[i] = (W[i - 16] + s0 + W[i - 7] + s1) >>> 0
-    }
-    let [a, b, c, d, e, f, g, h] = H
-    for (let i = 0; i < 64; i += 1) {
-      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)
-      const ch = (e & f) ^ (~e & g)
-      const t1 = (h + S1 + ch + SHA256_K[i] + W[i]) >>> 0
-      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)
-      const maj = (a & b) ^ (a & c) ^ (b & c)
-      const t2 = (S0 + maj) >>> 0
-      h = g; g = f; f = e; e = (d + t1) >>> 0
-      d = c; c = b; b = a; a = (t1 + t2) >>> 0
-    }
-    H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + b) >>> 0; H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0
-    H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0; H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0
+function processSha256Block(bytes, offset, state, words) {
+  for (let index = 0; index < 16; index += 1) {
+    words[index] = ((bytes[offset + index * 4] << 24) | (bytes[offset + index * 4 + 1] << 16) | (bytes[offset + index * 4 + 2] << 8) | bytes[offset + index * 4 + 3]) >>> 0
   }
-  return H.map((v) => v.toString(16).padStart(8, '0')).join('')
+  for (let index = 16; index < 64; index += 1) {
+    const s0 = rotr(words[index - 15], 7) ^ rotr(words[index - 15], 18) ^ (words[index - 15] >>> 3)
+    const s1 = rotr(words[index - 2], 17) ^ rotr(words[index - 2], 19) ^ (words[index - 2] >>> 10)
+    words[index] = (words[index - 16] + s0 + words[index - 7] + s1) >>> 0
+  }
+  let [a, b, c, d, e, f, g, h] = state
+  for (let index = 0; index < 64; index += 1) {
+    const sum1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)
+    const choice = (e & f) ^ (~e & g)
+    const temp1 = (h + sum1 + choice + SHA256_K[index] + words[index]) >>> 0
+    const sum0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)
+    const majority = (a & b) ^ (a & c) ^ (b & c)
+    const temp2 = (sum0 + majority) >>> 0
+    h = g; g = f; f = e; e = (d + temp1) >>> 0
+    d = c; c = b; b = a; a = (temp1 + temp2) >>> 0
+  }
+  state[0] = (state[0] + a) >>> 0; state[1] = (state[1] + b) >>> 0; state[2] = (state[2] + c) >>> 0; state[3] = (state[3] + d) >>> 0
+  state[4] = (state[4] + e) >>> 0; state[5] = (state[5] + f) >>> 0; state[6] = (state[6] + g) >>> 0; state[7] = (state[7] + h) >>> 0
+}
+
+function createSha256Tail(bytes, fullLength) {
+  const remaining = bytes.length - fullLength
+  const tail = new Uint8Array(remaining < 56 ? 64 : 128)
+  tail.set(bytes.subarray(fullLength))
+  tail[remaining] = 0x80
+  const bitLengthLow = (bytes.length * 8) >>> 0
+  const bitLengthHigh = Math.floor(bytes.length / 0x20000000) >>> 0
+  const offset = tail.length - 8
+  tail[offset] = (bitLengthHigh >>> 24) & 0xff
+  tail[offset + 1] = (bitLengthHigh >>> 16) & 0xff
+  tail[offset + 2] = (bitLengthHigh >>> 8) & 0xff
+  tail[offset + 3] = bitLengthHigh & 0xff
+  tail[offset + 4] = (bitLengthLow >>> 24) & 0xff
+  tail[offset + 5] = (bitLengthLow >>> 16) & 0xff
+  tail[offset + 6] = (bitLengthLow >>> 8) & 0xff
+  tail[offset + 7] = bitLengthLow & 0xff
+  return tail
+}
+
+function formatSha256(state) {
+  return state.map((value) => value.toString(16).padStart(8, '0')).join('')
+}
+
+export function sha256(data) {
+  const bytes = toBytes(data)
+  const state = createSha256State()
+  const words = new Uint32Array(64)
+  const fullLength = bytes.length - (bytes.length % 64)
+  for (let offset = 0; offset < fullLength; offset += 64) processSha256Block(bytes, offset, state, words)
+  const tail = createSha256Tail(bytes, fullLength)
+  for (let offset = 0; offset < tail.length; offset += 64) processSha256Block(tail, offset, state, words)
+  return formatSha256(state)
+}
+
+export async function sha256Async(data) {
+  const bytes = toBytes(data)
+  if (bytes.length < 256 * 1024) return sha256(bytes)
+  const state = createSha256State()
+  const words = new Uint32Array(64)
+  const fullLength = bytes.length - (bytes.length % 64)
+  for (let offset = 0; offset < fullLength; offset += 64) {
+    processSha256Block(bytes, offset, state, words)
+    if (offset > 0 && offset % (256 * 1024) === 0) await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  const tail = createSha256Tail(bytes, fullLength)
+  for (let offset = 0; offset < tail.length; offset += 64) processSha256Block(tail, offset, state, words)
+  return formatSha256(state)
 }
 
 function toDosDateTime(dateValue) {
@@ -162,16 +208,16 @@ function uniqueArchivePath(path, usedPaths) {
   return unique
 }
 
-export function createZipArchive(entries, date = new Date()) {
+function assembleZipArchive(entries, checksums, date) {
   const localParts = []
   const centralParts = []
   let offset = 0
   const stamp = toDosDateTime(date)
 
-  entries.forEach((entry) => {
+  entries.forEach((entry, index) => {
     const name = utf8Bytes(entry.name)
     const data = toBytes(entry.data)
-    const checksum = crc32(data)
+    const checksum = checksums[index]
     const localHeader = concatBytes([
       uint32(0x04034b50), uint16(20), uint16(ZIP_UTF8_FLAG), uint16(ZIP_STORE_METHOD),
       uint16(stamp.time), uint16(stamp.date), uint32(checksum), uint32(data.length), uint32(data.length),
@@ -192,6 +238,16 @@ export function createZipArchive(entries, date = new Date()) {
     uint32(central.length), uint32(offset), uint16(0),
   ])
   return concatBytes([...localParts, central, end])
+}
+
+export function createZipArchive(entries, date = new Date()) {
+  return assembleZipArchive(entries, entries.map((entry) => crc32(entry.data)), date)
+}
+
+export async function createZipArchiveAsync(entries, date = new Date()) {
+  const checksums = []
+  for (const entry of entries) checksums.push(await crc32Async(entry.data))
+  return assembleZipArchive(entries, checksums, date)
 }
 
 function utf16BeHex(value) {
@@ -385,7 +441,7 @@ export async function buildEvidenceArchive({ packState, reportText, groupLabels 
     addedAt: exportedAt,
     exportedAt,
     note: '证据包文字摘要',
-    sha256: sha256(summaryBytes),
+    sha256: await sha256Async(summaryBytes),
     status: 'included',
     path: summaryPath,
   })
@@ -415,7 +471,7 @@ export async function buildEvidenceArchive({ packState, reportText, groupLabels 
           addedAt: attachment?.createdAt || exportedAt,
           exportedAt,
           note: attachment?.source ? `来源：${attachment.source}` : '证据附件',
-          sha256: sha256(bytes),
+          sha256: await sha256Async(bytes),
           status: 'included',
           path,
         })
@@ -445,7 +501,7 @@ export async function buildEvidenceArchive({ packState, reportText, groupLabels 
     notice: '本压缩包由租小审在本机生成。请核对本清单中各文件的 SHA-256 与实际接收文件是否一致后再使用。',
   }, null, 2))
 
-  return { bytes: createZipArchive(entries), included, skipped }
+  return { bytes: await createZipArchiveAsync(entries), included, skipped }
 }
 
 export async function exportEvidenceZip(options) {
